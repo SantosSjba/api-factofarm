@@ -23,7 +23,53 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+API de **FactoFarm** construida con [Nest](https://github.com/nestjs/nest). Sigue una **Clean Architecture modular** (DDD ligero): dominio y casos de uso desacoplados del ORM y del transporte HTTP.
+
+## Arquitectura del proyecto
+
+### Enfoque
+
+- **Modular por dominio**: cada funcionalidad vive bajo `src/modules/<nombre>/`.
+- **Capas**: Domain (reglas y entidades) → Application (casos de uso) → Infrastructure (Prisma, adaptadores) → **Controllers** y **Módulos Nest** en la raíz del módulo (entrada HTTP y composición).
+
+### Estructura de carpetas (`src/`)
+
+```text
+src/
+  common/           # Utilidades transversales (helpers, constantes compartidas, etc.)
+  config/           # Configuración (env, validación de variables, etc.)
+  modules/
+    users/
+      application/
+      domain/
+      infrastructure/
+      users.controller.ts    # (cuando existan) — capa de presentación HTTP
+      users.module.ts
+    auth/
+    properties/
+    sales/
+```
+
+### Capas (responsabilidades)
+
+| Capa | Contenido típico |
+|------|-------------------|
+| **Domain** | Entidades, interfaces de repositorios, reglas de negocio puras (sin Nest ni Prisma). |
+| **Application** | Casos de uso (orquestación), DTOs de aplicación, puertos hacia el dominio. |
+| **Infrastructure** | Implementación de repositorios (p. ej. Prisma), mappers, integraciones externas. |
+| **Controllers** | Rutas HTTP, validación de entrada, delegación a casos de uso. |
+
+### Por qué este patrón
+
+- Escalable y testeable (casos de uso y dominio sin acoplar al framework).
+- El dominio no depende del ORM; cambiar Prisma o la base es más localizado.
+- Alineado con proyectos Nest profesionales sin cargar un DDD “pesado” completo.
+
+### Stack relacionado
+
+- **Frontend**: Angular (repositorio `front-factofarm`), arquitectura por features + `core` / `shared`.
+- **Datos**: Prisma + PostgreSQL (configuración e integración en Infrastructure).
+- **Autenticación**: JWT en API; el cliente envía el token (p. ej. interceptor en Angular).
 
 ## Project setup
 
