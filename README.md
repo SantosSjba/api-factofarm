@@ -39,6 +39,7 @@ src/
   config/           # Configuración (env, validación de variables con Joi, etc.)
   prisma/           # PrismaModule global (ORM)
   modules/
+    auth/           # POST /auth/login (JWT)
     establishments/ # controlador + módulo (ejemplo ligero)
     users/          # ejemplo completo en capas
       application/  # casos de uso, DTOs
@@ -69,7 +70,7 @@ Los nuevos dominios se añaden como `src/modules/<nombre>/` con las mismas capas
 
 - **Frontend**: Angular (repositorio `front-factofarm`), arquitectura por features + `core` / `shared`.
 - **Datos**: Prisma + PostgreSQL (configuración e integración en Infrastructure).
-- **Autenticación**: JWT en API; el cliente envía el token (p. ej. interceptor en Angular).
+- **Autenticación**: `POST /api/auth/login` devuelve JWT; variable **`JWT_SECRET`** (≥32 caracteres) obligatoria en `.env`.
 
 ## Project setup
 

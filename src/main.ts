@@ -26,6 +26,7 @@ async function bootstrap() {
     )
     .setVersion('1.0')
     .addTag('app', 'Estado del servicio')
+    .addTag('auth', 'Autenticación')
     .addTag('users', 'Usuarios')
     .addTag('establishments', 'Establecimientos')
     .build();

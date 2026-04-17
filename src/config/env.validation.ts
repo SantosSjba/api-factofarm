@@ -6,6 +6,11 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().port().default(3000),
+  JWT_SECRET: Joi.string().min(32).required().messages({
+    'string.min': 'JWT_SECRET debe tener al menos 32 caracteres',
+    'any.required': 'JWT_SECRET es obligatorio para firmar tokens',
+  }),
+  JWT_EXPIRES_IN: Joi.string().default('7d'),
   DATABASE_URL: Joi.string()
     .pattern(/^postgres(ql)?:\/\//)
     .required()
