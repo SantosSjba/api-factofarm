@@ -1,0 +1,11 @@
+/// Establecimiento / sucursal asignada al usuario
+model Establishment {
+  id        String   @id @default(uuid())
+  nombre    String
+  codigo    String?  @unique
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}

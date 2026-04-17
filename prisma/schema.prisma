@@ -1,0 +1,19 @@
+// =============================================================================
+// Punto de entrada del esquema (OBLIGATORIO UNA VEZ): solo generator + datasource.
+// =============================================================================
+// - No declares modelos, enums ni bloques duplicados aquí: van en prisma/models/*.prisma
+// - La URL de conexión no va aquí en Prisma 7: prisma.config.ts (datasource.url)
+// - Cliente generado: provider "prisma-client" + output (Prisma 7 recomendado)
+// - BD: provider "postgresql" (ajusta si cambias motor)
+//
+// Modularizar: añade archivos bajo prisma/models/; no repitas generator/datasource allí.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

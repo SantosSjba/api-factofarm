@@ -1,0 +1,25 @@
+/// Datos personales — pestaña "Datos personales" (1:1 con User)
+model UserProfile {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tipoDocumento      IdentityDocumentType?
+  numeroDocumento    String?
+  nombres            String?
+  apellidos          String?
+  fechaNacimiento    DateTime? @db.Date
+  emailPersonal      String?
+  direccion          String?
+  celularPersonal    String?
+  emailCorporativo   String?
+  celularCorporativo String?
+  fechaContratacion   DateTime? @db.Date
+  cargo              String?
+  /// URL o ruta de foto (subida de archivo en fase posterior)
+  fotoUrl            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profiles")
+}

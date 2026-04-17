@@ -1,0 +1,35 @@
+/// Perfil de acceso al sistema (pantalla "Datos de Usuario" > Perfil)
+enum UserRole {
+  ADMINISTRADOR
+  VENDEDOR
+}
+
+/// Tipo de documento de identidad ("Datos personales")
+enum IdentityDocumentType {
+  DNI
+  CE // Carné extranjería (ejemplo — ampliable)
+  PASAPORTE
+  OTRO
+}
+
+/// Cuenta de aplicación: pestaña "Datos de Usuario"
+model User {
+  id                String        @id @default(uuid())
+  /// Nombre mostrado en cuenta (campo Nombre del primer tab)
+  nombre            String
+  email             String        @unique
+  passwordHash      String
+  role              UserRole
+  establecimientoId String
+  establecimiento   Establishment @relation(fields: [establecimientoId], references: [id])
+
+  profile UserProfile?
+
+  permissions UserPermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([establecimientoId])
+  @@map("users")
+}

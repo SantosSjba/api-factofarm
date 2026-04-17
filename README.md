@@ -36,19 +36,19 @@ API de **FactoFarm** construida con [Nest](https://github.com/nestjs/nest). Sigu
 
 ```text
 src/
-  common/           # Utilidades transversales (helpers, constantes compartidas, etc.)
-  config/           # Configuración (env, validación de variables, etc.)
+  config/           # Configuración (env, validación de variables con Joi, etc.)
+  prisma/           # PrismaModule global (ORM)
   modules/
-    users/
-      application/
-      domain/
+    establishments/ # controlador + módulo (ejemplo ligero)
+    users/          # ejemplo completo en capas
+      application/  # casos de uso, DTOs
+      domain/       # puertos (repositorios), tipos de dominio
       infrastructure/
-      users.controller.ts    # (cuando existan) — capa de presentación HTTP
+      users.controller.ts
       users.module.ts
-    auth/
-    properties/
-    sales/
 ```
+
+Los nuevos dominios se añaden como `src/modules/<nombre>/` con las mismas capas. Utilidades transversales pueden ir en `src/common/` u otro prefijo cuando haga falta (no es obligatorio en repos recién arrancados).
 
 ### Capas (responsabilidades)
 

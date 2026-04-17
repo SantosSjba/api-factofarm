@@ -1,9 +1,26 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { envValidationSchema } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
+import { EstablishmentsModule } from './modules/establishments/establishments.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
-  imports: [],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+        allowUnknown: true,
+      },
+    }),
+    PrismaModule,
+    EstablishmentsModule,
+    UsersModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
