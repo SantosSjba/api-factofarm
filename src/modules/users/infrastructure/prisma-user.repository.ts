@@ -5,18 +5,27 @@ import type { IUserRepository } from '../domain/user.repository';
 import type {
   CreateUserInput,
   UpdateUserInput,
+  UserProfileSnapshot,
   UserSnapshot,
 } from '../domain/user.types';
 
-function mapUser(
-  row: Prisma.UserGetPayload<{ include: { profile: true } }>,
-): UserSnapshot {
+const userSnapshotInclude = {
+  profile: true,
+  establecimiento: { select: { nombre: true } },
+  permissions: { include: { permission: true } },
+} satisfies Prisma.UserInclude;
+
+type UserRow = Prisma.UserGetPayload<{ include: typeof userSnapshotInclude }>;
+
+function mapUser(row: UserRow): UserSnapshot {
   return {
     id: row.id,
     nombre: row.nombre,
     email: row.email,
     role: row.role,
     establecimientoId: row.establecimientoId,
+    establecimientoNombre: row.establecimiento.nombre,
+    permissionCodes: row.permissions.map((up) => up.permission.code),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     profile: row.profile
@@ -33,7 +42,12 @@ function mapUser(
           celularCorporativo: row.profile.celularCorporativo,
           fechaContratacion: row.profile.fechaContratacion,
           cargo: row.profile.cargo,
-          fotoUrl: row.profile.fotoUrl,
+          fotoArchivoId: row.profile.fotoArchivoId,
+          fotoUrl:
+            row.profile.fotoUrl ??
+            (row.profile.fotoArchivoId != null
+              ? `/api/files/${row.profile.fotoArchivoId}`
+              : null),
         }
       : null,
   };
@@ -55,14 +69,14 @@ export class PrismaUserRepository implements IUserRepository {
           ? { create: this.toProfileCreate(input.profile) }
           : undefined,
       },
-      include: { profile: true },
+      include: userSnapshotInclude,
     });
     return mapUser(created);
   }
 
   async findAll(): Promise<UserSnapshot[]> {
     const rows = await this.prisma.user.findMany({
-      include: { profile: true },
+      include: userSnapshotInclude,
       orderBy: { createdAt: 'desc' },
     });
     return rows.map(mapUser);
@@ -71,7 +85,7 @@ export class PrismaUserRepository implements IUserRepository {
   async findById(id: string): Promise<UserSnapshot | null> {
     const row = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true },
+      include: userSnapshotInclude,
     });
     return row ? mapUser(row) : null;
   }
@@ -79,7 +93,7 @@ export class PrismaUserRepository implements IUserRepository {
   async findByEmail(email: string): Promise<UserSnapshot | null> {
     const row = await this.prisma.user.findUnique({
       where: { email },
-      include: { profile: true },
+      include: userSnapshotInclude,
     });
     return row ? mapUser(row) : null;
   }
@@ -108,7 +122,7 @@ export class PrismaUserRepository implements IUserRepository {
           where: { userId: id },
           create: {
             userId: id,
-            ...this.toProfileCreate(profile),
+            ...this.toProfileUncheckedCreate(profile),
           },
           update: this.toProfileUpdate(profile),
         });
@@ -116,7 +130,7 @@ export class PrismaUserRepository implements IUserRepository {
 
       return tx.user.findUniqueOrThrow({
         where: { id },
-        include: { profile: true },
+        include: userSnapshotInclude,
       });
     });
 
@@ -144,6 +158,31 @@ export class PrismaUserRepository implements IUserRepository {
       fechaContratacion: p.fechaContratacion ?? undefined,
       cargo: p.cargo ?? undefined,
       fotoUrl: p.fotoUrl ?? undefined,
+      ...(p.fotoArchivoId
+        ? { fotoArchivo: { connect: { id: p.fotoArchivoId } } }
+        : {}),
+    };
+  }
+
+  /** Upsert `create` exige forma Unchecked (`userId`) + escalares como `fotoArchivoId`. */
+  private toProfileUncheckedCreate(
+    p: Partial<UserProfileSnapshot>,
+  ): Omit<Prisma.UserProfileUncheckedCreateInput, 'userId'> {
+    return {
+      tipoDocumento: p.tipoDocumento ?? undefined,
+      numeroDocumento: p.numeroDocumento ?? undefined,
+      nombres: p.nombres ?? undefined,
+      apellidos: p.apellidos ?? undefined,
+      fechaNacimiento: p.fechaNacimiento ?? undefined,
+      emailPersonal: p.emailPersonal ?? undefined,
+      direccion: p.direccion ?? undefined,
+      celularPersonal: p.celularPersonal ?? undefined,
+      emailCorporativo: p.emailCorporativo ?? undefined,
+      celularCorporativo: p.celularCorporativo ?? undefined,
+      fechaContratacion: p.fechaContratacion ?? undefined,
+      cargo: p.cargo ?? undefined,
+      fotoUrl: p.fotoUrl ?? undefined,
+      fotoArchivoId: p.fotoArchivoId ?? undefined,
     };
   }
 
@@ -166,6 +205,13 @@ export class PrismaUserRepository implements IUserRepository {
     if (p.fechaContratacion !== undefined) out.fechaContratacion = p.fechaContratacion;
     if (p.cargo !== undefined) out.cargo = p.cargo;
     if (p.fotoUrl !== undefined) out.fotoUrl = p.fotoUrl;
+    if (p.fotoArchivoId !== undefined) {
+      if (p.fotoArchivoId === null) {
+        out.fotoArchivo = { disconnect: true };
+      } else {
+        out.fotoArchivo = { connect: { id: p.fotoArchivoId } };
+      }
+    }
     return out;
   }
 }

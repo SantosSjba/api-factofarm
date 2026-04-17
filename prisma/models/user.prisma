@@ -25,6 +25,8 @@ model User {
 
   profile UserProfile?
 
+  archivosSubidos Archivo[]
+
   permissions UserPermission[]
 
   createdAt DateTime @default(now())

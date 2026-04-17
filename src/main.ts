@@ -25,10 +25,13 @@ async function bootstrap() {
       'API REST del backend FactoFarm (usuarios, establecimientos). Documentación generada con OpenAPI y Scalar.',
     )
     .setVersion('1.0')
+    .addBearerAuth()
     .addTag('app', 'Estado del servicio')
     .addTag('auth', 'Autenticación')
     .addTag('users', 'Usuarios')
     .addTag('establishments', 'Establecimientos')
+    .addTag('permissions', 'Permisos')
+    .addTag('files', 'Archivos')
     .build();
 
   const document = SwaggerModule.createDocument(app, openApiConfig);

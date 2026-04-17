@@ -14,9 +14,11 @@ model UserProfile {
   emailCorporativo   String?
   celularCorporativo String?
   fechaContratacion   DateTime? @db.Date
-  cargo              String?
-  /// URL o ruta de foto (subida de archivo en fase posterior)
-  fotoUrl            String?
+  cargo       String?
+  /// URL legado o externa (opcional; si hay `fotoArchivoId` el cliente puede usar GET /api/files/:id).
+  fotoUrl       String?
+  fotoArchivoId String?  @unique
+  fotoArchivo   Archivo? @relation(fields: [fotoArchivoId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

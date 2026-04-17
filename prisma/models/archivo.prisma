@@ -1,0 +1,18 @@
+/// Archivos subidos (metadatos en BD + fichero en disco vía `rutaRelativa`).
+model Archivo {
+  id               String   @id @default(uuid())
+  nombreOriginal   String
+  mimeType         String
+  tamanoBytes      Int
+  /// Ruta relativa al directorio configurado `UPLOADS_DIR` (p. ej. `2026/04/uuid.png`).
+  rutaRelativa     String
+  uploadedByUserId String?
+  uploadedBy       User?    @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  perfilComoFoto UserProfile?
+
+  createdAt DateTime @default(now())
+
+  @@index([uploadedByUserId])
+  @@map("archivos")
+}

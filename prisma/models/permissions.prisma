@@ -1,10 +1,18 @@
-/// Catálogo para la pestaña "Permisos" (granularidad futura)
+/// Catálogo para la pestaña "Permisos" y, vía `label` + jerarquía, alineación con el menú lateral
 model Permission {
-  id          String @id @default(uuid())
-  code        String @unique
+  id          String  @id @default(uuid())
+  code        String  @unique
   description String?
+  /// Texto UI (menú / árbol de permisos); opcional en códigos puramente técnicos (p. ej. users.read)
+  label       String?
+  sortOrder   Int     @default(0)
+  parentId    String?
+  parent      Permission?  @relation("PermissionHierarchy", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  children    Permission[] @relation("PermissionHierarchy")
 
   users UserPermission[]
+
+  @@index([parentId])
 }
 
 model UserPermission {

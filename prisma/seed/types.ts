@@ -5,7 +5,3 @@ export type SeedEstablishmentInput = {
   activo: boolean;
 };
 
-export type SeedPermissionInput = {
-  code: string;
-  description: string;
-};

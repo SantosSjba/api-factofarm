@@ -18,4 +18,6 @@ export const envValidationSchema = Joi.object({
       'string.pattern.base':
         'DATABASE_URL debe ser una URL postgres/postgresql (ej. postgresql://user:pass@host:5432/db)',
     }),
+  /** Directorio absoluto o relativo al cwd donde se guardan ficheros subidos (tabla `archivos`). */
+  UPLOADS_DIR: Joi.string().default('uploads'),
 });

@@ -94,6 +94,7 @@ export class UsersService {
       fechaContratacion: dto.fechaContratacion,
       cargo: dto.cargo,
       fotoUrl: dto.fotoUrl,
+      fotoArchivoId: dto.fotoArchivoId,
     };
   }
 }

@@ -5,7 +5,9 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IdentityDocumentType } from '../../../../generated/prisma/client';
@@ -81,9 +83,18 @@ export class UserProfileDto {
   @MaxLength(120)
   cargo?: string;
 
-  @ApiPropertyOptional({ maxLength: 2048, description: 'URL o ruta de foto' })
+  @ApiPropertyOptional({ maxLength: 2048, description: 'URL o ruta de foto (legado / externa)' })
   @IsOptional()
   @IsString()
   @MaxLength(2048)
   fotoUrl?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Id en tabla `archivos` (POST /api/files/upload). Omitir sin cambios; `null` desvincula la foto.',
+  })
+  @ValidateIf((_, v) => v !== undefined && v !== null)
+  @IsUUID()
+  fotoArchivoId?: string | null;
 }

@@ -13,6 +13,7 @@ export type UserProfileSnapshot = {
   celularCorporativo: string | null;
   fechaContratacion: Date | null;
   cargo: string | null;
+  fotoArchivoId: string | null;
   fotoUrl: string | null;
 };
 
@@ -22,6 +23,9 @@ export type UserSnapshot = {
   email: string;
   role: UserRole;
   establecimientoId: string;
+  establecimientoNombre: string;
+  /** Códigos `Permission.code` asignados (menú y RBAC). */
+  permissionCodes: string[];
   profile: UserProfileSnapshot | null;
   createdAt: Date;
   updatedAt: Date;
