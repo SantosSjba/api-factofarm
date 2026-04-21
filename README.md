@@ -1,145 +1,200 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# FactoFarm · API (NestJS)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend REST de **FactoFarm**: autenticación JWT, usuarios, establecimientos, permisos, archivos y documentación OpenAPI.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Arquitectura limpia (Clean Architecture)
 
-API de **FactoFarm** construida con [Nest](https://github.com/nestjs/nest). Sigue una **Clean Architecture modular** (DDD ligero): dominio y casos de uso desacoplados del ORM y del transporte HTTP.
+El proyecto **mantiene** una organización por **módulos de dominio** y **capas** desacopladas del framework HTTP y del ORM. La idea es que reglas de negocio y casos de uso no dependan de Nest ni de Prisma directamente.
 
-## Arquitectura del proyecto
+### Principios
 
-### Enfoque
-
-- **Modular por dominio**: cada funcionalidad vive bajo `src/modules/<nombre>/`.
-- **Capas**: Domain (reglas y entidades) → Application (casos de uso) → Infrastructure (Prisma, adaptadores) → **Controllers** y **Módulos Nest** en la raíz del módulo (entrada HTTP y composición).
+- **Modular por dominio**: cada área funcional vive en `src/modules/<dominio>/`.
+- **Flujo de dependencias**: el dominio no importa infraestructura; la infraestructura implementa interfaces definidas en el dominio (puertos / repositorios).
+- **Nest como capa de entrega**: controladores y módulos componen la aplicación; la lógica estable vive en `application/` y `domain/`.
 
 ### Estructura de carpetas (`src/`)
 
 ```text
 src/
-  config/           # Configuración (env, validación de variables con Joi, etc.)
-  prisma/           # PrismaModule global (ORM)
-  modules/
-    auth/           # POST /auth/login (JWT)
-    establishments/ # controlador + módulo (ejemplo ligero)
-    users/          # ejemplo completo en capas
-      application/  # casos de uso, DTOs
-      domain/       # puertos (repositorios), tipos de dominio
-      infrastructure/
-      users.controller.ts
-      users.module.ts
+├── main.ts                 # Arranque HTTP, Swagger/Scalar, CORS, prefijo global /api
+├── app.module.ts           # Raíz de módulos Nest
+├── app.controller.ts       # Rutas raíz (health, hello)
+├── app.service.ts
+├── config/                 # Validación de entorno (Joi), variables centralizadas
+├── prisma/                 # PrismaModule global + PrismaService (adaptador pg)
+├── generated/prisma/       # Cliente Prisma generado (no editar a mano; ver .gitignore)
+└── modules/
+    ├── auth/               # Login JWT
+    ├── users/              # CRUD usuarios (ejemplo completo en capas)
+    │   ├── application/    # Casos de uso, DTOs, UsersService
+    │   ├── domain/         # Tipos de dominio, IUserRepository (puerto)
+    │   ├── infrastructure/ # PrismaUserRepository
+    │   ├── users.controller.ts
+    │   └── users.module.ts
+    ├── establishments/
+    ├── permissions/
+    └── files/              # Subida de archivos + tabla archivos
 ```
 
-Los nuevos dominios se añaden como `src/modules/<nombre>/` con las mismas capas. Utilidades transversales pueden ir en `src/common/` u otro prefijo cuando haga falta (no es obligatorio en repos recién arrancados).
+| Capa | Rol |
+|------|-----|
+| **domain/** | Contratos (`user.repository.ts`), tipos (`user.types.ts`). Sin Nest/Prisma. |
+| **application/** | Orquestación (`users.service.ts`), DTOs de entrada/salida. |
+| **infrastructure/** | Implementación concreta del repositorio (Prisma). |
+| **\*.controller.ts** | HTTP: validación, delegación al servicio de aplicación. |
+| **\*.module.ts** | Composición Nest (providers, imports, exports). |
 
-### Capas (responsabilidades)
+Los **nuevos dominios** deben seguir el mismo patrón bajo `src/modules/<nombre>/`.
 
-| Capa | Contenido típico |
-|------|-------------------|
-| **Domain** | Entidades, interfaces de repositorios, reglas de negocio puras (sin Nest ni Prisma). |
-| **Application** | Casos de uso (orquestación), DTOs de aplicación, puertos hacia el dominio. |
-| **Infrastructure** | Implementación de repositorios (p. ej. Prisma), mappers, integraciones externas. |
-| **Controllers** | Rutas HTTP, validación de entrada, delegación a casos de uso. |
+### Prisma (fuera de `src/`)
 
-### Por qué este patrón
+- Esquema **multiarchivo** en `prisma/` y `prisma/models/*.prisma` (Prisma 7).
+- Configuración del datasource: `prisma.config.ts`.
+- Migraciones: `prisma/migrations/`.
 
-- Escalable y testeable (casos de uso y dominio sin acoplar al framework).
-- El dominio no depende del ORM; cambiar Prisma o la base es más localizado.
-- Alineado con proyectos Nest profesionales sin cargar un DDD “pesado” completo.
+---
 
-### Stack relacionado
+## Requisitos previos
 
-- **Frontend**: Angular (repositorio `front-factofarm`), arquitectura por features + `core` / `shared`.
-- **Datos**: Prisma + PostgreSQL (configuración e integración en Infrastructure).
-- **Autenticación**: `POST /api/auth/login` devuelve JWT; variable **`JWT_SECRET`** (≥32 caracteres) obligatoria en `.env`.
+- **Node.js** LTS (recomendado 20.x o superior) y **npm**.
+- **PostgreSQL** accesible (local o remoto) y una **base de datos vacía** creada para el proyecto (por ejemplo `bd_factofarm`).
 
-## Project setup
+---
+
+## Puesta en marcha desde cero
+
+Ejecuta los pasos **en orden** desde la raíz del repositorio `api-factofarm`.
+
+### 1. Instalar dependencias
 
 ```bash
-$ npm install
+npm install
 ```
 
-## Compile and run the project
+Tras `install` se ejecuta `postinstall` → **`prisma generate`** (genera el cliente en `src/generated/prisma`).
+
+### 2. Variables de entorno
+
+Crea un archivo **`.env`** en la raíz del proyecto (no lo subas al repositorio; está en `.gitignore`). Ejemplo mínimo:
+
+```env
+NODE_ENV=development
+PORT=3000
+HOST=0.0.0.0
+
+# PostgreSQL (obligatoria)
+DATABASE_URL=postgresql://USUARIO:CONTRASEÑA@localhost:5432/bd_factofarm
+
+# JWT (obligatorio; mínimo 32 caracteres)
+JWT_SECRET=cambia_esto_por_un_secreto_largo_de_al_menos_32_caracteres
+JWT_EXPIRES_IN=7d
+
+# Archivos subidos (opcional; por defecto carpeta ./uploads)
+UPLOADS_DIR=uploads
+```
+
+- **`JWT_SECRET`**: obligatorio; la validación Joi exige al menos 32 caracteres.
+- **`DATABASE_URL`**: debe comenzar por `postgres://` o `postgresql://`.
+
+### 3. Base de datos: migraciones Prisma
+
+Aplica el esquema a tu base de datos.
+
+**Desarrollo** (crea/aplica migraciones y sincroniza el historial local):
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run prisma:migrate
 ```
 
-## Run tests
+Equivale a `prisma migrate dev`. Si es la primera vez, Prisma aplicará todas las migraciones existentes en `prisma/migrations/`.
+
+**Producción / CI** (solo aplica migraciones ya versionadas, sin prompts):
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run prisma:deploy
 ```
 
-## Deployment
+Equivale a `prisma migrate deploy`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### 4. Datos iniciales (seed)
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Carga datos demo (admin, permisos, etc.) definidos en `prisma/seed/`:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run db:seed
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Credenciales de demostración (solo desarrollo; ver `prisma/seed/data/admin-demo.ts`):
 
-## Resources
+- **Correo:** `admin@factofarm.local`
+- **Contraseña:** `Admin123!`
 
-Check out a few resources that may come in handy when working with NestJS:
+### 5. Compilar y arrancar la API
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+npm run build
+npm run start:dev
+```
 
-## Support
+Modo desarrollo con recarga:
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+npm run start:dev
+```
 
-## Stay in touch
+Arranque en producción (tras `build`):
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+npm run start:prod
+```
 
-## License
+En consola verás el **puerto**, la **conexión a PostgreSQL** (vía Prisma) y enlaces útiles con **`http://localhost:<PORT>`** (documentación, health, OpenAPI).
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+---
+
+## Comprobar que todo funciona
+
+| Recurso | URL típica (puerto 3000) |
+|---------|---------------------------|
+| Health (incluye ping `SELECT 1` a la BD) | `http://localhost:3000/api/health` |
+| Documentación interactiva (Scalar) | `http://localhost:3000/api/docs` |
+| OpenAPI JSON | `http://localhost:3000/api/openapi.json` |
+| Prefijo global de rutas REST | **`/api`** |
+
+Login (ejemplo):
+
+```http
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "admin@factofarm.local", "password": "Admin123!" }
+```
+
+---
+
+## Scripts npm útiles
+
+| Script | Descripción |
+|--------|-------------|
+| `npm run start:dev` | API en modo watch |
+| `npm run build` | Compila Nest (antes ejecuta `prisma generate`) |
+| `npm run prisma:generate` | Regenera el cliente Prisma |
+| `npm run prisma:migrate` | Migraciones en desarrollo (`migrate dev`) |
+| `npm run prisma:deploy` | Aplicar migraciones en prod/CI (`migrate deploy`) |
+| `npm run db:seed` | Ejecuta el seed |
+| `npm run lint` | ESLint |
+| `npm run test` | Tests unitarios |
+
+---
+
+## Frontend y CORS
+
+El front Angular (`front-factofarm`) suele llamar a esta API en desarrollo desde `http://localhost:3000`. En `main.ts` está **`enableCors({ origin: true })`** para desarrollo; en producción conviene restringir orígenes.
+
+---
+
+## Licencia
+
+Proyecto privado (**UNLICENSED** en `package.json`). NestJS y dependencias mantienen sus propias licencias.

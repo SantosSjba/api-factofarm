@@ -6,6 +6,8 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().port().default(3000),
+  /** Interfaz de escucha (`0.0.0.0` = todas; `127.0.0.1` solo local). */
+  HOST: Joi.string().default('0.0.0.0'),
   JWT_SECRET: Joi.string().min(32).required().messages({
     'string.min': 'JWT_SECRET debe tener al menos 32 caracteres',
     'any.required': 'JWT_SECRET es obligatorio para firmar tokens',
