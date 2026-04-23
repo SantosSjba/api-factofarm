@@ -3,13 +3,14 @@ import type { SeedDb } from '../types';
 
 export async function seedUbigeo(prisma: SeedDb): Promise<void> {
   console.log('\n🗺️ Creating ubigeo (all Peru)...');
-  const CHUNK = 500;
+  // Neon puede cortar transacciones largas; usar lotes más pequeños sin $transaction masivo.
+  const CHUNK = 100;
 
   async function bulkUpsertDepartments(rows: readonly { id: string; name: string }[]) {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
-      await prisma.$transaction(
-        chunk.map(row =>
+      await Promise.all(
+        chunk.map((row) =>
           prisma.department.upsert({
             where: { id: row.id },
             update: { name: row.name },
@@ -25,8 +26,8 @@ export async function seedUbigeo(prisma: SeedDb): Promise<void> {
   ) {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
-      await prisma.$transaction(
-        chunk.map(row =>
+      await Promise.all(
+        chunk.map((row) =>
           prisma.province.upsert({
             where: { id: row.id },
             update: { departmentId: row.departmentId, name: row.name },
@@ -42,8 +43,8 @@ export async function seedUbigeo(prisma: SeedDb): Promise<void> {
   ) {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
-      await prisma.$transaction(
-        chunk.map(row =>
+      await Promise.all(
+        chunk.map((row) =>
           prisma.district.upsert({
             where: { id: row.id },
             update: { provinceId: row.provinceId, name: row.name },
@@ -51,6 +52,7 @@ export async function seedUbigeo(prisma: SeedDb): Promise<void> {
           }),
         ),
       );
+      console.log(`   ... districts ${i + 1}–${Math.min(i + CHUNK, rows.length)} done`);
     }
   }
 
@@ -60,9 +62,6 @@ export async function seedUbigeo(prisma: SeedDb): Promise<void> {
   await bulkUpsertProvinces(PROVINCES);
   console.log(`   ✅ ${PROVINCES.length} provinces`);
 
-  for (let i = 0; i < DISTRICTS.length; i += CHUNK) {
-    await bulkUpsertDistricts(DISTRICTS.slice(i, i + CHUNK));
-    console.log(`   ... districts ${i + 1}–${Math.min(i + CHUNK, DISTRICTS.length)} done`);
-  }
+  await bulkUpsertDistricts(DISTRICTS);
   console.log(`   ✅ ${DISTRICTS.length} districts`);
 }

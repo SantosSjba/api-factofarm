@@ -21,6 +21,43 @@ const DOCUMENT_LABELS: Record<DocumentSeriesType, string> = {
   GUIA_TRANSFERENCIA_ALMACEN: 'GUIA DE TRANSFERENCIA ALMACEN',
 };
 
+const DEFAULT_SERIES: ReadonlyArray<{
+  documentType: DocumentSeriesType;
+  numero: string;
+  esContingencia: boolean;
+}> = [
+  { documentType: DocumentSeriesType.FACTURA_ELECTRONICA, numero: 'F001', esContingencia: false },
+  { documentType: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA, numero: 'B001', esContingencia: false },
+  { documentType: DocumentSeriesType.NOTA_CREDITO, numero: 'FC01', esContingencia: false },
+  { documentType: DocumentSeriesType.NOTA_CREDITO, numero: 'BC01', esContingencia: false },
+  { documentType: DocumentSeriesType.NOTA_DEBITO, numero: 'FD01', esContingencia: false },
+  { documentType: DocumentSeriesType.NOTA_DEBITO, numero: 'BD01', esContingencia: false },
+  {
+    documentType: DocumentSeriesType.COMPROBANTE_RETENCION_ELECTRONICA,
+    numero: 'R001',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.GUIA_REMISION_REMITENTE,
+    numero: 'T001',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.COMPROBANTE_PERCEPCION_ELECTRONICA,
+    numero: 'P001',
+    esContingencia: false,
+  },
+  { documentType: DocumentSeriesType.NOTA_VENTA, numero: 'NV01', esContingencia: false },
+  { documentType: DocumentSeriesType.LIQUIDACION_COMPRA, numero: 'L001', esContingencia: false },
+  { documentType: DocumentSeriesType.GUIA_INGRESO_ALMACEN, numero: 'NIA1', esContingencia: false },
+  { documentType: DocumentSeriesType.GUIA_SALIDA_ALMACEN, numero: 'NSA1', esContingencia: false },
+  {
+    documentType: DocumentSeriesType.GUIA_TRANSFERENCIA_ALMACEN,
+    numero: 'NTA1',
+    esContingencia: false,
+  },
+];
+
 const selectEstablishment = {
   id: true,
   nombre: true,
@@ -60,10 +97,12 @@ export class EstablishmentsService {
 
   async create(dto: CreateEstablishmentDto) {
     try {
-      return await this.prisma.establishment.create({
+      const created = await this.prisma.establishment.create({
         data: this.mapEstablishmentCreateInput(dto),
         select: selectEstablishment,
       });
+      await this.ensureDefaultSeries(created.id);
+      return created;
     } catch (err) {
       this.handleKnownError(err, 'Ya existe un establecimiento con ese código.');
     }
@@ -110,8 +149,32 @@ export class EstablishmentsService {
     }));
   }
 
+  listDepartments() {
+    return this.prisma.department.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+  }
+
+  listProvinces(departmentId: string) {
+    return this.prisma.province.findMany({
+      where: { departmentId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, departmentId: true },
+    });
+  }
+
+  listDistricts(provinceId: string) {
+    return this.prisma.district.findMany({
+      where: { provinceId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, provinceId: true },
+    });
+  }
+
   async listSeries(establishmentId: string) {
     await this.ensureEstablishment(establishmentId);
+    await this.ensureDefaultSeries(establishmentId);
     return this.prisma.establishmentSeries.findMany({
       where: { establishmentId },
       orderBy: [{ documentType: 'asc' }, { numero: 'asc' }],
@@ -172,6 +235,18 @@ export class EstablishmentsService {
     if (!current) {
       throw new NotFoundException('Establecimiento no encontrado');
     }
+  }
+
+  private async ensureDefaultSeries(establishmentId: string) {
+    await this.prisma.establishmentSeries.createMany({
+      data: DEFAULT_SERIES.map((s) => ({
+        establishmentId,
+        documentType: s.documentType,
+        numero: s.numero,
+        esContingencia: s.esContingencia,
+      })),
+      skipDuplicates: true,
+    });
   }
 
   private mapEstablishmentCreateInput(

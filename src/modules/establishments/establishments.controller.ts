@@ -27,6 +27,26 @@ export class EstablishmentsController {
     return this.establishmentsService.getDocumentTypes();
   }
 
+  @Get('ubigeo/departments')
+  @ApiOperation({ summary: 'Listar departamentos (ubigeo)' })
+  listDepartments() {
+    return this.establishmentsService.listDepartments();
+  }
+
+  @Get('ubigeo/provinces/:departmentId')
+  @ApiOperation({ summary: 'Listar provincias por departamento' })
+  @ApiParam({ name: 'departmentId', description: 'Ubigeo departamento id' })
+  listProvinces(@Param('departmentId') departmentId: string) {
+    return this.establishmentsService.listProvinces(departmentId);
+  }
+
+  @Get('ubigeo/districts/:provinceId')
+  @ApiOperation({ summary: 'Listar distritos por provincia' })
+  @ApiParam({ name: 'provinceId', description: 'Ubigeo provincia id' })
+  listDistricts(@Param('provinceId') provinceId: string) {
+    return this.establishmentsService.listDistricts(provinceId);
+  }
+
   @Get()
   @ApiOperation({
     summary: 'Listar establecimientos activos',
