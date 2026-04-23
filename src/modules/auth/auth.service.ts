@@ -30,7 +30,10 @@ export class AuthService {
     user: AuthUserView;
   }> {
     const user = await this.prisma.user.findFirst({
-      where: { email: { equals: email.trim(), mode: 'insensitive' } },
+      where: {
+        email: { equals: email.trim(), mode: 'insensitive' },
+        deletedAt: null,
+      },
     });
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');

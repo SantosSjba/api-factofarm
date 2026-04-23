@@ -55,7 +55,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar usuario' })
+  @ApiOperation({ summary: 'Eliminar usuario (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);

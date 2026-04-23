@@ -76,6 +76,7 @@ export class PrismaUserRepository implements IUserRepository {
 
   async findAll(): Promise<UserSnapshot[]> {
     const rows = await this.prisma.user.findMany({
+      where: { deletedAt: null },
       include: userSnapshotInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -83,8 +84,8 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   async findById(id: string): Promise<UserSnapshot | null> {
-    const row = await this.prisma.user.findUnique({
-      where: { id },
+    const row = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
       include: userSnapshotInclude,
     });
     return row ? mapUser(row) : null;
@@ -138,7 +139,10 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.user.delete({ where: { id } });
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   private toProfileCreate(
