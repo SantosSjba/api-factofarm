@@ -1,0 +1,31 @@
+model Department {
+  id   String @id
+  name String
+
+  provinces Province[]
+
+  @@map("departments")
+}
+
+model Province {
+  id           String @id
+  departmentId String
+  name         String
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  districts  District[]
+
+  @@index([departmentId])
+  @@map("provinces")
+}
+
+model District {
+  id         String @id
+  provinceId String
+  name       String
+
+  province Province @relation(fields: [provinceId], references: [id], onDelete: Restrict)
+
+  @@index([provinceId])
+  @@map("districts")
+}
