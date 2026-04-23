@@ -7,8 +7,9 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from './dto/create-establishment.dto';
 import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
@@ -51,8 +52,17 @@ export class EstablishmentsController {
   @ApiOperation({
     summary: 'Listar establecimientos activos',
   })
-  findAll() {
-    return this.establishmentsService.findAll();
+  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por nombre/código/dirección' })
+  @ApiQuery({
+    name: 'hospital',
+    required: false,
+    description: 'Filtrar por hospital (all|hospital|no-hospital)',
+  })
+  findAll(
+    @Query('search') search?: string,
+    @Query('hospital') hospital?: string,
+  ) {
+    return this.establishmentsService.findAll({ search, hospital });
   }
 
   @Post()

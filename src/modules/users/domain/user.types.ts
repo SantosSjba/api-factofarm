@@ -48,3 +48,8 @@ export type UpdateUserInput = {
   establecimientoId?: string;
   profile?: Partial<UserProfileSnapshot>;
 };
+
+export type UserListFilters = {
+  search?: string;
+  role?: UserRole;
+};

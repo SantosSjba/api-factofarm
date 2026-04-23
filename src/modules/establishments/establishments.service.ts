@@ -87,9 +87,30 @@ const selectEstablishment = {
 export class EstablishmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
+  findAll(filters?: { search?: string; hospital?: string }) {
+    const search = filters?.search?.trim();
+    const hospital = filters?.hospital?.trim().toLowerCase();
+    const hospitalFlag =
+      hospital === 'hospital' ? true : hospital === 'no-hospital' ? false : undefined;
+
+    const where: Prisma.EstablishmentWhereInput = {
+      deletedAt: null,
+      activo: true,
+      ...(hospitalFlag !== undefined ? { esHospital: hospitalFlag } : {}),
+      ...(search
+        ? {
+            OR: [
+              { nombre: { contains: search, mode: 'insensitive' } },
+              { codigo: { contains: search, mode: 'insensitive' } },
+              { direccionFiscal: { contains: search, mode: 'insensitive' } },
+              { direccionComercial: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
     return this.prisma.establishment.findMany({
-      where: { deletedAt: null, activo: true },
+      where,
       orderBy: { nombre: 'asc' },
       select: selectEstablishment,
     });

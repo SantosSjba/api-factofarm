@@ -5,6 +5,7 @@ import type { IUserRepository } from '../domain/user.repository';
 import type {
   CreateUserInput,
   UpdateUserInput,
+  UserListFilters,
   UserProfileSnapshot,
   UserSnapshot,
 } from '../domain/user.types';
@@ -74,9 +75,23 @@ export class PrismaUserRepository implements IUserRepository {
     return mapUser(created);
   }
 
-  async findAll(): Promise<UserSnapshot[]> {
+  async findAll(filters?: UserListFilters): Promise<UserSnapshot[]> {
+    const search = filters?.search?.trim();
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      ...(filters?.role ? { role: filters.role } : {}),
+      ...(search
+        ? {
+            OR: [
+              { nombre: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
     const rows = await this.prisma.user.findMany({
-      where: { deletedAt: null },
+      where,
       include: userSnapshotInclude,
       orderBy: { createdAt: 'desc' },
     });
