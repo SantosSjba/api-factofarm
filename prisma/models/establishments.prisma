@@ -1,11 +1,69 @@
+enum DocumentSeriesType {
+  FACTURA_ELECTRONICA
+  BOLETA_VENTA_ELECTRONICA
+  NOTA_CREDITO
+  NOTA_DEBITO
+  GUIA_REMISION_REMITENTE
+  COMPROBANTE_RETENCION_ELECTRONICA
+  GUIA_REMISION_TRANSPORTISTA
+  COMPROBANTE_PERCEPCION_ELECTRONICA
+  NOTA_VENTA
+  LIQUIDACION_COMPRA
+  GUIA_INGRESO_ALMACEN
+  GUIA_SALIDA_ALMACEN
+  GUIA_TRANSFERENCIA_ALMACEN
+}
+
 /// Establecimiento / sucursal asignada al usuario
 model Establishment {
-  id        String   @id @default(uuid())
-  nombre    String
-  codigo    String?  @unique
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  nombre          String
+  codigo          String?  @unique
+  activo          Boolean  @default(true)
+  pais            String   @default("PERU")
+  departmentId    String?
+  provinceId      String?
+  districtId      String?
+  direccionFiscal String?
+  direccionComercial String?
+  telefono        String?
+  correoContacto  String?
+  direccionWeb    String?
+  informacionAdicional String?
+  urlImpresora    String?
+  nombreImpresora String?
+  clienteDefault  String?
+  logoArchivoId   String?
+  sujetoIgv31556  Boolean  @default(false)
+  esHospital      Boolean  @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  users User[]
+  department Department? @relation("EstablishmentDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  province   Province?   @relation("EstablishmentProvince", fields: [provinceId], references: [id], onDelete: Restrict)
+  district   District?   @relation("EstablishmentDistrict", fields: [districtId], references: [id], onDelete: Restrict)
+
+  users  User[]
+  series EstablishmentSeries[]
+
+  @@index([departmentId])
+  @@index([provinceId])
+  @@index([districtId])
+  @@index([deletedAt])
+}
+
+model EstablishmentSeries {
+  id              String             @id @default(uuid())
+  establishmentId String
+  documentType    DocumentSeriesType
+  numero          String
+  esContingencia  Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@unique([establishmentId, documentType, numero])
+  @@index([establishmentId, documentType])
 }

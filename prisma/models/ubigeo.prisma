@@ -3,6 +3,7 @@ model Department {
   name String
 
   provinces Province[]
+  establishments Establishment[] @relation("EstablishmentDepartment")
 
   @@map("departments")
 }
@@ -14,6 +15,7 @@ model Province {
 
   department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   districts  District[]
+  establishments Establishment[] @relation("EstablishmentProvince")
 
   @@index([departmentId])
   @@map("provinces")
@@ -25,6 +27,7 @@ model District {
   name       String
 
   province Province @relation(fields: [provinceId], references: [id], onDelete: Restrict)
+  establishments Establishment[] @relation("EstablishmentDistrict")
 
   @@index([provinceId])
   @@map("districts")
