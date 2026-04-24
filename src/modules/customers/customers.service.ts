@@ -481,18 +481,18 @@ export class CustomersService {
     if (!row) throw new NotFoundException('Cliente no encontrado');
   }
 
-  private norm(v?: string): string | undefined {
-    if (v === undefined) return undefined;
+  private norm(v?: string | null): string | undefined {
+    if (v === undefined || v === null) return undefined;
     const t = v.trim();
     return t || undefined;
   }
 
-  private normLower(v?: string): string | undefined {
+  private normLower(v?: string | null): string | undefined {
     const n = this.norm(v);
     return n ? n.toLowerCase() : undefined;
   }
 
-  private normUpper(v?: string): string | undefined {
+  private normUpper(v?: string | null): string | undefined {
     const n = this.norm(v);
     return n ? n.toUpperCase() : undefined;
   }
