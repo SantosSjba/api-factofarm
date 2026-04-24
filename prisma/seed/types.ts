@@ -33,3 +33,7 @@ export type SeedEstablishmentInput = {
 };
 
 export type SeedDb = PrismaClient;
+
+export type SeedCustomerTypeInput = {
+  descripcion: string;
+};

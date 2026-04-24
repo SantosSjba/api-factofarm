@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { seedAdminUser } from './admin-user';
+import { seedCustomerTypes } from './customer-types';
 import { seedEstablishments } from './establishments';
 import { seedPermissions } from './permissions';
 import { seedUbigeo } from './ubigeo';
@@ -7,6 +8,7 @@ import { seedUbigeo } from './ubigeo';
 export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await seedUbigeo(prisma);
   await seedEstablishments(prisma);
+  await seedCustomerTypes(prisma);
   await seedPermissions(prisma);
   await seedAdminUser(prisma);
 }
