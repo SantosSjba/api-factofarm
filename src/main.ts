@@ -36,6 +36,7 @@ async function bootstrap() {
     .addTag('users', 'Usuarios')
     .addTag('establishments', 'Establecimientos')
     .addTag('customer-types', 'Tipos de cliente')
+    .addTag('customers', 'Clientes')
     .addTag('permissions', 'Permisos')
     .addTag('files', 'Archivos')
     .build();

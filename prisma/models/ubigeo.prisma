@@ -4,6 +4,7 @@ model Department {
 
   provinces Province[]
   establishments Establishment[] @relation("EstablishmentDepartment")
+  customerAddresses CustomerAddress[] @relation("CustomerAddressDepartment")
 
   @@map("departments")
 }
@@ -16,6 +17,7 @@ model Province {
   department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   districts  District[]
   establishments Establishment[] @relation("EstablishmentProvince")
+  customerAddresses CustomerAddress[] @relation("CustomerAddressProvince")
 
   @@index([departmentId])
   @@map("provinces")
@@ -28,6 +30,7 @@ model District {
 
   province Province @relation(fields: [provinceId], references: [id], onDelete: Restrict)
   establishments Establishment[] @relation("EstablishmentDistrict")
+  customerAddresses CustomerAddress[] @relation("CustomerAddressDistrict")
 
   @@index([provinceId])
   @@map("districts")

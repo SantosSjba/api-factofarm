@@ -5,5 +5,7 @@ model CustomerType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  customers Customer[]
+
   @@index([deletedAt])
 }

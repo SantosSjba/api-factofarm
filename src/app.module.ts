@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { FilesModule } from './modules/files/files.module';
 import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CustomerTypesModule } from './modules/customer-types/customer-types.mod
     FilesModule,
     UsersModule,
     CustomerTypesModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

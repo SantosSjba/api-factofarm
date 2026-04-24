@@ -1,0 +1,87 @@
+enum CustomerDocumentType {
+  DNI
+  RUC
+  CE
+  PASAPORTE
+  DOC_SIN_RUC
+  OTRO
+}
+
+model CustomerZone {
+  id          String   @id @default(uuid())
+  nombre      String   @unique
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customers Customer[]
+
+  @@index([deletedAt])
+}
+
+model Customer {
+  id                  String               @id @default(uuid())
+  nombre              String
+  nombreComercial     String?
+  tipoDocumento       CustomerDocumentType
+  numeroDocumento     String
+  nacionalidad        String?              @default("PERU")
+  diasCredito         Int                  @default(0)
+  codigoInterno       String?
+  codigoBarra         String?
+  observaciones       String?
+  sitioWeb            String?
+  contactoNombre      String?
+  contactoTelefono    String?
+  correosOpcionales   String?
+  telefono            String?
+  correoElectronico   String?
+  puntosAcumulados    Int                  @default(0)
+  activo              Boolean              @default(true)
+  habilitado          Boolean              @default(true)
+  etiquetas           String[]             @default([])
+  vendedorAsignadoId  String?
+  vendedorAsignado    User?                @relation("CustomerAssignedSeller", fields: [vendedorAsignadoId], references: [id], onDelete: SetNull)
+  customerTypeId      String?
+  customerType        CustomerType?        @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
+  zoneId              String?
+  zone                CustomerZone?        @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  deletedAt           DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  addresses CustomerAddress[]
+
+  @@index([deletedAt])
+  @@index([customerTypeId])
+  @@index([zoneId])
+  @@index([vendedorAsignadoId])
+  @@index([nombre])
+  @@index([numeroDocumento])
+  @@unique([tipoDocumento, numeroDocumento])
+}
+
+model CustomerAddress {
+  id               String    @id @default(uuid())
+  customerId       String
+  customer         Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  esPrincipal      Boolean   @default(false)
+  pais             String    @default("PERU")
+  departmentId     String?
+  department       Department? @relation("CustomerAddressDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  provinceId       String?
+  province         Province? @relation("CustomerAddressProvince", fields: [provinceId], references: [id], onDelete: Restrict)
+  districtId       String?
+  district         District? @relation("CustomerAddressDistrict", fields: [districtId], references: [id], onDelete: Restrict)
+  direccion        String?
+  telefono         String?
+  correoElectronico String?
+  correosOpcionales String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([customerId, esPrincipal])
+  @@index([departmentId])
+  @@index([provinceId])
+  @@index([districtId])
+}
