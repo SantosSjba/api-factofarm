@@ -8,10 +8,10 @@ export class ProductListQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'all|nombre|codigoInterno|descripcion' })
+  @ApiPropertyOptional({ description: 'all|nombre|codigoInterno|codigoBarra|codigoBusqueda|descripcion' })
   @IsOptional()
-  @IsIn(['all', 'nombre', 'codigoInterno', 'descripcion'])
-  field?: 'all' | 'nombre' | 'codigoInterno' | 'descripcion';
+  @IsIn(['all', 'nombre', 'codigoInterno', 'codigoBarra', 'codigoBusqueda', 'descripcion'])
+  field?: 'all' | 'nombre' | 'codigoInterno' | 'codigoBarra' | 'codigoBusqueda' | 'descripcion';
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

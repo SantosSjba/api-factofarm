@@ -10,20 +10,37 @@ const selectProductList = {
   id: true,
   nombre: true,
   descripcion: true,
+  principioActivo: true,
+  concentracion: true,
+  formaFarmaceutica: true,
+  codigoBusqueda: true,
   codigoInterno: true,
+  codigoBarra: true,
   codigoSunat: true,
   modelo: true,
+  lineaProducto: true,
   registroSanitario: true,
   codigoMedicamentoDigemid: true,
+  saleTaxAffectationId: true,
+  purchaseTaxAffectationId: true,
   precioUnitarioVenta: true,
   precioUnitarioCompra: true,
   incluyeIgvVenta: true,
   incluyeIgvCompra: true,
+  tipoSistemaIscId: true,
+  porcentajeIsc: true,
+  codigoLote: true,
+  fechaVencimientoLote: true,
+  numeroPuntos: true,
   marcaLaboratorio: true,
   stockMinimo: true,
+  categoryId: true,
+  brandId: true,
+  productLocationId: true,
   unit: { select: { id: true, codigo: true, nombre: true } },
   brand: { select: { id: true, nombre: true } },
   currency: { select: { id: true, codigo: true, nombre: true } },
+  tipoSistemaIsc: { select: { id: true, codigo: true, nombre: true } },
   warehouseStocks: { select: { cantidad: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -58,6 +75,12 @@ export class ProductsService {
       if (field === 'all' || field === 'codigoInterno') {
         searchable.push({ codigoInterno: { contains: search, mode: 'insensitive' } });
       }
+      if (field === 'all' || field === 'codigoBarra') {
+        searchable.push({ codigoBarra: { contains: search, mode: 'insensitive' } });
+      }
+      if (field === 'all' || field === 'codigoBusqueda') {
+        searchable.push({ codigoBusqueda: { contains: search, mode: 'insensitive' } });
+      }
       if (field === 'all' || field === 'descripcion') {
         searchable.push({ descripcion: { contains: search, mode: 'insensitive' } });
       }
@@ -83,18 +106,35 @@ export class ProductsService {
       id: row.id,
       nombre: row.nombre,
       descripcion: row.descripcion,
+      principioActivo: row.principioActivo,
+      concentracion: row.concentracion,
+      formaFarmaceutica: row.formaFarmaceutica,
+      codigoBusqueda: row.codigoBusqueda,
       codigoInterno: row.codigoInterno,
+      codigoBarra: row.codigoBarra,
       codigoSunat: row.codigoSunat,
       modelo: row.modelo,
+      lineaProducto: row.lineaProducto,
       registroSanitario: row.registroSanitario,
       codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
+      saleTaxAffectationId: row.saleTaxAffectationId,
+      purchaseTaxAffectationId: row.purchaseTaxAffectationId,
       precioUnitarioVenta: decStr(row.precioUnitarioVenta)!,
       precioUnitarioCompra: decStr(row.precioUnitarioCompra),
       incluyeIgvVenta: row.incluyeIgvVenta,
       incluyeIgvCompra: row.incluyeIgvCompra,
+      tipoSistemaIscId: row.tipoSistemaIscId,
+      tipoSistemaIscNombre: row.tipoSistemaIsc?.nombre ?? null,
+      porcentajeIsc: decStr(row.porcentajeIsc),
+      codigoLote: row.codigoLote,
+      fechaVencimientoLote: row.fechaVencimientoLote?.toISOString() ?? null,
+      numeroPuntos: decStr(row.numeroPuntos),
       stockMinimo: row.stockMinimo,
       marcaLaboratorio: row.marcaLaboratorio,
       marcaNombre: row.brand?.nombre ?? null,
+      categoryId: row.categoryId,
+      brandId: row.brandId,
+      productLocationId: row.productLocationId,
       unit: row.unit,
       currency: row.currency,
       totalStock: sumStock(row.warehouseStocks),
@@ -161,6 +201,16 @@ export class ProductsService {
       if (!a) throw new BadRequestException('Archivo de imagen no válido');
     }
 
+    if (dto.tipoSistemaIscId) {
+      const iscSystem = await this.prisma.productIscSystem.findFirst({
+        where: { id: dto.tipoSistemaIscId, deletedAt: null, activo: true },
+      });
+      if (!iscSystem) throw new BadRequestException('Tipo de sistema ISC no válido');
+    }
+    if ((dto.incluyeIscVenta || dto.incluyeIscCompra) && !dto.tipoSistemaIscId) {
+      throw new BadRequestException('Debe seleccionar un tipo de sistema ISC');
+    }
+
     const warehouseIds = new Set<string>();
     for (const p of dto.warehousePrices ?? []) {
       warehouseIds.add(p.warehouseId);
@@ -219,10 +269,24 @@ export class ProductsService {
           necesitaRecetaMedica: dto.necesitaRecetaMedica ?? false,
           calcularCantidadPorPrecio: dto.calcularCantidadPorPrecio ?? false,
           manejaLotes: dto.manejaLotes ?? false,
+          codigoLote: dto.manejaLotes ? dto.codigoLote?.trim() || null : null,
+          fechaVencimientoLote:
+            dto.manejaLotes && dto.fechaVencimientoLote ? new Date(dto.fechaVencimientoLote) : null,
           incluyeIscVenta: dto.incluyeIscVenta ?? false,
           incluyeIscCompra: dto.incluyeIscCompra ?? false,
+          tipoSistemaIscId: dto.incluyeIscVenta || dto.incluyeIscCompra ? dto.tipoSistemaIscId ?? null : null,
+          porcentajeIsc:
+            (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
+            dto.porcentajeIsc !== undefined &&
+            dto.porcentajeIsc !== null
+              ? new Prisma.Decimal(dto.porcentajeIsc)
+              : null,
           sujetoDetraccion: dto.sujetoDetraccion ?? false,
           sePuedeCanjearPorPuntos: dto.sePuedeCanjearPorPuntos ?? false,
+          numeroPuntos:
+            dto.sePuedeCanjearPorPuntos && dto.numeroPuntos !== undefined && dto.numeroPuntos !== null
+              ? new Prisma.Decimal(dto.numeroPuntos)
+              : null,
           aplicaGanancia: dto.aplicaGanancia ?? false,
           porcentajeGanancia:
             dto.porcentajeGanancia !== undefined && dto.porcentajeGanancia !== null
@@ -342,6 +406,12 @@ export class ProductsService {
       precioUnitarioCompra: decStr(row.precioUnitarioCompra),
       incluyeIgvVenta: row.incluyeIgvVenta,
       incluyeIgvCompra: row.incluyeIgvCompra,
+      tipoSistemaIscId: row.tipoSistemaIscId,
+      tipoSistemaIscNombre: row.tipoSistemaIsc?.nombre ?? null,
+      porcentajeIsc: decStr(row.porcentajeIsc),
+      codigoLote: row.codigoLote,
+      fechaVencimientoLote: row.fechaVencimientoLote?.toISOString() ?? null,
+      numeroPuntos: decStr(row.numeroPuntos),
       stockMinimo: row.stockMinimo,
       marcaLaboratorio: row.marcaLaboratorio,
       marcaNombre: row.brand?.nombre ?? null,
@@ -438,6 +508,14 @@ export class ProductsService {
       where: { deletedAt: null },
       orderBy: { nombre: 'asc' },
       select: { id: true, nombre: true },
+    });
+  }
+
+  listIscSystems() {
+    return this.prisma.productIscSystem.findMany({
+      where: { deletedAt: null, activo: true },
+      orderBy: { nombre: 'asc' },
+      select: { id: true, codigo: true, nombre: true },
     });
   }
 }

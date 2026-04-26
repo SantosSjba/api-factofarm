@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { currenciesData } from '../data/currencies';
 import { productAttributeTypesData } from '../data/product-attribute-types';
+import { productIscSystemsData } from '../data/product-isc-systems';
 import { taxAffectationTypesData } from '../data/tax-affectation-types';
 import { unitsOfMeasureData } from '../data/units-of-measure';
 
@@ -34,6 +35,14 @@ export async function seedProductCatalogs(prisma: PrismaClient): Promise<void> {
       where: { nombre },
       update: { deletedAt: null },
       create: { nombre },
+    });
+  }
+
+  for (const row of productIscSystemsData) {
+    await prisma.productIscSystem.upsert({
+      where: { codigo: row.codigo },
+      update: { nombre: row.nombre, activo: true, deletedAt: null },
+      create: { codigo: row.codigo, nombre: row.nombre, activo: true },
     });
   }
 

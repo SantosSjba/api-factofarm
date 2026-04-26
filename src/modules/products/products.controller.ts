@@ -53,6 +53,12 @@ export class ProductsController {
     return this.productsService.listAttributeTypes();
   }
 
+  @Get('catalogs/isc-systems')
+  @ApiOperation({ summary: 'Catálogo de tipos de sistema ISC' })
+  catalogIscSystems() {
+    return this.productsService.listIscSystems();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Listar productos con paginación' })
   list(@Query() query: ProductListQueryDto) {

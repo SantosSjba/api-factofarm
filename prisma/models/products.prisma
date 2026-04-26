@@ -98,6 +98,20 @@ model ProductAttributeType {
   @@index([deletedAt])
 }
 
+model ProductIscSystem {
+  id        String   @id @default(uuid())
+  codigo    String   @unique @db.VarChar(50)
+  nombre    String   @unique @db.VarChar(120)
+  activo    Boolean  @default(true)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
 model Product {
   id          String  @id @default(uuid())
   nombre      String
@@ -131,10 +145,15 @@ model Product {
   necesitaRecetaMedica      Boolean  @default(false)
   calcularCantidadPorPrecio Boolean  @default(false)
   manejaLotes               Boolean  @default(false)
+  codigoLote                String?
+  fechaVencimientoLote      DateTime?
   incluyeIscVenta           Boolean  @default(false)
   incluyeIscCompra          Boolean  @default(false)
+  tipoSistemaIscId          String?
+  porcentajeIsc             Decimal? @db.Decimal(9, 4)
   sujetoDetraccion          Boolean  @default(false)
   sePuedeCanjearPorPuntos   Boolean  @default(false)
+  numeroPuntos              Decimal? @db.Decimal(18, 4)
   aplicaGanancia            Boolean  @default(false)
   porcentajeGanancia        Decimal? @db.Decimal(9, 4)
   costoUnitario             Decimal? @db.Decimal(18, 4)
@@ -152,6 +171,7 @@ model Product {
   currency             Currency            @relation(fields: [currencyId], references: [id], onDelete: Restrict)
   saleTaxAffectation   TaxAffectationType  @relation("ProductSaleTax", fields: [saleTaxAffectationId], references: [id], onDelete: Restrict)
   purchaseTaxAffectation TaxAffectationType? @relation("ProductPurchaseTax", fields: [purchaseTaxAffectationId], references: [id], onDelete: SetNull)
+  tipoSistemaIsc       ProductIscSystem?   @relation(fields: [tipoSistemaIscId], references: [id], onDelete: SetNull)
   category             Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand                Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
   productLocation      ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: SetNull)
@@ -171,6 +191,7 @@ model Product {
   @@index([deletedAt])
   @@index([nombre])
   @@index([codigoInterno])
+  @@index([tipoSistemaIscId])
   @@index([categoryId])
 }
 

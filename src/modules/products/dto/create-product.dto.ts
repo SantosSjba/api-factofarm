@@ -4,7 +4,6 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -254,6 +253,28 @@ export class CreateProductDto {
   @IsBoolean()
   incluyeIscCompra?: boolean;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  tipoSistemaIscId?: string;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  porcentajeIsc?: number;
+
+  @ApiPropertyOptional({ maxLength: 60 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  codigoLote?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha de vencimiento del lote en formato ISO' })
+  @IsOptional()
+  @IsString()
+  fechaVencimientoLote?: string;
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
@@ -263,6 +284,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   sePuedeCanjearPorPuntos?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  numeroPuntos?: number;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
