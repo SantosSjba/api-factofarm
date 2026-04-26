@@ -46,6 +46,23 @@ export type SeedBrandInput = {
   nombre: string;
 };
 
+export type SeedProductInput = {
+  nombre: string;
+  descripcion?: string;
+  codigoInterno: string;
+  codigoBarra?: string;
+  precioUnitarioVenta: string;
+  precioUnitarioCompra?: string;
+  stockMinimo?: number;
+  stockInicial?: string;
+  incluyeIgvVenta?: boolean;
+  categoryNombre?: string;
+  brandNombre?: string;
+  marcaLaboratorio?: string;
+  presentacionDescripcion?: string;
+  attributeObservacion?: string;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };

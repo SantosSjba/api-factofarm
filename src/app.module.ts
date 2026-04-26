@@ -13,6 +13,7 @@ import { CustomerTypesModule } from './modules/customer-types/customer-types.mod
 import { CustomersModule } from './modules/customers/customers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
+import { ProductsModule } from './modules/products/products.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { BrandsModule } from './modules/brands/brands.module';
     CategoriesModule,
     BrandsModule,
     CustomersModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

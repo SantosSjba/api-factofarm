@@ -1,0 +1,21 @@
+/** Tipos de afectación al IGV (texto operativo SUNAT / facturación). */
+export const taxAffectationTypesData = [
+  { codigo: '10', descripcion: 'Gravado - Operación Onerosa' },
+  { codigo: '11', descripcion: 'Gravado - Retiro por premio' },
+  { codigo: '12', descripcion: 'Gravado - Retiro por donación' },
+  { codigo: '13', descripcion: 'Gravado - Retiro' },
+  { codigo: '14', descripcion: 'Gravado - Retiro por publicidad' },
+  { codigo: '15', descripcion: 'Gravado - Bonificaciones' },
+  { codigo: '16', descripcion: 'Gravado - Retiro por entrega a trabajadores' },
+  { codigo: '20', descripcion: 'Exonerado - Operación Onerosa' },
+  { codigo: '21', descripcion: 'Exonerado - Transferencia Gratuita' },
+  { codigo: '30', descripcion: 'Inafecto - Operación Onerosa' },
+  { codigo: '31', descripcion: 'Inafecto - Retiro por Bonificación' },
+  { codigo: '32', descripcion: 'Inafecto - Retiro' },
+  { codigo: '33', descripcion: 'Inafecto - Retiro por Muestras Médicas' },
+  { codigo: '34', descripcion: 'Inafecto - Retiro por Convenio Colectivo' },
+  { codigo: '35', descripcion: 'Inafecto - Retiro por premio' },
+  { codigo: '36', descripcion: 'Inafecto - Retiro por publicidad' },
+  { codigo: '37', descripcion: 'Inafecto - Transferencia gratuita' },
+  { codigo: '40', descripcion: 'Exportación de bienes o servicios' },
+] as const;

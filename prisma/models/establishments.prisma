@@ -44,8 +44,10 @@ model Establishment {
   province   Province?   @relation("EstablishmentProvince", fields: [provinceId], references: [id], onDelete: Restrict)
   district   District?   @relation("EstablishmentDistrict", fields: [districtId], references: [id], onDelete: Restrict)
 
-  users  User[]
-  series EstablishmentSeries[]
+  users             User[]
+  series            EstablishmentSeries[]
+  warehouses        Warehouse[]
+  productLocations  ProductLocation[]
 
   @@index([departmentId])
   @@index([provinceId])
