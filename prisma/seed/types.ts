@@ -42,6 +42,10 @@ export type SeedCategoryInput = {
   nombre: string;
 };
 
+export type SeedBrandInput = {
+  nombre: string;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };

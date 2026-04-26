@@ -12,6 +12,7 @@ import { FilesModule } from './modules/files/files.module';
 import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { BrandsModule } from './modules/brands/brands.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
     UsersModule,
     CustomerTypesModule,
     CategoriesModule,
+    BrandsModule,
     CustomersModule,
   ],
   controllers: [AppController],

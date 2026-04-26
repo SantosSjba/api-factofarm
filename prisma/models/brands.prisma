@@ -1,0 +1,9 @@
+model Brand {
+  id        String   @id @default(uuid())
+  nombre    String   @unique
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+}
