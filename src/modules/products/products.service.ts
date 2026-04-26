@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateProductLocationDto } from './dto/create-product-location.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
 
@@ -262,6 +263,33 @@ export class ProductsService {
 
       let orden = 0;
       for (const pr of dto.presentations ?? []) {
+        const factor = Number(pr.factor ?? 0);
+        const precio1 = Number(pr.precio1 ?? 0);
+        const precio2 = Number(pr.precio2 ?? 0);
+        const precio3 = Number(pr.precio3 ?? 0);
+        const precioDefecto = pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
+
+        if (!(factor > 0)) {
+          throw new BadRequestException('En presentaciones, el factor debe ser mayor a 0');
+        }
+        if (precio1 < 0 || precio2 < 0 || precio3 < 0) {
+          throw new BadRequestException('En presentaciones, los precios deben ser mayores o iguales a 0');
+        }
+        if (precio1 <= 0 && precio2 <= 0 && precio3 <= 0) {
+          throw new BadRequestException('En presentaciones, al menos un precio debe ser mayor a 0');
+        }
+        const precioPorDefecto =
+          precioDefecto === PresentationDefaultPrice.PRECIO_1
+            ? precio1
+            : precioDefecto === PresentationDefaultPrice.PRECIO_2
+              ? precio2
+              : precio3;
+        if (precioPorDefecto <= 0) {
+          throw new BadRequestException(
+            'En presentaciones, el precio por defecto debe apuntar a un precio mayor a 0',
+          );
+        }
+
         await tx.productPresentation.create({
           data: {
             productId: product.id,
@@ -269,11 +297,11 @@ export class ProductsService {
             codigoBarra: pr.codigoBarra?.trim() || null,
             unitId: pr.unitId,
             descripcion: pr.descripcion?.trim() || null,
-            factor: new Prisma.Decimal(pr.factor ?? 0),
-            precio1: new Prisma.Decimal(pr.precio1 ?? 0),
-            precio2: new Prisma.Decimal(pr.precio2 ?? 0),
-            precio3: new Prisma.Decimal(pr.precio3 ?? 0),
-            precioDefecto: pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1,
+            factor: new Prisma.Decimal(factor),
+            precio1: new Prisma.Decimal(precio1),
+            precio2: new Prisma.Decimal(precio2),
+            precio3: new Prisma.Decimal(precio3),
+            precioDefecto,
             precioPuntos:
               pr.precioPuntos !== undefined && pr.precioPuntos !== null
                 ? new Prisma.Decimal(pr.precioPuntos)
@@ -369,6 +397,40 @@ export class ProductsService {
         establishment: { select: { id: true, nombre: true, codigo: true } },
       },
     });
+  }
+
+  async createProductLocation(dto: CreateProductLocationDto) {
+    const nombre = dto.nombre.trim().toUpperCase();
+    if (!nombre) {
+      throw new BadRequestException('El nombre de la ubicación es obligatorio.');
+    }
+
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: dto.establishmentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!establishment) {
+      throw new NotFoundException('Establecimiento no encontrado');
+    }
+
+    try {
+      return await this.prisma.productLocation.create({
+        data: {
+          establishmentId: dto.establishmentId,
+          nombre,
+        },
+        select: {
+          id: true,
+          nombre: true,
+          establishment: { select: { id: true, nombre: true, codigo: true } },
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Ya existe una ubicación con ese nombre en el establecimiento.');
+      }
+      throw err;
+    }
   }
 
   listAttributeTypes() {
