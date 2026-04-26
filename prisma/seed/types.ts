@@ -38,6 +38,10 @@ export type SeedCustomerTypeInput = {
   descripcion: string;
 };
 
+export type SeedCategoryInput = {
+  nombre: string;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };

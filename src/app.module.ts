@@ -11,6 +11,7 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
 import { FilesModule } from './modules/files/files.module';
 import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CategoriesModule } from './modules/categories/categories.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CustomersModule } from './modules/customers/customers.module';
     FilesModule,
     UsersModule,
     CustomerTypesModule,
+    CategoriesModule,
     CustomersModule,
   ],
   controllers: [AppController],
