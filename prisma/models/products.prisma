@@ -1,0 +1,254 @@
+/// Precio por defecto en presentaciones (Precio 1 / 2 / 3)
+enum PresentationDefaultPrice {
+  PRECIO_1
+  PRECIO_2
+  PRECIO_3
+}
+
+/// Unidades de medida (catálogo SUNAT / comercial)
+model UnitOfMeasure {
+  id        String    @id @default(uuid())
+  codigo    String    @unique
+  nombre    String    @unique
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products      Product[]             @relation("ProductBaseUnit")
+  presentations ProductPresentation[]
+
+  @@index([deletedAt])
+}
+
+model Currency {
+  id        String    @id @default(uuid())
+  codigo    String    @unique /// PEN, USD
+  nombre    String    @unique
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+/// Tipos de afectación al IGV (texto normativo / SUNAT)
+model TaxAffectationType {
+  id          String    @id @default(uuid())
+  codigo      String    @unique
+  descripcion String    @unique
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  productsSale     Product[] @relation("ProductSaleTax")
+  productsPurchase Product[] @relation("ProductPurchaseTax")
+
+  @@index([deletedAt])
+}
+
+/// Almacén ligado a un establecimiento (sucursal)
+model Warehouse {
+  id                String    @id @default(uuid())
+  establishmentId String
+  nombre            String
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  productPrices ProductWarehousePrice[]
+  productStocks ProductWarehouseStock[]
+  defaultForProducts Product[] @relation("ProductDefaultWarehouse")
+
+  @@unique([establishmentId, nombre])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+/// Ubicación física dentro del establecimiento (anaquel, etc.)
+model ProductLocation {
+  id                String    @id @default(uuid())
+  establishmentId String
+  nombre            String
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  products      Product[]
+
+  @@unique([establishmentId, nombre])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+/// Tipos para el listado dinámico de atributos del producto
+model ProductAttributeType {
+  id        String    @id @default(uuid())
+  nombre    String    @unique
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  productAttributes ProductAttribute[]
+
+  @@index([deletedAt])
+}
+
+model ProductIscSystem {
+  id        String   @id @default(uuid())
+  codigo    String   @unique @db.VarChar(50)
+  nombre    String   @unique @db.VarChar(120)
+  activo    Boolean  @default(true)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+model Product {
+  id          String  @id @default(uuid())
+  nombre      String
+  descripcion String?
+
+  principioActivo       String?
+  concentracion         String?
+  registroSanitario     String?
+  formaFarmaceutica     String?
+  codigoBusqueda        String?
+  codigoInterno         String?
+  codigoBarra           String?
+  codigoSunat           String?
+  codigoMedicamentoDigemid String?
+  lineaProducto         String?
+  modelo                String?
+  marcaLaboratorio      String?
+
+  unitId     String
+  currencyId String
+
+  saleTaxAffectationId     String
+  purchaseTaxAffectationId String?
+
+  precioUnitarioVenta  Decimal  @db.Decimal(18, 4)
+  precioUnitarioCompra Decimal? @db.Decimal(18, 4)
+
+  incluyeIgvVenta   Boolean @default(true)
+  incluyeIgvCompra  Boolean @default(true)
+  generico                  Boolean  @default(false)
+  necesitaRecetaMedica      Boolean  @default(false)
+  calcularCantidadPorPrecio Boolean  @default(false)
+  manejaLotes               Boolean  @default(false)
+  codigoLote                String?
+  fechaVencimientoLote      DateTime?
+  incluyeIscVenta           Boolean  @default(false)
+  incluyeIscCompra          Boolean  @default(false)
+  tipoSistemaIscId          String?
+  porcentajeIsc             Decimal? @db.Decimal(9, 4)
+  sujetoDetraccion          Boolean  @default(false)
+  sePuedeCanjearPorPuntos   Boolean  @default(false)
+  numeroPuntos              Decimal? @db.Decimal(18, 4)
+  aplicaGanancia            Boolean  @default(false)
+  porcentajeGanancia        Decimal? @db.Decimal(9, 4)
+  costoUnitario             Decimal? @db.Decimal(18, 4)
+
+  stockMinimo Int @default(1)
+
+  categoryId String?
+  brandId    String?
+
+  productLocationId  String?
+  defaultWarehouseId String?
+  imagenArchivoId    String? @unique
+
+  unit                 UnitOfMeasure       @relation("ProductBaseUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  currency             Currency            @relation(fields: [currencyId], references: [id], onDelete: Restrict)
+  saleTaxAffectation   TaxAffectationType  @relation("ProductSaleTax", fields: [saleTaxAffectationId], references: [id], onDelete: Restrict)
+  purchaseTaxAffectation TaxAffectationType? @relation("ProductPurchaseTax", fields: [purchaseTaxAffectationId], references: [id], onDelete: SetNull)
+  tipoSistemaIsc       ProductIscSystem?   @relation(fields: [tipoSistemaIscId], references: [id], onDelete: SetNull)
+  category             Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand                Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  productLocation      ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: SetNull)
+  defaultWarehouse     Warehouse?          @relation("ProductDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
+  imagenArchivo        Archivo?            @relation("ProductImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
+
+  presentations   ProductPresentation[]
+  attributes      ProductAttribute[]
+  warehousePrices ProductWarehousePrice[]
+  warehouseStocks ProductWarehouseStock[]
+
+  habilitado Boolean   @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([deletedAt])
+  @@index([nombre])
+  @@index([codigoInterno])
+  @@index([tipoSistemaIscId])
+  @@index([categoryId])
+}
+
+model ProductWarehousePrice {
+  id          String  @id @default(uuid())
+  productId   String
+  warehouseId String
+  precio      Decimal @db.Decimal(18, 4)
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, warehouseId])
+  @@index([warehouseId])
+}
+
+model ProductWarehouseStock {
+  id          String  @id @default(uuid())
+  productId   String
+  warehouseId String
+  cantidad    Decimal @default(0) @db.Decimal(18, 4)
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, warehouseId])
+  @@index([warehouseId])
+}
+
+model ProductPresentation {
+  id            String                   @id @default(uuid())
+  productId     String
+  orden         Int                      @default(0)
+  codigoBarra   String?
+  unitId        String
+  descripcion   String?
+  factor        Decimal                  @default(0) @db.Decimal(18, 6)
+  precio1       Decimal                  @default(0) @db.Decimal(18, 4)
+  precio2       Decimal                  @default(0) @db.Decimal(18, 4)
+  precio3       Decimal                  @default(0) @db.Decimal(18, 4)
+  precioDefecto PresentationDefaultPrice @default(PRECIO_1)
+  precioPuntos  Decimal?                 @db.Decimal(18, 4)
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unit    UnitOfMeasure   @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+}
+
+model ProductAttribute {
+  id              String @id @default(uuid())
+  productId       String
+  attributeTypeId String
+  descripcion     String @db.VarChar(500)
+
+  product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeType ProductAttributeType @relation(fields: [attributeTypeId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+}

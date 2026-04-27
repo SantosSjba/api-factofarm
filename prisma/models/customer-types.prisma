@@ -1,0 +1,11 @@
+model CustomerType {
+  id          String   @id @default(uuid())
+  descripcion String   @unique
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customers Customer[]
+
+  @@index([deletedAt])
+}

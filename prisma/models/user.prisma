@@ -28,10 +28,13 @@ model User {
   archivosSubidos Archivo[]
 
   permissions UserPermission[]
+  customersAsignados Customer[] @relation("CustomerAssignedSeller")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   @@index([establecimientoId])
+  @@index([deletedAt])
   @@map("users")
 }

@@ -9,6 +9,11 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { FilesModule } from './modules/files/files.module';
+import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { BrandsModule } from './modules/brands/brands.module';
+import { ProductsModule } from './modules/products/products.module';
 
 @Module({
   imports: [
@@ -26,6 +31,11 @@ import { FilesModule } from './modules/files/files.module';
     PermissionsModule,
     FilesModule,
     UsersModule,
+    CustomerTypesModule,
+    CategoriesModule,
+    BrandsModule,
+    CustomersModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

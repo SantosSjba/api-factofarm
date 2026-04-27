@@ -5,9 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { UserRole } from '../../../generated/prisma/client';
 import { USER_REPOSITORY } from '../domain/user.repository';
 import type { IUserRepository } from '../domain/user.repository';
-import type { CreateUserInput, UpdateUserInput, UserSnapshot } from '../domain/user.types';
+import type {
+  CreateUserInput,
+  UpdateUserInput,
+  UserListFilters,
+  UserSnapshot,
+} from '../domain/user.types';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 
@@ -39,8 +45,19 @@ export class UsersService {
     return this.users.create(input);
   }
 
-  async findAll(): Promise<UserSnapshot[]> {
-    return this.users.findAll();
+  async findAll(rawFilters?: { search?: string; role?: string }): Promise<UserSnapshot[]> {
+    const search = rawFilters?.search?.trim();
+    const roleRaw = rawFilters?.role?.trim().toUpperCase();
+    const role =
+      roleRaw === UserRole.ADMINISTRADOR || roleRaw === UserRole.VENDEDOR
+        ? roleRaw
+        : undefined;
+
+    const filters: UserListFilters = {
+      ...(search ? { search } : {}),
+      ...(role ? { role } : {}),
+    };
+    return this.users.findAll(filters);
   }
 
   async findOne(id: string): Promise<UserSnapshot> {

@@ -10,6 +10,7 @@ model Archivo {
   uploadedBy       User?    @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
 
   perfilComoFoto UserProfile?
+  productImagen Product? @relation("ProductImagen")
 
   createdAt DateTime @default(now())
 

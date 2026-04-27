@@ -5,6 +5,7 @@ import type { IUserRepository } from '../domain/user.repository';
 import type {
   CreateUserInput,
   UpdateUserInput,
+  UserListFilters,
   UserProfileSnapshot,
   UserSnapshot,
 } from '../domain/user.types';
@@ -74,8 +75,23 @@ export class PrismaUserRepository implements IUserRepository {
     return mapUser(created);
   }
 
-  async findAll(): Promise<UserSnapshot[]> {
+  async findAll(filters?: UserListFilters): Promise<UserSnapshot[]> {
+    const search = filters?.search?.trim();
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      ...(filters?.role ? { role: filters.role } : {}),
+      ...(search
+        ? {
+            OR: [
+              { nombre: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
     const rows = await this.prisma.user.findMany({
+      where,
       include: userSnapshotInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -83,8 +99,8 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   async findById(id: string): Promise<UserSnapshot | null> {
-    const row = await this.prisma.user.findUnique({
-      where: { id },
+    const row = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
       include: userSnapshotInclude,
     });
     return row ? mapUser(row) : null;
@@ -138,7 +154,10 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.user.delete({ where: { id } });
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   private toProfileCreate(

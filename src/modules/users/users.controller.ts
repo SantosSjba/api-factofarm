@@ -7,11 +7,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateUserDto } from './application/dto/create-user.dto';
@@ -32,8 +34,17 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Listar usuarios' })
-  findAll() {
-    return this.usersService.findAll();
+  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por nombre/correo' })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    description: 'Filtrar por rol (ADMINISTRADOR|VENDEDOR)',
+  })
+  findAll(
+    @Query('search') search?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.usersService.findAll({ search, role });
   }
 
   @Get(':id')
@@ -55,7 +66,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar usuario' })
+  @ApiOperation({ summary: 'Eliminar usuario (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);

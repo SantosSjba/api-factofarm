@@ -1,27 +1,118 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { PrismaService } from '../../prisma/prisma.service';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
+import { CreateEstablishmentDto } from './dto/create-establishment.dto';
+import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
+import { EstablishmentsService } from './establishments.service';
 
-/** Listado para combos (Establecimiento) en formularios de usuario. */
 @ApiTags('establishments')
 @Controller('establishments')
 export class EstablishmentsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly establishmentsService: EstablishmentsService) {}
+
+  @Get('series/document-types')
+  @ApiOperation({
+    summary: 'Tipos de documento disponibles para series',
+  })
+  getSeriesDocumentTypes() {
+    return this.establishmentsService.getDocumentTypes();
+  }
+
+  @Get('ubigeo/departments')
+  @ApiOperation({ summary: 'Listar departamentos (ubigeo)' })
+  listDepartments() {
+    return this.establishmentsService.listDepartments();
+  }
+
+  @Get('ubigeo/provinces/:departmentId')
+  @ApiOperation({ summary: 'Listar provincias por departamento' })
+  @ApiParam({ name: 'departmentId', description: 'Ubigeo departamento id' })
+  listProvinces(@Param('departmentId') departmentId: string) {
+    return this.establishmentsService.listProvinces(departmentId);
+  }
+
+  @Get('ubigeo/districts/:provinceId')
+  @ApiOperation({ summary: 'Listar distritos por provincia' })
+  @ApiParam({ name: 'provinceId', description: 'Ubigeo provincia id' })
+  listDistricts(@Param('provinceId') provinceId: string) {
+    return this.establishmentsService.listDistricts(provinceId);
+  }
 
   @Get()
   @ApiOperation({
     summary: 'Listar establecimientos activos',
-    description: 'Uso típico: combos del formulario de usuario.',
   })
-  findAll() {
-    return this.prisma.establishment.findMany({
-      where: { activo: true },
-      orderBy: { nombre: 'asc' },
-      select: {
-        id: true,
-        nombre: true,
-        codigo: true,
-      },
-    });
+  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por nombre/código/dirección' })
+  @ApiQuery({
+    name: 'hospital',
+    required: false,
+    description: 'Filtrar por hospital (all|hospital|no-hospital)',
+  })
+  findAll(
+    @Query('search') search?: string,
+    @Query('hospital') hospital?: string,
+  ) {
+    return this.establishmentsService.findAll({ search, hospital });
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Crear establecimiento' })
+  @ApiBody({ type: CreateEstablishmentDto })
+  create(@Body() dto: CreateEstablishmentDto) {
+    return this.establishmentsService.create(dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Actualizar establecimiento' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiBody({ type: UpdateEstablishmentDto })
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateEstablishmentDto) {
+    return this.establishmentsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar establecimiento (soft delete)' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.establishmentsService.remove(id);
+  }
+
+  @Get(':id/series')
+  @ApiOperation({ summary: 'Listar series de un establecimiento' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  listSeries(@Param('id', ParseUUIDPipe) id: string) {
+    return this.establishmentsService.listSeries(id);
+  }
+
+  @Post(':id/series')
+  @ApiOperation({ summary: 'Crear serie para un establecimiento' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiBody({ type: CreateEstablishmentSeriesDto })
+  addSeries(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateEstablishmentSeriesDto,
+  ) {
+    return this.establishmentsService.addSeries(id, dto);
+  }
+
+  @Delete(':id/series/:seriesId')
+  @ApiOperation({ summary: 'Eliminar serie de un establecimiento' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({ name: 'seriesId', format: 'uuid' })
+  deleteSeries(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('seriesId', ParseUUIDPipe) seriesId: string,
+  ) {
+    return this.establishmentsService.deleteSeries(id, seriesId);
   }
 }
