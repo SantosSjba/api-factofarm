@@ -78,6 +78,12 @@ export class ProductsController {
     return this.productsService.listIscSystems();
   }
 
+  @Get(':id/history/stock')
+  @ApiOperation({ summary: 'Historial de stock por ubicación del producto' })
+  historyStock(@Param('id') id: string) {
+    return this.productsService.historyStock(id);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Listar productos con paginación' })
   list(@Query() query: ProductListQueryDto) {

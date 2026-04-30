@@ -1466,6 +1466,39 @@ export class ProductsService {
     });
   }
 
+  async historyStock(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    const rows = await this.prisma.productWarehouseStock.findMany({
+      where: {
+        productId: id,
+        warehouse: { deletedAt: null },
+      },
+      orderBy: { warehouseId: 'asc' },
+      select: {
+        cantidad: true,
+        warehouse: {
+          select: {
+            id: true,
+            nombre: true,
+            establishment: { select: { id: true, nombre: true, codigo: true } },
+          },
+        },
+      },
+    });
+
+    return rows.map((r) => ({
+      warehouseId: r.warehouse.id,
+      ubicacion: `${r.warehouse.nombre} · ${r.warehouse.establishment.nombre}`,
+      stock: r.cantidad.toString(),
+      series: r.warehouse.establishment.codigo ?? '—',
+    }));
+  }
+
   listProductLocations(establishmentId?: string) {
     return this.prisma.productLocation.findMany({
       where: { deletedAt: null, establishmentId: establishmentId || undefined },
