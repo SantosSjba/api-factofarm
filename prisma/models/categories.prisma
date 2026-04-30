@@ -6,6 +6,7 @@ model Category {
   updatedAt DateTime @updatedAt
 
   products Product[]
+  services Service[]
 
   @@index([deletedAt])
 }

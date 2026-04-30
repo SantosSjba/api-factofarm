@@ -11,6 +11,7 @@ model Archivo {
 
   perfilComoFoto UserProfile?
   productImagen Product? @relation("ProductImagen")
+  serviceImagen Service? @relation("ServiceImagen")
 
   createdAt DateTime @default(now())
 

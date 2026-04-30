@@ -16,6 +16,7 @@ model UnitOfMeasure {
 
   products      Product[]             @relation("ProductBaseUnit")
   presentations ProductPresentation[]
+  services      Service[]             @relation("ServiceBaseUnit")
 
   @@index([deletedAt])
 }
@@ -29,6 +30,7 @@ model Currency {
   updatedAt DateTime  @updatedAt
 
   products Product[]
+  services Service[]
 
   @@index([deletedAt])
 }
@@ -44,6 +46,8 @@ model TaxAffectationType {
 
   productsSale     Product[] @relation("ProductSaleTax")
   productsPurchase Product[] @relation("ProductPurchaseTax")
+  servicesSale     Service[] @relation("ServiceSaleTax")
+  servicesPurchase Service[] @relation("ServicePurchaseTax")
 
   @@index([deletedAt])
 }
@@ -79,6 +83,7 @@ model ProductLocation {
 
   establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
   products      Product[]
+  services      Service[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -94,6 +99,7 @@ model ProductAttributeType {
   updatedAt DateTime  @updatedAt
 
   productAttributes ProductAttribute[]
+  serviceAttributes ServiceAttribute[]
 
   @@index([deletedAt])
 }
@@ -108,6 +114,7 @@ model ProductIscSystem {
   updatedAt DateTime @updatedAt
 
   products Product[]
+  services Service[]
 
   @@index([deletedAt])
 }
@@ -251,4 +258,85 @@ model ProductAttribute {
   attributeType ProductAttributeType @relation(fields: [attributeTypeId], references: [id], onDelete: Restrict)
 
   @@index([productId])
+}
+
+model Service {
+  id          String  @id @default(uuid())
+  nombre      String
+  descripcion String?
+
+  principioActivo          String?
+  concentracion            String?
+  registroSanitario        String?
+  formaFarmaceutica        String?
+  codigoBusqueda           String?
+  codigoInterno            String?
+  codigoBarra              String?
+  codigoSunat              String?
+  codigoMedicamentoDigemid String?
+  lineaProducto            String?
+  modelo                   String?
+  marcaLaboratorio         String?
+
+  unitId     String
+  currencyId String
+
+  saleTaxAffectationId     String
+  purchaseTaxAffectationId String?
+
+  precioUnitarioVenta  Decimal  @db.Decimal(18, 4)
+  precioUnitarioCompra Decimal? @db.Decimal(18, 4)
+
+  incluyeIgvVenta      Boolean  @default(true)
+  incluyeIgvCompra     Boolean  @default(true)
+  generico             Boolean  @default(false)
+  necesitaRecetaMedica Boolean  @default(false)
+  incluyeIscVenta      Boolean  @default(false)
+  incluyeIscCompra     Boolean  @default(false)
+  tipoSistemaIscId     String?
+  porcentajeIsc        Decimal? @db.Decimal(9, 4)
+  sujetoDetraccion     Boolean  @default(false)
+  sePuedeCanjearPorPuntos Boolean  @default(false)
+  numeroPuntos         Decimal? @db.Decimal(18, 4)
+
+  categoryId String?
+  brandId    String?
+
+  productLocationId String?
+  imagenArchivoId   String? @unique
+
+  unit                  UnitOfMeasure       @relation("ServiceBaseUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  currency              Currency            @relation(fields: [currencyId], references: [id], onDelete: Restrict)
+  saleTaxAffectation    TaxAffectationType  @relation("ServiceSaleTax", fields: [saleTaxAffectationId], references: [id], onDelete: Restrict)
+  purchaseTaxAffectation TaxAffectationType? @relation("ServicePurchaseTax", fields: [purchaseTaxAffectationId], references: [id], onDelete: SetNull)
+  tipoSistemaIsc        ProductIscSystem?   @relation(fields: [tipoSistemaIscId], references: [id], onDelete: SetNull)
+  category              Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand                 Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  productLocation       ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: SetNull)
+  imagenArchivo         Archivo?            @relation("ServiceImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
+
+  attributes ServiceAttribute[]
+
+  habilitado Boolean   @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([deletedAt])
+  @@index([nombre])
+  @@index([codigoInterno])
+  @@index([tipoSistemaIscId])
+  @@index([categoryId])
+}
+
+model ServiceAttribute {
+  id              String @id @default(uuid())
+  serviceId       String
+  attributeTypeId String
+  descripcion     String @db.VarChar(500)
+
+  service       Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  attributeType ProductAttributeType @relation(fields: [attributeTypeId], references: [id], onDelete: Restrict)
+
+  @@index([serviceId])
 }

@@ -8,6 +8,7 @@ import { seedEstablishments } from './establishments';
 import { seedProductCatalogs } from './product-catalogs';
 import { seedProducts } from './products';
 import { seedPermissions } from './permissions';
+import { seedServices } from './services';
 import { seedUbigeo } from './ubigeo';
 
 export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
@@ -18,6 +19,7 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await seedCategories(prisma);
   await seedBrands(prisma);
   await seedProducts(prisma);
+  await seedServices(prisma);
   await seedCustomers(prisma);
   await seedPermissions(prisma);
   await seedAdminUser(prisma);

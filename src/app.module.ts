@@ -14,6 +14,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
+import { ServicesModule } from './modules/services/services.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ProductsModule } from './modules/products/products.module';
     BrandsModule,
     CustomersModule,
     ProductsModule,
+    ServicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
