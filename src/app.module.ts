@@ -16,6 +16,7 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ServicesModule } from './modules/services/services.module';
 import { CompoundProductsModule } from './modules/compound-products/compound-products.module';
+import { SeriesModule } from './modules/series/series.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CompoundProductsModule } from './modules/compound-products/compound-pro
     ProductsModule,
     ServicesModule,
     CompoundProductsModule,
+    SeriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

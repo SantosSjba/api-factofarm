@@ -192,6 +192,7 @@ model Product {
   attributes      ProductAttribute[]
   warehousePrices ProductWarehousePrice[]
   warehouseStocks ProductWarehouseStock[]
+  seriales       ProductSerial[]
   usedInCompounds CompoundProductItem[]
 
   habilitado Boolean   @default(true)
@@ -204,6 +205,34 @@ model Product {
   @@index([codigoInterno])
   @@index([tipoSistemaIscId])
   @@index([categoryId])
+}
+
+enum ProductSerialStatus {
+  DISPONIBLE
+  RESERVADO
+  VENDIDO
+  ANULADO
+}
+
+model ProductSerial {
+  id        String            @id @default(uuid())
+  serie     String            @unique
+  productId String
+  fecha     DateTime          @default(now())
+  estado    ProductSerialStatus @default(DISPONIBLE)
+  vendido   Boolean           @default(false)
+  soldAt    DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([serie])
+  @@index([productId])
+  @@index([estado])
 }
 
 model ProductWarehousePrice {

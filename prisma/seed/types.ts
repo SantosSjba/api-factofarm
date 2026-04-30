@@ -84,6 +84,14 @@ export type SeedCompoundProductInput = {
   items: SeedCompoundProductItemInput[];
 };
 
+export type SeedProductSerialInput = {
+  serie: string;
+  productCodigoInterno: string;
+  estado?: 'DISPONIBLE' | 'RESERVADO' | 'VENDIDO' | 'ANULADO';
+  vendido?: boolean;
+  fecha?: string;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };
