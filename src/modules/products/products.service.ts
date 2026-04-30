@@ -1518,7 +1518,7 @@ export class ProductsService {
           },
         },
         presentations: {
-          orderBy: [{ orden: 'asc' }, { createdAt: 'asc' }],
+          orderBy: [{ orden: 'asc' }, { id: 'asc' }],
           select: {
             id: true,
             unit: { select: { codigo: true, nombre: true } },
