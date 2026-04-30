@@ -7,6 +7,7 @@ model Brand {
 
   products Product[]
   services Service[]
+  compoundProducts CompoundProduct[]
 
   @@index([deletedAt])
 }

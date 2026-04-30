@@ -17,6 +17,7 @@ model UnitOfMeasure {
   products      Product[]             @relation("ProductBaseUnit")
   presentations ProductPresentation[]
   services      Service[]             @relation("ServiceBaseUnit")
+  compoundProducts CompoundProduct[]  @relation("CompoundProductBaseUnit")
 
   @@index([deletedAt])
 }
@@ -31,6 +32,7 @@ model Currency {
 
   products Product[]
   services Service[]
+  compoundProducts CompoundProduct[]
 
   @@index([deletedAt])
 }
@@ -48,6 +50,7 @@ model TaxAffectationType {
   productsPurchase Product[] @relation("ProductPurchaseTax")
   servicesSale     Service[] @relation("ServiceSaleTax")
   servicesPurchase Service[] @relation("ServicePurchaseTax")
+  compoundProductsSale CompoundProduct[] @relation("CompoundProductSaleTax")
 
   @@index([deletedAt])
 }
@@ -189,6 +192,7 @@ model Product {
   attributes      ProductAttribute[]
   warehousePrices ProductWarehousePrice[]
   warehouseStocks ProductWarehouseStock[]
+  usedInCompounds CompoundProductItem[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?
@@ -257,6 +261,78 @@ model ProductAttribute {
   product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
   attributeType ProductAttributeType @relation(fields: [attributeTypeId], references: [id], onDelete: Restrict)
 
+  @@index([productId])
+}
+
+model CompoundProductPlatform {
+  id        String   @id @default(uuid())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  compoundProducts CompoundProduct[]
+
+  @@index([deletedAt])
+}
+
+model CompoundProduct {
+  id               String   @id @default(uuid())
+  nombre           String
+  nombreSecundario String?
+  descripcion      String?
+  modelo           String?
+
+  unitId     String
+  currencyId String
+
+  saleTaxAffectationId String
+  precioUnitarioVenta  Decimal @db.Decimal(18, 4)
+  incluyeIgvVenta      Boolean @default(true)
+
+  plataformaId              String?
+  codigoSunat               String?
+  codigoInterno             String?
+  precioUnitarioCompra      Decimal @default(0) @db.Decimal(18, 4)
+  totalPrecioCompraReferencia Decimal @default(0) @db.Decimal(18, 4)
+
+  categoryId String?
+  brandId    String?
+  imagenArchivoId String? @unique
+
+  unit               UnitOfMeasure       @relation("CompoundProductBaseUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  currency           Currency            @relation(fields: [currencyId], references: [id], onDelete: Restrict)
+  saleTaxAffectation TaxAffectationType  @relation("CompoundProductSaleTax", fields: [saleTaxAffectationId], references: [id], onDelete: Restrict)
+  plataforma         CompoundProductPlatform? @relation(fields: [plataformaId], references: [id], onDelete: SetNull)
+  category           Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand              Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  imagenArchivo      Archivo?            @relation("CompoundProductImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
+
+  items CompoundProductItem[]
+
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([nombre])
+  @@index([codigoInterno])
+  @@index([categoryId])
+}
+
+model CompoundProductItem {
+  id                String @id @default(uuid())
+  compoundProductId String
+  productId         String
+  cantidad          Decimal @default(1) @db.Decimal(18, 4)
+  precioUnitario    Decimal @default(0) @db.Decimal(18, 4)
+  total             Decimal @default(0) @db.Decimal(18, 4)
+
+  compoundProduct CompoundProduct @relation(fields: [compoundProductId], references: [id], onDelete: Cascade)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([compoundProductId])
   @@index([productId])
 }
 

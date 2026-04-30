@@ -63,6 +63,27 @@ export type SeedProductInput = {
   attributeObservacion?: string;
 };
 
+export type SeedCompoundProductItemInput = {
+  productCodigoInterno: string;
+  cantidad: string;
+  precioUnitario?: string;
+};
+
+export type SeedCompoundProductInput = {
+  codigoInterno: string;
+  nombre: string;
+  nombreSecundario?: string;
+  descripcion?: string;
+  modelo?: string;
+  precioUnitarioVenta: string;
+  precioUnitarioCompra: string;
+  codigoSunat?: string;
+  plataformaNombre?: string;
+  categoryNombre?: string;
+  brandNombre?: string;
+  items: SeedCompoundProductItemInput[];
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };
