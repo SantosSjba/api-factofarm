@@ -84,6 +84,12 @@ export class ProductsController {
     return this.productsService.historyStock(id);
   }
 
+  @Get(':id/stock')
+  @ApiOperation({ summary: 'Stock de producto y lista de precios creados' })
+  stock(@Param('id') id: string) {
+    return this.productsService.stockSummary(id);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Listar productos con paginación' })
   list(@Query() query: ProductListQueryDto) {

@@ -1499,6 +1499,60 @@ export class ProductsService {
     }));
   }
 
+  async stockSummary(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        warehouseStocks: {
+          where: { warehouse: { deletedAt: null } },
+          orderBy: { warehouseId: 'asc' },
+          select: {
+            warehouse: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            cantidad: true,
+          },
+        },
+        presentations: {
+          orderBy: [{ orden: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            unit: { select: { codigo: true, nombre: true } },
+            descripcion: true,
+            factor: true,
+            precio1: true,
+            precio2: true,
+            precio3: true,
+            precioDefecto: true,
+          },
+        },
+      },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    return {
+      stockByLocation: product.warehouseStocks.map((s) => ({
+        warehouseId: s.warehouse.id,
+        ubicacion: `${s.warehouse.nombre}`,
+        stock: s.cantidad.toString(),
+      })),
+      priceList: product.presentations.map((p) => ({
+        id: p.id,
+        unidad: p.unit.codigo || p.unit.nombre,
+        descripcion: p.descripcion ?? '',
+        factor: p.factor.toString(),
+        precio1: p.precio1.toString(),
+        precio2: p.precio2.toString(),
+        precio3: p.precio3.toString(),
+        precioDefecto: p.precioDefecto,
+      })),
+    };
+  }
+
   listProductLocations(establishmentId?: string) {
     return this.prisma.productLocation.findMany({
       where: { deletedAt: null, establishmentId: establishmentId || undefined },
