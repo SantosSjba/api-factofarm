@@ -255,21 +255,54 @@ export class CustomersService {
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const nombre = String(r['NOMBRE'] ?? '').trim();
-      const tipoDocumento = String(r['TIPO_DOCUMENTO'] ?? '').trim().toUpperCase();
-      const numeroDocumento = String(r['NUMERO_DOCUMENTO'] ?? '').trim();
+      const nombre = String(r['Nombre/Razón Social'] ?? '').trim();
+      const nombreComercial = String(r['Nombre Comercial'] ?? '').trim();
+      const numeroDocumento = String(r['Número de documento'] ?? '').trim();
+      const tipoDocumentoRaw = String(r['Código documento de identidad'] ?? '').trim();
+      const tipoDocumento = this.mapPersonDocumentType(tipoDocumentoRaw);
+
       if (!nombre || !tipoDocumento || !numeroDocumento) {
         errors.push(`Fila ${i + 2}: faltan datos obligatorios.`);
         continue;
       }
-      if (!Object.values(CustomerDocumentType).includes(tipoDocumento as CustomerDocumentType)) {
-        errors.push(`Fila ${i + 2}: tipo documento inválido (${tipoDocumento}).`);
+
+      const countryCode = String(r['Código del Páis'] ?? '').trim();
+      const ubigeoCode = String(r['Código de Ubigeo'] ?? '').trim();
+      const direccion = String(r['Dirección'] ?? '').trim();
+      const correo = String(r['Correo electrónico'] ?? '').trim();
+      const telefono = String(r['Teléfono'] ?? '').trim();
+      const tipoClienteNombre = String(r['Tipo Cliente'] ?? '').trim();
+
+      const customerTypeId = tipoClienteNombre
+        ? (
+            await this.prisma.customerType.findFirst({
+              where: { deletedAt: null, descripcion: { equals: tipoClienteNombre, mode: 'insensitive' } },
+              select: { id: true },
+            })
+          )?.id ?? null
+        : null;
+
+      const district = ubigeoCode
+        ? await this.prisma.district.findFirst({
+            where: { id: ubigeoCode },
+            select: { id: true, provinceId: true, province: { select: { departmentId: true } } },
+          })
+        : null;
+
+      if (ubigeoCode && !district) {
+        errors.push(`Fila ${i + 2}: código de ubigeo inválido (${ubigeoCode}).`);
         continue;
       }
+
+      if (tipoDocumentoRaw && !tipoDocumento) {
+        errors.push(`Fila ${i + 2}: tipo documento inválido (${tipoDocumentoRaw}).`);
+        continue;
+      }
+
       try {
         const existing = await this.prisma.customer.findFirst({
           where: {
-            tipoDocumento: tipoDocumento as CustomerDocumentType,
+            tipoDocumento,
             numeroDocumento,
           },
           select: { id: true, deletedAt: true },
@@ -279,26 +312,73 @@ export class CustomersService {
             where: { id: existing.id },
             data: {
               nombre: nombre.toUpperCase(),
-              codigoInterno: String(r['CODIGO_INTERNO'] ?? '').trim() || null,
-              diasCredito: Number(r['DIAS_CREDITO'] || 0),
-              observaciones: String(r['OBSERVACIONES'] ?? '').trim() || null,
-              puntosAcumulados: Number(r['PUNTOS'] || 0),
+              nombreComercial: nombreComercial || null,
+              telefono: telefono || null,
+              correoElectronico: correo || null,
+              customerTypeId,
               deletedAt: null,
             },
           });
+          if (direccion || correo || telefono || district || countryCode) {
+            const principal = await this.prisma.customerAddress.findFirst({
+              where: { customerId: existing.id, esPrincipal: true },
+              select: { id: true },
+            });
+            const addressData = {
+              pais: countryCode ? this.mapCountryCode(countryCode) : 'PERU',
+              departmentId: district?.province.departmentId ?? null,
+              provinceId: district?.provinceId ?? null,
+              districtId: district?.id ?? null,
+              direccion: direccion || null,
+              telefono: telefono || null,
+              correoElectronico: correo || null,
+              correosOpcionales: null,
+            };
+            if (principal) {
+              await this.prisma.customerAddress.update({
+                where: { id: principal.id },
+                data: addressData,
+              });
+            } else {
+              await this.prisma.customerAddress.create({
+                data: {
+                  customerId: existing.id,
+                  esPrincipal: true,
+                  ...addressData,
+                },
+              });
+            }
+          }
           updated++;
         } else {
-          await this.prisma.customer.create({
+          const createdCustomer = await this.prisma.customer.create({
             data: {
               nombre: nombre.toUpperCase(),
-              tipoDocumento: tipoDocumento as CustomerDocumentType,
+              nombreComercial: nombreComercial || null,
+              tipoDocumento,
               numeroDocumento,
-              codigoInterno: String(r['CODIGO_INTERNO'] ?? '').trim() || null,
-              diasCredito: Number(r['DIAS_CREDITO'] || 0),
-              observaciones: String(r['OBSERVACIONES'] ?? '').trim() || null,
-              puntosAcumulados: Number(r['PUNTOS'] || 0),
+              telefono: telefono || null,
+              correoElectronico: correo || null,
+              customerTypeId,
             },
+            select: { id: true },
           });
+          if (direccion || correo || telefono || district || countryCode) {
+            await this.prisma.customerAddress.create({
+              data: {
+                customerId: createdCustomer.id,
+                esPrincipal: true,
+                pais: countryCode ? this.mapCountryCode(countryCode) : 'PERU',
+                departmentId: district?.province.departmentId ?? null,
+                provinceId: district?.provinceId ?? null,
+                districtId: district?.id ?? null,
+                direccion: direccion || null,
+                telefono: telefono || null,
+                correoElectronico: correo || null,
+                correosOpcionales: null,
+              },
+            });
+          }
           created++;
         }
       } catch (e) {
@@ -317,19 +397,61 @@ export class CustomersService {
   buildImportTemplateBuffer() {
     const rows = [
       {
-        NOMBRE: 'CLIENTE DEMO SAC',
-        TIPO_DOCUMENTO: 'RUC',
-        NUMERO_DOCUMENTO: '20123456789',
-        CODIGO_INTERNO: 'CL-001',
-        DIAS_CREDITO: 0,
-        OBSERVACIONES: '',
-        PUNTOS: 0,
+        'Código documento de identidad': 1,
+        'Número de documento': 41784438,
+        'Nombre/Razón Social': 'Juan Pinedo',
+        'Nombre Comercial': '',
+        'Código del Páis': '',
+        'Código de Ubigeo': '',
+        'Dirección': '',
+        'Correo electrónico': '',
+        'Teléfono': '',
+        'Tipo Cliente': 'Interno',
+      },
+      {
+        'Código documento de identidad': 6,
+        'Número de documento': 20505973522,
+        'Nombre/Razón Social': 'Empresa SAC',
+        'Nombre Comercial': 'Empresa SAC',
+        'Código del Páis': 'PE',
+        'Código de Ubigeo': 150101,
+        'Dirección': 'Los pinos 125',
+        'Correo electrónico': 'embo@gmail.com',
+        'Teléfono': 7152233,
+        'Tipo Cliente': '',
       },
     ];
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'clientes-formato');
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  }
+
+  private mapPersonDocumentType(rawCode: string): CustomerDocumentType | null {
+    const clean = rawCode.trim();
+    if (!clean) return null;
+    const map: Record<string, CustomerDocumentType> = {
+      '1': 'DNI',
+      '6': 'RUC',
+      '4': 'CE',
+      '7': 'PASAPORTE',
+      A: 'DOC_SIN_RUC',
+      B: 'OTRO',
+      DNI: 'DNI',
+      RUC: 'RUC',
+      CE: 'CE',
+      PASAPORTE: 'PASAPORTE',
+      DOC_SIN_RUC: 'DOC_SIN_RUC',
+      OTRO: 'OTRO',
+    };
+    return map[clean.toUpperCase()] ?? null;
+  }
+
+  private mapCountryCode(code: string): string {
+    const clean = code.trim().toUpperCase();
+    if (!clean) return 'PERU';
+    if (clean === 'PE' || clean === 'PER') return 'PERU';
+    return clean;
   }
 
   async buildExportBuffer(dto: ExportCustomersDto) {
