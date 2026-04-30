@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Post, Query, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -7,6 +20,8 @@ import { CreateProductLocationDto } from './dto/create-product-location.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ImportProductsDto } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
+import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
+import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { ProductsService } from './products.service';
 
 @ApiTags('products')
@@ -74,6 +89,37 @@ export class ProductsController {
   @ApiBody({ type: CreateProductDto })
   create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Actualizar producto' })
+  @ApiBody({ type: CreateProductDto })
+  update(@Param('id') id: string, @Body() dto: CreateProductDto) {
+    return this.productsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar (lógico) producto' })
+  remove(@Param('id') id: string) {
+    return this.productsService.remove(id);
+  }
+
+  @Post(':id/duplicate')
+  @ApiOperation({ summary: 'Duplicar producto' })
+  duplicate(@Param('id') id: string) {
+    return this.productsService.duplicate(id);
+  }
+
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Actualizar estado habilitado del producto' })
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateProductStatusDto) {
+    return this.productsService.updateStatus(id, dto);
+  }
+
+  @Patch(':id/barcode')
+  @ApiOperation({ summary: 'Actualizar código de barras del producto' })
+  updateBarcode(@Param('id') id: string, @Body() dto: UpdateProductBarcodeDto) {
+    return this.productsService.updateBarcode(id, dto);
   }
 
   @Post('import')

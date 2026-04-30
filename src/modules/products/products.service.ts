@@ -7,6 +7,8 @@ import { CreateProductLocationDto } from './dto/create-product-location.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductImportMode } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
+import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
+import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 
 const selectProductList = {
   id: true,
@@ -39,6 +41,7 @@ const selectProductList = {
   categoryId: true,
   brandId: true,
   productLocationId: true,
+  habilitado: true,
   unit: { select: { id: true, codigo: true, nombre: true } },
   brand: { select: { id: true, nombre: true } },
   currency: { select: { id: true, codigo: true, nombre: true } },
@@ -133,6 +136,7 @@ export class ProductsService {
       fechaVencimientoLote: row.fechaVencimientoLote?.toISOString() ?? null,
       numeroPuntos: decStr(row.numeroPuntos),
       stockMinimo: row.stockMinimo,
+      habilitado: row.habilitado,
       marcaLaboratorio: row.marcaLaboratorio,
       marcaNombre: row.brand?.nombre ?? null,
       categoryId: row.categoryId,
@@ -422,12 +426,483 @@ export class ProductsService {
       fechaVencimientoLote: row.fechaVencimientoLote?.toISOString() ?? null,
       numeroPuntos: decStr(row.numeroPuntos),
       stockMinimo: row.stockMinimo,
+      habilitado: row.habilitado,
       marcaLaboratorio: row.marcaLaboratorio,
       marcaNombre: row.brand?.nombre ?? null,
       unit: row.unit,
       currency: row.currency,
       totalStock: sumStock(row.warehouseStocks),
     };
+  }
+
+  async update(id: string, dto: CreateProductDto) {
+    const exists = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, manejaLotes: true, codigoLote: true, fechaVencimientoLote: true },
+    });
+    if (!exists) throw new NotFoundException('Producto no encontrado');
+
+    const unit = await this.prisma.unitOfMeasure.findFirst({
+      where: { id: dto.unitId, deletedAt: null },
+    });
+    if (!unit) throw new BadRequestException('Unidad de medida no válida');
+
+    const currency = await this.prisma.currency.findFirst({
+      where: { id: dto.currencyId, deletedAt: null },
+    });
+    if (!currency) throw new BadRequestException('Moneda no válida');
+
+    const saleTax = await this.prisma.taxAffectationType.findFirst({
+      where: { id: dto.saleTaxAffectationId, deletedAt: null },
+    });
+    if (!saleTax) throw new BadRequestException('Tipo de afectación (venta) no válido');
+
+    if (dto.purchaseTaxAffectationId) {
+      const pt = await this.prisma.taxAffectationType.findFirst({
+        where: { id: dto.purchaseTaxAffectationId, deletedAt: null },
+      });
+      if (!pt) throw new BadRequestException('Tipo de afectación (compra) no válido');
+    }
+
+    if (dto.categoryId) {
+      const c = await this.prisma.category.findFirst({ where: { id: dto.categoryId, deletedAt: null } });
+      if (!c) throw new BadRequestException('Categoría no válida');
+    }
+
+    if (dto.brandId) {
+      const b = await this.prisma.brand.findFirst({ where: { id: dto.brandId, deletedAt: null } });
+      if (!b) throw new BadRequestException('Marca no válida');
+    }
+
+    const productLocation = dto.productLocationId
+      ? await this.prisma.productLocation.findFirst({
+          where: { id: dto.productLocationId, deletedAt: null },
+        })
+      : null;
+    if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
+
+    const defaultWarehouse = dto.defaultWarehouseId
+      ? await this.prisma.warehouse.findFirst({
+          where: { id: dto.defaultWarehouseId, deletedAt: null },
+        })
+      : null;
+    if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
+
+    if (productLocation && defaultWarehouse && productLocation.establishmentId !== defaultWarehouse.establishmentId) {
+      throw new BadRequestException(
+        'La ubicación debe pertenecer al mismo establecimiento del almacén por defecto.',
+      );
+    }
+
+    if (dto.imagenArchivoId) {
+      const a = await this.prisma.archivo.findUnique({ where: { id: dto.imagenArchivoId } });
+      if (!a) throw new BadRequestException('Archivo de imagen no válido');
+    }
+
+    if (dto.tipoSistemaIscId) {
+      const iscSystem = await this.prisma.productIscSystem.findFirst({
+        where: { id: dto.tipoSistemaIscId, deletedAt: null, activo: true },
+      });
+      if (!iscSystem) throw new BadRequestException('Tipo de sistema ISC no válido');
+    }
+    if ((dto.incluyeIscVenta || dto.incluyeIscCompra) && !dto.tipoSistemaIscId) {
+      throw new BadRequestException('Debe seleccionar un tipo de sistema ISC');
+    }
+
+    const warehouseIds = new Set<string>();
+    for (const p of dto.warehousePrices ?? []) {
+      warehouseIds.add(p.warehouseId);
+    }
+    for (const s of dto.warehouseStocks ?? []) {
+      warehouseIds.add(s.warehouseId);
+    }
+    for (const wid of warehouseIds) {
+      const w = await this.prisma.warehouse.findFirst({ where: { id: wid, deletedAt: null } });
+      if (!w) throw new BadRequestException(`Almacén no válido: ${wid}`);
+    }
+
+    for (const pr of dto.presentations ?? []) {
+      const u = await this.prisma.unitOfMeasure.findFirst({ where: { id: pr.unitId, deletedAt: null } });
+      if (!u) throw new BadRequestException('Unidad en presentación no válida');
+    }
+
+    for (const at of dto.attributes ?? []) {
+      const t = await this.prisma.productAttributeType.findFirst({
+        where: { id: at.attributeTypeId, deletedAt: null },
+      });
+      if (!t) throw new BadRequestException('Tipo de atributo no válido');
+    }
+
+    const purchaseTaxId = dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          nombre: dto.nombre.trim(),
+          descripcion: dto.descripcion?.trim() || null,
+          principioActivo: dto.principioActivo?.trim() || null,
+          concentracion: dto.concentracion?.trim() || null,
+          registroSanitario: dto.registroSanitario?.trim() || null,
+          formaFarmaceutica: dto.formaFarmaceutica?.trim() || null,
+          codigoBusqueda: dto.codigoBusqueda?.trim() || null,
+          codigoInterno: dto.codigoInterno?.trim() || null,
+          codigoBarra: dto.codigoBarra?.trim() || null,
+          codigoSunat: dto.codigoSunat?.trim() || null,
+          codigoMedicamentoDigemid: dto.codigoMedicamentoDigemid?.trim() || null,
+          lineaProducto: dto.lineaProducto?.trim() || null,
+          modelo: dto.modelo?.trim() || null,
+          marcaLaboratorio: dto.marcaLaboratorio?.trim() || null,
+          unitId: dto.unitId,
+          currencyId: dto.currencyId,
+          saleTaxAffectationId: dto.saleTaxAffectationId,
+          purchaseTaxAffectationId: purchaseTaxId,
+          precioUnitarioVenta: new Prisma.Decimal(dto.precioUnitarioVenta),
+          precioUnitarioCompra:
+            dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null
+              ? new Prisma.Decimal(dto.precioUnitarioCompra)
+              : null,
+          incluyeIgvVenta: dto.incluyeIgvVenta ?? true,
+          incluyeIgvCompra: dto.incluyeIgvCompra ?? true,
+          generico: dto.generico ?? false,
+          necesitaRecetaMedica: dto.necesitaRecetaMedica ?? false,
+          calcularCantidadPorPrecio: dto.calcularCantidadPorPrecio ?? false,
+          // Nota: edición de lote/vencimiento se gestiona en módulo de Inventario.
+          manejaLotes: exists.manejaLotes,
+          codigoLote: exists.codigoLote,
+          fechaVencimientoLote: exists.fechaVencimientoLote,
+          incluyeIscVenta: dto.incluyeIscVenta ?? false,
+          incluyeIscCompra: dto.incluyeIscCompra ?? false,
+          tipoSistemaIscId: dto.incluyeIscVenta || dto.incluyeIscCompra ? dto.tipoSistemaIscId ?? null : null,
+          porcentajeIsc:
+            (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
+            dto.porcentajeIsc !== undefined &&
+            dto.porcentajeIsc !== null
+              ? new Prisma.Decimal(dto.porcentajeIsc)
+              : null,
+          sujetoDetraccion: dto.sujetoDetraccion ?? false,
+          sePuedeCanjearPorPuntos: dto.sePuedeCanjearPorPuntos ?? false,
+          numeroPuntos:
+            dto.sePuedeCanjearPorPuntos && dto.numeroPuntos !== undefined && dto.numeroPuntos !== null
+              ? new Prisma.Decimal(dto.numeroPuntos)
+              : null,
+          aplicaGanancia: dto.aplicaGanancia ?? false,
+          porcentajeGanancia:
+            dto.porcentajeGanancia !== undefined && dto.porcentajeGanancia !== null
+              ? new Prisma.Decimal(dto.porcentajeGanancia)
+              : null,
+          costoUnitario:
+            dto.costoUnitario !== undefined && dto.costoUnitario !== null
+              ? new Prisma.Decimal(dto.costoUnitario)
+              : null,
+          stockMinimo: dto.stockMinimo ?? 1,
+          categoryId: dto.categoryId ?? null,
+          brandId: dto.brandId ?? null,
+          productLocationId: dto.productLocationId ?? null,
+          defaultWarehouseId: dto.defaultWarehouseId ?? null,
+          imagenArchivoId: dto.imagenArchivoId ?? null,
+        },
+      });
+
+      if (dto.warehousePrices) {
+        await tx.productWarehousePrice.deleteMany({ where: { productId: id } });
+        for (const wp of dto.warehousePrices) {
+          await tx.productWarehousePrice.create({
+            data: {
+              productId: id,
+              warehouseId: wp.warehouseId,
+              precio: new Prisma.Decimal(wp.precio),
+            },
+          });
+        }
+      }
+
+      if (dto.warehouseStocks) {
+        await tx.productWarehouseStock.deleteMany({ where: { productId: id } });
+        for (const ws of dto.warehouseStocks) {
+          await tx.productWarehouseStock.create({
+            data: {
+              productId: id,
+              warehouseId: ws.warehouseId,
+              cantidad: new Prisma.Decimal(ws.cantidad),
+            },
+          });
+        }
+      }
+
+      if (dto.presentations) {
+        await tx.productPresentation.deleteMany({ where: { productId: id } });
+        let orden = 0;
+        for (const pr of dto.presentations) {
+          const factor = Number(pr.factor ?? 0);
+          const precio1 = Number(pr.precio1 ?? 0);
+          const precio2 = Number(pr.precio2 ?? 0);
+          const precio3 = Number(pr.precio3 ?? 0);
+          const precioDefecto = pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
+
+          if (!(factor > 0)) {
+            throw new BadRequestException('En presentaciones, el factor debe ser mayor a 0');
+          }
+          if (precio1 < 0 || precio2 < 0 || precio3 < 0) {
+            throw new BadRequestException('En presentaciones, los precios deben ser mayores o iguales a 0');
+          }
+          if (precio1 <= 0 && precio2 <= 0 && precio3 <= 0) {
+            throw new BadRequestException('En presentaciones, al menos un precio debe ser mayor a 0');
+          }
+          const precioPorDefecto =
+            precioDefecto === PresentationDefaultPrice.PRECIO_1
+              ? precio1
+              : precioDefecto === PresentationDefaultPrice.PRECIO_2
+                ? precio2
+                : precio3;
+          if (precioPorDefecto <= 0) {
+            throw new BadRequestException(
+              'En presentaciones, el precio por defecto debe apuntar a un precio mayor a 0',
+            );
+          }
+
+          await tx.productPresentation.create({
+            data: {
+              productId: id,
+              orden: orden++,
+              codigoBarra: pr.codigoBarra?.trim() || null,
+              unitId: pr.unitId,
+              descripcion: pr.descripcion?.trim() || null,
+              factor: new Prisma.Decimal(factor),
+              precio1: new Prisma.Decimal(precio1),
+              precio2: new Prisma.Decimal(precio2),
+              precio3: new Prisma.Decimal(precio3),
+              precioDefecto,
+              precioPuntos:
+                pr.precioPuntos !== undefined && pr.precioPuntos !== null
+                  ? new Prisma.Decimal(pr.precioPuntos)
+                  : null,
+            },
+          });
+        }
+      }
+
+      if (dto.attributes) {
+        await tx.productAttribute.deleteMany({ where: { productId: id } });
+        for (const at of dto.attributes) {
+          await tx.productAttribute.create({
+            data: {
+              productId: id,
+              attributeTypeId: at.attributeTypeId,
+              descripcion: at.descripcion.trim(),
+            },
+          });
+        }
+      }
+    });
+
+    const row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: selectProductList,
+    });
+    if (!row) throw new NotFoundException('Producto no encontrado tras actualizar');
+
+    return {
+      id: row.id,
+      nombre: row.nombre,
+      descripcion: row.descripcion,
+      codigoInterno: row.codigoInterno,
+      codigoSunat: row.codigoSunat,
+      modelo: row.modelo,
+      registroSanitario: row.registroSanitario,
+      codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
+      precioUnitarioVenta: decStr(row.precioUnitarioVenta)!,
+      precioUnitarioCompra: decStr(row.precioUnitarioCompra),
+      incluyeIgvVenta: row.incluyeIgvVenta,
+      incluyeIgvCompra: row.incluyeIgvCompra,
+      tipoSistemaIscId: row.tipoSistemaIscId,
+      tipoSistemaIscNombre: row.tipoSistemaIsc?.nombre ?? null,
+      porcentajeIsc: decStr(row.porcentajeIsc),
+      codigoLote: row.codigoLote,
+      fechaVencimientoLote: row.fechaVencimientoLote?.toISOString() ?? null,
+      numeroPuntos: decStr(row.numeroPuntos),
+      stockMinimo: row.stockMinimo,
+      habilitado: row.habilitado,
+      marcaLaboratorio: row.marcaLaboratorio,
+      marcaNombre: row.brand?.nombre ?? null,
+      unit: row.unit,
+      currency: row.currency,
+      totalStock: sumStock(row.warehouseStocks),
+    };
+  }
+
+  async remove(id: string) {
+    const row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('Producto no encontrado');
+    await this.prisma.product.update({
+      where: { id },
+      data: { deletedAt: new Date(), habilitado: false },
+    });
+    return { ok: true };
+  }
+
+  async updateStatus(id: string, dto: UpdateProductStatusDto) {
+    const row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('Producto no encontrado');
+    return this.prisma.product.update({
+      where: { id },
+      data: { habilitado: dto.habilitado },
+      select: selectProductList,
+    });
+  }
+
+  async updateBarcode(id: string, dto: UpdateProductBarcodeDto) {
+    const row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('Producto no encontrado');
+    return this.prisma.product.update({
+      where: { id },
+      data: { codigoBarra: dto.codigoBarra.trim() || null },
+      select: selectProductList,
+    });
+  }
+
+  async duplicate(id: string) {
+    const source = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        warehousePrices: true,
+        warehouseStocks: true,
+        presentations: true,
+        attributes: true,
+      },
+    });
+    if (!source) throw new NotFoundException('Producto no encontrado');
+
+    const cloneId = await this.prisma.$transaction(async (tx) => {
+      const baseName = source.nombre.trim();
+      let nextName = `${baseName} (Copia)`;
+      let n = 2;
+      while (
+        await tx.product.findFirst({
+          where: { nombre: nextName, deletedAt: null },
+          select: { id: true },
+        })
+      ) {
+        nextName = `${baseName} (Copia ${n++})`;
+      }
+
+      const created = await tx.product.create({
+        data: {
+          nombre: nextName,
+          descripcion: source.descripcion,
+          principioActivo: source.principioActivo,
+          concentracion: source.concentracion,
+          registroSanitario: source.registroSanitario,
+          formaFarmaceutica: source.formaFarmaceutica,
+          codigoBusqueda: source.codigoBusqueda,
+          codigoInterno: null,
+          codigoBarra: null,
+          codigoSunat: source.codigoSunat,
+          codigoMedicamentoDigemid: source.codigoMedicamentoDigemid,
+          lineaProducto: source.lineaProducto,
+          modelo: source.modelo,
+          marcaLaboratorio: source.marcaLaboratorio,
+          unitId: source.unitId,
+          currencyId: source.currencyId,
+          saleTaxAffectationId: source.saleTaxAffectationId,
+          purchaseTaxAffectationId: source.purchaseTaxAffectationId,
+          precioUnitarioVenta: source.precioUnitarioVenta,
+          precioUnitarioCompra: source.precioUnitarioCompra,
+          incluyeIgvVenta: source.incluyeIgvVenta,
+          incluyeIgvCompra: source.incluyeIgvCompra,
+          generico: source.generico,
+          necesitaRecetaMedica: source.necesitaRecetaMedica,
+          calcularCantidadPorPrecio: source.calcularCantidadPorPrecio,
+          manejaLotes: source.manejaLotes,
+          codigoLote: source.codigoLote,
+          fechaVencimientoLote: source.fechaVencimientoLote,
+          incluyeIscVenta: source.incluyeIscVenta,
+          incluyeIscCompra: source.incluyeIscCompra,
+          tipoSistemaIscId: source.tipoSistemaIscId,
+          porcentajeIsc: source.porcentajeIsc,
+          sujetoDetraccion: source.sujetoDetraccion,
+          sePuedeCanjearPorPuntos: source.sePuedeCanjearPorPuntos,
+          numeroPuntos: source.numeroPuntos,
+          aplicaGanancia: source.aplicaGanancia,
+          porcentajeGanancia: source.porcentajeGanancia,
+          costoUnitario: source.costoUnitario,
+          stockMinimo: source.stockMinimo,
+          categoryId: source.categoryId,
+          brandId: source.brandId,
+          productLocationId: source.productLocationId,
+          defaultWarehouseId: source.defaultWarehouseId,
+          imagenArchivoId: null,
+          habilitado: source.habilitado,
+        },
+        select: { id: true },
+      });
+
+      for (const wp of source.warehousePrices) {
+        await tx.productWarehousePrice.create({
+          data: {
+            productId: created.id,
+            warehouseId: wp.warehouseId,
+            precio: wp.precio,
+          },
+        });
+      }
+
+      for (const ws of source.warehouseStocks) {
+        await tx.productWarehouseStock.create({
+          data: {
+            productId: created.id,
+            warehouseId: ws.warehouseId,
+            cantidad: ws.cantidad,
+          },
+        });
+      }
+
+      for (const pr of source.presentations) {
+        await tx.productPresentation.create({
+          data: {
+            productId: created.id,
+            orden: pr.orden,
+            codigoBarra: pr.codigoBarra,
+            unitId: pr.unitId,
+            descripcion: pr.descripcion,
+            factor: pr.factor,
+            precio1: pr.precio1,
+            precio2: pr.precio2,
+            precio3: pr.precio3,
+            precioDefecto: pr.precioDefecto,
+            precioPuntos: pr.precioPuntos,
+          },
+        });
+      }
+
+      for (const at of source.attributes) {
+        await tx.productAttribute.create({
+          data: {
+            productId: created.id,
+            attributeTypeId: at.attributeTypeId,
+            descripcion: at.descripcion,
+          },
+        });
+      }
+
+      return created.id;
+    });
+
+    const row = await this.prisma.product.findFirst({
+      where: { id: cloneId, deletedAt: null },
+      select: selectProductList,
+    });
+    if (!row) throw new NotFoundException('Producto duplicado no encontrado');
+    return row;
   }
 
   async importFromExcel(mode: ProductImportMode, file: Express.Multer.File) {
