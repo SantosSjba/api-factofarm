@@ -169,7 +169,7 @@ export class ProductsController {
       selectedMode === 'L_PRECIOS'
         ? 'item_price_lists.xlsx'
         : selectedMode === 'ACTUALIZAR_PRECIOS'
-          ? 'items_update_prices.xlsx'
+          ? 'items_prices_simsed.xlsx'
           : 'items.xlsx';
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

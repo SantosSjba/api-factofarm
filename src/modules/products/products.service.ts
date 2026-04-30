@@ -950,14 +950,14 @@ export class ProductsService {
     } else if (mode === 'ACTUALIZAR_PRECIOS') {
       rows = [
         {
-          'Código Interno': 'BI001',
-          'Precio Unitario Venta': 250,
-          'Precio Unitario Compra (Opcional)': 200,
-        },
-        {
-          'Código Interno': 'BI002',
-          'Precio Unitario Venta': 300,
-          'Precio Unitario Compra (Opcional)': '',
+          medcod: 'BI001',
+          medff: 'SUSPENSION',
+          prdpreadq: 0.9264,
+          prdpredist: 0.9264,
+          prdpreope: 1,
+          medest: 'E',
+          medestvta: 1,
+          descrip: 'PRODUCTO REFERENCIAL',
         },
       ];
     } else {
@@ -1306,7 +1306,7 @@ export class ProductsService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const displayRow = i + 2;
-      const codigoInterno = this.cellString(row, 'Código Interno');
+      const codigoInterno = this.cellStringAlias(row, ['Código Interno', 'medcod']);
       if (!codigoInterno) continue;
 
       try {
@@ -1316,8 +1316,8 @@ export class ProductsService {
         });
         if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
 
-        const venta = this.toNumber(row['Precio Unitario Venta']);
-        const compra = this.toNumber(row['Precio Unitario Compra (Opcional)']);
+        const venta = this.toNumberAlias(row, ['Precio Unitario Venta', 'prdpreadq', 'prdpreope']);
+        const compra = this.toNumberAlias(row, ['Precio Unitario Compra (Opcional)', 'prdpredist']);
         if (venta === null || venta < 0) {
           throw new BadRequestException('Precio Unitario Venta inválido.');
         }
@@ -1345,6 +1345,23 @@ export class ProductsService {
     }
 
     return { totalRows: rows.length, created: 0, updated, errors };
+  }
+
+  private cellStringAlias(row: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const val = this.cellString(row, key);
+      if (val) return val;
+    }
+    return '';
+  }
+
+  private toNumberAlias(row: Record<string, unknown>, keys: string[]): number | null {
+    for (const key of keys) {
+      const value = row[key];
+      const parsed = this.toNumber(value);
+      if (parsed !== null) return parsed;
+    }
+    return null;
   }
 
   private cellString(row: Record<string, unknown>, key: string): string {

@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import * as XLSX from 'xlsx';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
 import { CreateCompoundProductDto } from './dto/create-compound-product.dto';
+import { CompoundProductImportMode } from './dto/import-compound-products.dto';
 
 const selectCompoundList = {
   id: true,
@@ -221,6 +223,210 @@ export class CompoundProductsService {
     });
   }
 
+  async importFromExcel(mode: CompoundProductImportMode, file: Express.Multer.File) {
+    if (!file?.buffer?.length) {
+      throw new NotFoundException('Archivo no válido para importar');
+    }
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const first = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[first];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+    if (!rows.length) {
+      return { totalRows: 0, created: 0, updated: 0, errors: [] as string[] };
+    }
+    if (mode === 'DETALLE_PRODUCTOS_COMPUESTOS') {
+      return this.importCompoundDetailRows(rows);
+    }
+    return this.importCompoundRows(rows);
+  }
+
+  buildImportTemplateBuffer(mode: CompoundProductImportMode) {
+    const workbook = XLSX.utils.book_new();
+    const rows =
+      mode === 'DETALLE_PRODUCTOS_COMPUESTOS'
+        ? [
+            {
+              'Código Interno (Producto compuesto/kit)': 'CODKIT1',
+              'Código Interno (Producto individual pertenece al kit)': 'C150',
+              Cantidad: 1,
+            },
+          ]
+        : [
+            {
+              Nombre: 'kit 1',
+              'Código Interno': 'CODKIT1',
+              'Código Sunat': '20202020',
+              'Código Tipo de Unidad': 'NIU',
+              'Código Tipo de Moneda': 'PEN',
+              'Precio Unitario Venta': 120.25,
+              'Codigo Tipo de Afectación del Igv Venta': '10',
+              Categoria: 'Bebidas',
+              Marca: 'Adidas',
+              Descripcion: 'desc 1',
+              'Nombre secundario': 'nombre sec 1',
+              Plataforma: 'Saga Falabella',
+              'Tiene Igv': 'SI',
+              Modelo: 'Modelo A',
+            },
+          ];
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  }
+
+  private async importCompoundRows(rows: Record<string, unknown>[]) {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const displayRow = i + 2;
+      const nombre = this.cellString(row, 'Nombre');
+      const codigoInterno = this.cellString(row, 'Código Interno');
+      const unitCode = this.cellString(row, 'Código Tipo de Unidad').toUpperCase();
+      const currencyCode = this.cellString(row, 'Código Tipo de Moneda').toUpperCase();
+      const saleTaxCode = this.cellString(row, 'Codigo Tipo de Afectación del Igv Venta');
+
+      if (!nombre && !codigoInterno && !unitCode && !currencyCode) continue;
+      if (!nombre || !codigoInterno || !unitCode || !currencyCode || !saleTaxCode) {
+        errors.push(`Fila ${displayRow}: faltan campos obligatorios.`);
+        continue;
+      }
+
+      try {
+        const unit = await this.prisma.unitOfMeasure.findFirst({
+          where: { codigo: unitCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!unit) throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
+
+        const currency = await this.prisma.currency.findFirst({
+          where: { codigo: currencyCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!currency) throw new BadRequestException(`Moneda no encontrada (${currencyCode})`);
+
+        const saleTax = await this.prisma.taxAffectationType.findFirst({
+          where: { codigo: saleTaxCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!saleTax) throw new BadRequestException(`Tipo afectación venta no encontrado (${saleTaxCode})`);
+
+        const venta = this.toNumber(row['Precio Unitario Venta']);
+        if (venta === null || venta < 0) throw new BadRequestException('Precio Unitario Venta inválido.');
+
+        const categoryId = await this.resolveCategoryId(this.cellString(row, 'Categoria'));
+        const brandId = await this.resolveBrandId(this.cellString(row, 'Marca'));
+        const plataformaId = await this.resolvePlatformId(this.cellString(row, 'Plataforma'));
+
+        const payload: Prisma.CompoundProductUncheckedCreateInput = {
+          nombre,
+          codigoInterno,
+          nombreSecundario: this.cellString(row, 'Nombre secundario') || null,
+          descripcion: this.cellStringAlias(row, ['Descripcion', 'Descripción']) || null,
+          modelo: this.cellString(row, 'Modelo') || null,
+          codigoSunat: this.cellString(row, 'Código Sunat') || null,
+          unitId: unit.id,
+          currencyId: currency.id,
+          saleTaxAffectationId: saleTax.id,
+          precioUnitarioVenta: new Prisma.Decimal(venta),
+          precioUnitarioCompra: new Prisma.Decimal(this.toNumber(row['Precio Unitario Compra']) ?? 0),
+          incluyeIgvVenta: this.toBooleanSiNo(row['Tiene Igv'], true),
+          totalPrecioCompraReferencia: new Prisma.Decimal(0),
+          plataformaId,
+          categoryId,
+          brandId,
+        };
+
+        const current = await this.prisma.compoundProduct.findFirst({
+          where: { deletedAt: null, codigoInterno },
+          select: { id: true },
+        });
+        if (current) {
+          await this.prisma.compoundProduct.update({ where: { id: current.id }, data: payload });
+          updated += 1;
+        } else {
+          await this.prisma.compoundProduct.create({ data: payload });
+          created += 1;
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error no identificado';
+        errors.push(`Fila ${displayRow}: ${message}`);
+      }
+    }
+
+    return { totalRows: rows.length, created, updated, errors };
+  }
+
+  private async importCompoundDetailRows(rows: Record<string, unknown>[]) {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const displayRow = i + 2;
+      const codigoCompuesto = this.cellStringAlias(row, [
+        'Código Interno (Producto compuesto/kit)',
+        'Codigo Interno (Producto compuesto/kit)',
+      ]);
+      const codigoProducto = this.cellStringAlias(row, [
+        'Código Interno (Producto individual pertenece al kit)',
+        'Codigo Interno (Producto individual pertenece al kit)',
+      ]);
+      const cantidad = this.toNumber(row['Cantidad']);
+
+      if (!codigoCompuesto && !codigoProducto && cantidad === null) continue;
+      if (!codigoCompuesto || !codigoProducto || cantidad === null || cantidad <= 0) {
+        errors.push(`Fila ${displayRow}: faltan campos obligatorios o cantidad inválida.`);
+        continue;
+      }
+
+      try {
+        const compound = await this.prisma.compoundProduct.findFirst({
+          where: { codigoInterno: codigoCompuesto, deletedAt: null },
+          select: { id: true },
+        });
+        if (!compound) throw new BadRequestException(`Compuesto no encontrado (${codigoCompuesto})`);
+
+        const product = await this.prisma.product.findFirst({
+          where: { codigoInterno: codigoProducto, deletedAt: null },
+          select: { id: true, precioUnitarioVenta: true },
+        });
+        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoProducto})`);
+
+        const precioUnitario = product.precioUnitarioVenta;
+        const cantidadDec = new Prisma.Decimal(cantidad);
+        const total = cantidadDec.mul(precioUnitario);
+
+        const current = await this.prisma.compoundProductItem.findFirst({
+          where: { compoundProductId: compound.id, productId: product.id },
+          select: { id: true },
+        });
+        if (current) {
+          await this.prisma.compoundProductItem.update({
+            where: { id: current.id },
+            data: { cantidad: cantidadDec, precioUnitario, total },
+          });
+          updated += 1;
+        } else {
+          await this.prisma.compoundProductItem.create({
+            data: { compoundProductId: compound.id, productId: product.id, cantidad: cantidadDec, precioUnitario, total },
+          });
+          created += 1;
+        }
+
+        await this.recalculateCompoundTotal(compound.id);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error no identificado';
+        errors.push(`Fila ${displayRow}: ${message}`);
+      }
+    }
+
+    return { totalRows: rows.length, created, updated, errors };
+  }
+
   private buildData(dto: CreateCompoundProductDto, totalRef: Prisma.Decimal): Prisma.CompoundProductUncheckedCreateInput {
     return {
       nombre: dto.nombre.trim(),
@@ -244,6 +450,18 @@ export class CompoundProductsService {
       brandId: dto.brandId || null,
       imagenArchivoId: dto.imagenArchivoId || null,
     };
+  }
+
+  private async recalculateCompoundTotal(compoundProductId: string) {
+    const items = await this.prisma.compoundProductItem.findMany({
+      where: { compoundProductId },
+      select: { total: true },
+    });
+    const total = items.reduce((acc, row) => acc.plus(row.total), new Prisma.Decimal(0));
+    await this.prisma.compoundProduct.update({
+      where: { id: compoundProductId },
+      data: { totalPrecioCompraReferencia: total },
+    });
   }
 
   private async getByIdOrThrow(id: string) {
@@ -344,5 +562,77 @@ export class CompoundProductsService {
       );
     }
     await Promise.all(checks);
+  }
+
+  private cellStringAlias(row: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = this.cellString(row, key);
+      if (value) return value;
+    }
+    return '';
+  }
+
+  private cellString(row: Record<string, unknown>, key: string): string {
+    const value = row[key];
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  }
+
+  private toNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const normalized = String(value).replace(',', '.').trim();
+    if (!normalized) return null;
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private toBooleanSiNo(value: unknown, fallback: boolean): boolean {
+    const text = String(value ?? '')
+      .trim()
+      .toUpperCase();
+    if (!text) return fallback;
+    if (['SI', 'S', 'YES', 'Y', '1', 'TRUE'].includes(text)) return true;
+    if (['NO', 'N', '0', 'FALSE'].includes(text)) return false;
+    return fallback;
+  }
+
+  private async resolveCategoryId(nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.category.findFirst({
+      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.category.create({ data: { nombre: clean }, select: { id: true } });
+    return created.id;
+  }
+
+  private async resolveBrandId(nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.brand.findFirst({
+      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.brand.create({ data: { nombre: clean }, select: { id: true } });
+    return created.id;
+  }
+
+  private async resolvePlatformId(nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.compoundProductPlatform.findFirst({
+      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.compoundProductPlatform.create({
+      data: { nombre: clean, activo: true },
+      select: { id: true },
+    });
+    return created.id;
   }
 }
