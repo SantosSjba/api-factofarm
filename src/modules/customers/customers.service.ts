@@ -6,6 +6,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerListQueryDto } from './dto/customer-list-query.dto';
 import { ExportCustomersDto } from './dto/export-customers.dto';
 import { UpdateCustomerBarcodeDto } from './dto/update-customer-barcode.dto';
+import { UpdateCustomerZoneDto } from './dto/update-customer-zone.dto';
 import { UpdateCustomerStatusDto } from './dto/update-customer-status.dto';
 import { UpdateCustomerTagsDto } from './dto/update-customer-tags.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -216,6 +217,41 @@ export class CustomersService {
     } catch (err) {
       this.handleKnownError(err, 'Ya existe una zona con ese nombre.');
     }
+  }
+
+  async updateZone(id: string, dto: UpdateCustomerZoneDto) {
+    const zone = await this.prisma.customerZone.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!zone) throw new NotFoundException('Zona no encontrada');
+    try {
+      return await this.prisma.customerZone.update({
+        where: { id },
+        data: { nombre: dto.nombre?.trim().toUpperCase() || undefined },
+        select: { id: true, nombre: true },
+      });
+    } catch (err) {
+      this.handleKnownError(err, 'Ya existe una zona con ese nombre.');
+    }
+  }
+
+  async removeZone(id: string) {
+    const zone = await this.prisma.customerZone.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!zone) throw new NotFoundException('Zona no encontrada');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.customer.updateMany({
+        where: { zoneId: id, deletedAt: null },
+        data: { zoneId: null },
+      });
+      await tx.customerZone.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    });
   }
 
   async listSellers() {

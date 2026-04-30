@@ -29,6 +29,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerListQueryDto } from './dto/customer-list-query.dto';
 import { ExportCustomersDto } from './dto/export-customers.dto';
 import { UpdateCustomerBarcodeDto } from './dto/update-customer-barcode.dto';
+import { UpdateCustomerZoneDto } from './dto/update-customer-zone.dto';
 import { UpdateCustomerStatusDto } from './dto/update-customer-status.dto';
 import { UpdateCustomerTagsDto } from './dto/update-customer-tags.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -73,6 +74,19 @@ export class CustomersController {
   @Post('zones')
   createZone(@Body() dto: CreateCustomerZoneDto) {
     return this.customersService.createZone(dto);
+  }
+
+  @Patch('zones/:id')
+  updateZone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCustomerZoneDto,
+  ) {
+    return this.customersService.updateZone(id, dto);
+  }
+
+  @Delete('zones/:id')
+  removeZone(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customersService.removeZone(id);
   }
 
   @Get('import/template')
