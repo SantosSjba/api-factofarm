@@ -103,7 +103,8 @@ export class CustomersService {
       ...(searchable.length ? { OR: searchable } : {}),
     };
 
-    const [total, items] = await this.prisma.$transaction([
+    // Evita transacción para lecturas paginadas y reduce riesgo de P2028 (maxWait).
+    const [total, items] = await Promise.all([
       this.prisma.customer.count({ where }),
       this.prisma.customer.findMany({
         where,

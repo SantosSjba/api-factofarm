@@ -3,7 +3,6 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
-import type { Request, Response } from 'express';
 import { AppModule } from './app.module';
 
 /** URL base para logs y enlaces humanos (evita `http://[::1]:…` que confunde en Windows). */
@@ -52,11 +51,10 @@ async function bootstrap() {
     }),
   );
 
-  app
-    .getHttpAdapter()
-    .get('/api/openapi.json', (_req: Request, res: Response) => {
-      res.type('application/json').send(JSON.stringify(document));
-    });
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/api/openapi.json', (_req, res) => {
+    httpAdapter.reply(res, document, 200);
+  });
 
   const port = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '0.0.0.0';

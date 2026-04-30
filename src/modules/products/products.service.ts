@@ -91,7 +91,8 @@ export class ProductsService {
       ...(searchable.length ? { OR: searchable } : {}),
     };
 
-    const [total, rows] = await this.prisma.$transaction([
+    // Evita transacción para lecturas paginadas y reduce riesgo de P2028 (maxWait).
+    const [total, rows] = await Promise.all([
       this.prisma.product.count({ where }),
       this.prisma.product.findMany({
         where,
@@ -182,18 +183,24 @@ export class ProductsService {
       if (!b) throw new BadRequestException('Marca no válida');
     }
 
-    if (dto.productLocationId) {
-      const pl = await this.prisma.productLocation.findFirst({
+    const productLocation = dto.productLocationId
+      ? await this.prisma.productLocation.findFirst({
         where: { id: dto.productLocationId, deletedAt: null },
-      });
-      if (!pl) throw new BadRequestException('Ubicación no válida');
-    }
+      })
+      : null;
+    if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
 
-    if (dto.defaultWarehouseId) {
-      const w = await this.prisma.warehouse.findFirst({
+    const defaultWarehouse = dto.defaultWarehouseId
+      ? await this.prisma.warehouse.findFirst({
         where: { id: dto.defaultWarehouseId, deletedAt: null },
-      });
-      if (!w) throw new BadRequestException('Almacén por defecto no válido');
+      })
+      : null;
+    if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
+
+    if (productLocation && defaultWarehouse && productLocation.establishmentId !== defaultWarehouse.establishmentId) {
+      throw new BadRequestException(
+        'La ubicación debe pertenecer al mismo establecimiento del almacén por defecto.',
+      );
     }
 
     if (dto.imagenArchivoId) {
@@ -457,9 +464,9 @@ export class ProductsService {
     });
   }
 
-  listProductLocations() {
+  listProductLocations(establishmentId?: string) {
     return this.prisma.productLocation.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, establishmentId: establishmentId || undefined },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,

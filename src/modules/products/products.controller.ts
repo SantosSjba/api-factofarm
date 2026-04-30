@@ -36,8 +36,8 @@ export class ProductsController {
 
   @Get('catalogs/product-locations')
   @ApiOperation({ summary: 'Ubicaciones de producto por establecimiento' })
-  catalogLocations() {
-    return this.productsService.listProductLocations();
+  catalogLocations(@Query('establishmentId') establishmentId?: string) {
+    return this.productsService.listProductLocations(establishmentId);
   }
 
   @Post('catalogs/product-locations')
