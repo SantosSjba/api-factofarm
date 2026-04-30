@@ -2,8 +2,10 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '../../generated/prisma/client';
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
+import * as XLSX from 'xlsx';
 import { CreateProductLocationDto } from './dto/create-product-location.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { ProductImportMode } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
 
 const selectProductList = {
@@ -426,6 +428,531 @@ export class ProductsService {
       currency: row.currency,
       totalStock: sumStock(row.warehouseStocks),
     };
+  }
+
+  async importFromExcel(mode: ProductImportMode, file: Express.Multer.File) {
+    if (!file?.buffer?.length) {
+      throw new NotFoundException('Archivo no válido para importar');
+    }
+
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const first = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[first];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+    if (!rows.length) {
+      return { totalRows: 0, created: 0, updated: 0, errors: [] as string[] };
+    }
+
+    switch (mode) {
+      case 'PRODUCTOS':
+        return this.importItemsRows(rows);
+      case 'L_PRECIOS':
+        return this.importPriceListRows(rows);
+      case 'ACTUALIZAR_PRECIOS':
+        return this.importUpdatePricesRows(rows);
+      default:
+        throw new BadRequestException('Modo de importación no soportado');
+    }
+  }
+
+  buildImportTemplateBuffer(mode: ProductImportMode) {
+    const workbook = XLSX.utils.book_new();
+    let rows: Record<string, unknown>[] = [];
+    if (mode === 'L_PRECIOS') {
+      rows = [
+        {
+          'Código Interno (Producto)': 'P001',
+          Descripcion: 'Desc Precio 1',
+          'Código Tipo de Unidad': 'NIU',
+          Factor: 5,
+          'Precio 1': 10,
+          'Precio 2': 20,
+          'Precio 3': 30,
+          'Precio por defecto': 1,
+        },
+      ];
+    } else if (mode === 'ACTUALIZAR_PRECIOS') {
+      rows = [
+        {
+          'Código Interno': 'BI001',
+          'Precio Unitario Venta': 250,
+          'Precio Unitario Compra (Opcional)': 200,
+        },
+        {
+          'Código Interno': 'BI002',
+          'Precio Unitario Venta': 300,
+          'Precio Unitario Compra (Opcional)': '',
+        },
+      ];
+    } else {
+      rows = [
+        {
+          Nombre: 'ACIDO FOLICO TABLETA 0.5 mg',
+          'Código Interno': 'A000001',
+          Modelo: '',
+          'Código Sunat': 20202020,
+          'Código Tipo de Unidad': 'NIU',
+          'Código Tipo de Moneda': 'PEN',
+          'Precio Unitario Venta': 12.25,
+          'Codigo Tipo de Afectación del Igv Venta': 10,
+          'Tiene Igv': 'SI',
+          'Precio Unitario Compra': 120.5,
+          'Codigo Tipo de Afectación del Igv Compra': 10,
+          Stock: 10,
+          'Stock Mínimo': 1,
+          Categoria: 'MEDICAMENTO',
+          Marca: 'FARMINDUSTRIA',
+          Descripcion: 'ACIDO FOLICO TABLETA 0.5 mg',
+          'Principio Activo': 'ACIDO FOLICO',
+          'Código lote': '',
+          'Fec. Vencimiento': '',
+          'Cód barras': 10000001,
+          'Concentración': '0.5 mg',
+          'Código Medicamento DIGEMID': 'A000001',
+          Presentación: 'Tabletas',
+          'Registro Sanitario': '1234-1235',
+          'Es Generico': 'SI',
+          Ubicación: 'Inv 1 Est 2',
+        },
+      ];
+    }
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  }
+
+  private async importItemsRows(rows: Record<string, unknown>[]) {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    const warehouses = await this.prisma.warehouse.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
+      select: { id: true, establishmentId: true, nombre: true },
+    });
+    if (!warehouses.length) {
+      throw new BadRequestException('No hay almacenes configurados para importar productos.');
+    }
+    const defaultWarehouse =
+      warehouses.find((w) => w.nombre.toUpperCase().includes('OFICINA PRINCIPAL')) ?? warehouses[0];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const displayRow = i + 2;
+      const nombre = this.cellString(row, 'Nombre');
+      const codigoInterno = this.cellString(row, 'Código Interno');
+      const unitCode = this.cellString(row, 'Código Tipo de Unidad').toUpperCase();
+      const currencyCode = this.cellString(row, 'Código Tipo de Moneda').toUpperCase();
+      const saleTaxCode = this.cellString(row, 'Codigo Tipo de Afectación del Igv Venta');
+
+      if (!nombre && !codigoInterno && !unitCode && !currencyCode) {
+        continue;
+      }
+      if (!nombre || !codigoInterno || !unitCode || !currencyCode || !saleTaxCode) {
+        errors.push(`Fila ${displayRow}: faltan campos obligatorios.`);
+        continue;
+      }
+
+      try {
+        const unit = await this.prisma.unitOfMeasure.findFirst({
+          where: { codigo: unitCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!unit) throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
+
+        const currency = await this.prisma.currency.findFirst({
+          where: { codigo: currencyCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!currency) throw new BadRequestException(`Moneda no encontrada (${currencyCode})`);
+
+        const saleTax = await this.prisma.taxAffectationType.findFirst({
+          where: { codigo: saleTaxCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!saleTax) throw new BadRequestException(`Tipo afectación venta no encontrado (${saleTaxCode})`);
+
+        const purchaseTaxCode = this.cellString(row, 'Codigo Tipo de Afectación del Igv Compra') || saleTaxCode;
+        const purchaseTax = await this.prisma.taxAffectationType.findFirst({
+          where: { codigo: purchaseTaxCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!purchaseTax) {
+          throw new BadRequestException(`Tipo afectación compra no encontrado (${purchaseTaxCode})`);
+        }
+
+        const categoryId = await this.resolveCategoryId(this.cellString(row, 'Categoria'));
+        const brandId = await this.resolveBrandId(this.cellString(row, 'Marca'));
+        const productLocationId = await this.resolveProductLocationId(
+          defaultWarehouse.establishmentId,
+          this.cellString(row, 'Ubicación'),
+        );
+
+        const precioVenta = this.toNumber(row['Precio Unitario Venta']);
+        const precioCompra = this.toNumber(row['Precio Unitario Compra']);
+        const stock = this.toNumber(row['Stock']) ?? 0;
+        const stockMinimo = this.toInteger(row['Stock Mínimo']) ?? 1;
+        const tieneIgv = this.toBooleanSiNo(row['Tiene Igv'], true);
+        const esGenerico = this.toBooleanSiNo(row['Es Generico'], false);
+        const codigoLote = this.cellString(row, 'Código lote');
+        const fechaVencimiento = this.toDateIso(row['Fec. Vencimiento']);
+        const manejaLotes = !!(codigoLote || fechaVencimiento);
+
+        if (precioVenta === null || precioVenta < 0) {
+          throw new BadRequestException('Precio Unitario Venta inválido.');
+        }
+        if (precioCompra !== null && precioCompra < 0) {
+          throw new BadRequestException('Precio Unitario Compra inválido.');
+        }
+
+        const current = await this.prisma.product.findFirst({
+          where: { deletedAt: null, codigoInterno },
+          select: { id: true },
+        });
+
+        const product = current
+          ? await this.prisma.product.update({
+              where: { id: current.id },
+              data: {
+                nombre,
+                codigoBusqueda: this.cellString(row, 'Código Interno') || codigoInterno,
+                codigoInterno,
+                modelo: this.cellString(row, 'Modelo') || null,
+                codigoSunat: this.cellString(row, 'Código Sunat') || null,
+                precioUnitarioVenta: new Prisma.Decimal(precioVenta),
+                precioUnitarioCompra: precioCompra !== null ? new Prisma.Decimal(precioCompra) : null,
+                saleTaxAffectationId: saleTax.id,
+                purchaseTaxAffectationId: purchaseTax.id,
+                incluyeIgvVenta: tieneIgv,
+                incluyeIgvCompra: tieneIgv,
+                stockMinimo,
+                categoryId,
+                brandId,
+                descripcion: this.cellString(row, 'Descripcion') || null,
+                principioActivo: this.cellString(row, 'Principio Activo') || null,
+                concentracion: this.cellString(row, 'Concentración') || null,
+                formaFarmaceutica: this.cellString(row, 'Presentación') || null,
+                registroSanitario: this.cellString(row, 'Registro Sanitario') || null,
+                codigoBarra: this.cellString(row, 'Cód barras') || null,
+                codigoMedicamentoDigemid: this.cellString(row, 'Código Medicamento DIGEMID') || null,
+                unitId: unit.id,
+                currencyId: currency.id,
+                generico: esGenerico,
+                manejaLotes,
+                codigoLote: manejaLotes ? codigoLote || null : null,
+                fechaVencimientoLote: manejaLotes && fechaVencimiento ? new Date(fechaVencimiento) : null,
+                defaultWarehouseId: defaultWarehouse.id,
+                productLocationId,
+              },
+              select: { id: true },
+            })
+          : await this.prisma.product.create({
+              data: {
+                nombre,
+                codigoBusqueda: this.cellString(row, 'Código Interno') || codigoInterno,
+                codigoInterno,
+                modelo: this.cellString(row, 'Modelo') || null,
+                codigoSunat: this.cellString(row, 'Código Sunat') || null,
+                precioUnitarioVenta: new Prisma.Decimal(precioVenta),
+                precioUnitarioCompra: precioCompra !== null ? new Prisma.Decimal(precioCompra) : null,
+                saleTaxAffectationId: saleTax.id,
+                purchaseTaxAffectationId: purchaseTax.id,
+                incluyeIgvVenta: tieneIgv,
+                incluyeIgvCompra: tieneIgv,
+                stockMinimo,
+                categoryId,
+                brandId,
+                descripcion: this.cellString(row, 'Descripcion') || null,
+                principioActivo: this.cellString(row, 'Principio Activo') || null,
+                concentracion: this.cellString(row, 'Concentración') || null,
+                formaFarmaceutica: this.cellString(row, 'Presentación') || null,
+                registroSanitario: this.cellString(row, 'Registro Sanitario') || null,
+                codigoBarra: this.cellString(row, 'Cód barras') || null,
+                codigoMedicamentoDigemid: this.cellString(row, 'Código Medicamento DIGEMID') || null,
+                unitId: unit.id,
+                currencyId: currency.id,
+                generico: esGenerico,
+                manejaLotes,
+                codigoLote: manejaLotes ? codigoLote || null : null,
+                fechaVencimientoLote: manejaLotes && fechaVencimiento ? new Date(fechaVencimiento) : null,
+                defaultWarehouseId: defaultWarehouse.id,
+                productLocationId,
+              },
+              select: { id: true },
+            });
+
+        await this.prisma.productWarehouseStock.upsert({
+          where: {
+            productId_warehouseId: {
+              productId: product.id,
+              warehouseId: defaultWarehouse.id,
+            },
+          },
+          update: { cantidad: new Prisma.Decimal(stock) },
+          create: {
+            productId: product.id,
+            warehouseId: defaultWarehouse.id,
+            cantidad: new Prisma.Decimal(stock),
+          },
+        });
+
+        if (current) updated++;
+        else created++;
+      } catch (error) {
+        const message =
+          error instanceof BadRequestException
+            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            : error instanceof Error
+              ? error.message
+              : 'Error no controlado';
+        errors.push(`Fila ${displayRow}: ${message}`);
+      }
+    }
+
+    return { totalRows: rows.length, created, updated, errors };
+  }
+
+  private async importPriceListRows(rows: Record<string, unknown>[]) {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const displayRow = i + 2;
+      const codigoInterno = this.cellString(row, 'Código Interno (Producto)');
+      const unitCode = this.cellString(row, 'Código Tipo de Unidad').toUpperCase();
+
+      if (!codigoInterno && !unitCode) continue;
+      if (!codigoInterno || !unitCode) {
+        errors.push(`Fila ${displayRow}: código interno y unidad son obligatorios.`);
+        continue;
+      }
+
+      try {
+        const product = await this.prisma.product.findFirst({
+          where: { deletedAt: null, codigoInterno },
+          select: { id: true },
+        });
+        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+
+        const unit = await this.prisma.unitOfMeasure.findFirst({
+          where: { codigo: unitCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (!unit) throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
+
+        const factor = this.toNumber(row['Factor']);
+        const precio1 = this.toNumber(row['Precio 1']);
+        const precio2 = this.toNumber(row['Precio 2']);
+        const precio3 = this.toNumber(row['Precio 3']);
+        const defaultNo = this.toInteger(row['Precio por defecto']) ?? 1;
+
+        if (factor === null || factor <= 0) throw new BadRequestException('Factor inválido.');
+        if (precio1 === null || precio2 === null || precio3 === null) {
+          throw new BadRequestException('Precios 1, 2 y 3 son obligatorios.');
+        }
+        if (precio1 < 0 || precio2 < 0 || precio3 < 0) {
+          throw new BadRequestException('Los precios no pueden ser negativos.');
+        }
+
+        const precioDefecto =
+          defaultNo === 2
+            ? PresentationDefaultPrice.PRECIO_2
+            : defaultNo === 3
+              ? PresentationDefaultPrice.PRECIO_3
+              : PresentationDefaultPrice.PRECIO_1;
+        const descripcion = this.cellString(row, 'Descripcion') || null;
+        const selectedPrice = precioDefecto === 'PRECIO_1' ? precio1 : precioDefecto === 'PRECIO_2' ? precio2 : precio3;
+        if (selectedPrice <= 0) {
+          throw new BadRequestException('El precio por defecto debe ser mayor a 0.');
+        }
+
+        const exists = await this.prisma.productPresentation.findFirst({
+          where: { productId: product.id, unitId: unit.id, descripcion: descripcion ?? undefined },
+          orderBy: { orden: 'asc' },
+          select: { id: true },
+        });
+
+        if (exists) {
+          await this.prisma.productPresentation.update({
+            where: { id: exists.id },
+            data: {
+              factor: new Prisma.Decimal(factor),
+              precio1: new Prisma.Decimal(precio1),
+              precio2: new Prisma.Decimal(precio2),
+              precio3: new Prisma.Decimal(precio3),
+              precioDefecto,
+              descripcion,
+            },
+          });
+          updated++;
+        } else {
+          const lastOrder = await this.prisma.productPresentation.findFirst({
+            where: { productId: product.id },
+            orderBy: { orden: 'desc' },
+            select: { orden: true },
+          });
+          await this.prisma.productPresentation.create({
+            data: {
+              productId: product.id,
+              unitId: unit.id,
+              descripcion,
+              factor: new Prisma.Decimal(factor),
+              precio1: new Prisma.Decimal(precio1),
+              precio2: new Prisma.Decimal(precio2),
+              precio3: new Prisma.Decimal(precio3),
+              precioDefecto,
+              orden: (lastOrder?.orden ?? -1) + 1,
+            },
+          });
+          created++;
+        }
+      } catch (error) {
+        const message =
+          error instanceof BadRequestException
+            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            : error instanceof Error
+              ? error.message
+              : 'Error no controlado';
+        errors.push(`Fila ${displayRow}: ${message}`);
+      }
+    }
+
+    return { totalRows: rows.length, created, updated, errors };
+  }
+
+  private async importUpdatePricesRows(rows: Record<string, unknown>[]) {
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const displayRow = i + 2;
+      const codigoInterno = this.cellString(row, 'Código Interno');
+      if (!codigoInterno) continue;
+
+      try {
+        const product = await this.prisma.product.findFirst({
+          where: { deletedAt: null, codigoInterno },
+          select: { id: true },
+        });
+        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+
+        const venta = this.toNumber(row['Precio Unitario Venta']);
+        const compra = this.toNumber(row['Precio Unitario Compra (Opcional)']);
+        if (venta === null || venta < 0) {
+          throw new BadRequestException('Precio Unitario Venta inválido.');
+        }
+        if (compra !== null && compra < 0) {
+          throw new BadRequestException('Precio Unitario Compra inválido.');
+        }
+
+        await this.prisma.product.update({
+          where: { id: product.id },
+          data: {
+            precioUnitarioVenta: new Prisma.Decimal(venta),
+            ...(compra !== null ? { precioUnitarioCompra: new Prisma.Decimal(compra) } : {}),
+          },
+        });
+        updated++;
+      } catch (error) {
+        const message =
+          error instanceof BadRequestException
+            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            : error instanceof Error
+              ? error.message
+              : 'Error no controlado';
+        errors.push(`Fila ${displayRow}: ${message}`);
+      }
+    }
+
+    return { totalRows: rows.length, created: 0, updated, errors };
+  }
+
+  private cellString(row: Record<string, unknown>, key: string): string {
+    const raw = row[key];
+    if (raw === null || raw === undefined) return '';
+    if (typeof raw === 'number') return String(raw).trim();
+    return String(raw).trim();
+  }
+
+  private toNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private toInteger(value: unknown): number | null {
+    const n = this.toNumber(value);
+    if (n === null) return null;
+    return Math.trunc(n);
+  }
+
+  private toBooleanSiNo(value: unknown, fallback = false): boolean {
+    if (value === null || value === undefined || value === '') return fallback;
+    const v = String(value).trim().toUpperCase();
+    if (['SI', 'SÍ', 'YES', 'TRUE', '1'].includes(v)) return true;
+    if (['NO', 'FALSE', '0'].includes(v)) return false;
+    return fallback;
+  }
+
+  private toDateIso(value: unknown): string | null {
+    if (value === null || value === undefined || value === '') return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+    if (typeof value === 'number') {
+      const date = XLSX.SSF.parse_date_code(value);
+      if (!date) return null;
+      const d = new Date(Date.UTC(date.y, date.m - 1, date.d));
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    }
+    const d = new Date(String(value));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  private async resolveCategoryId(nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.category.findFirst({
+      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.category.create({ data: { nombre: clean }, select: { id: true } });
+    return created.id;
+  }
+
+  private async resolveBrandId(nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.brand.findFirst({
+      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.brand.create({ data: { nombre: clean }, select: { id: true } });
+    return created.id;
+  }
+
+  private async resolveProductLocationId(establishmentId: string, nombre: string): Promise<string | null> {
+    const clean = nombre.trim();
+    if (!clean) return null;
+    const existing = await this.prisma.productLocation.findFirst({
+      where: {
+        deletedAt: null,
+        establishmentId,
+        nombre: { equals: clean, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.productLocation.create({
+      data: { establishmentId, nombre: clean.toUpperCase() },
+      select: { id: true },
+    });
+    return created.id;
   }
 
   listUnits() {
