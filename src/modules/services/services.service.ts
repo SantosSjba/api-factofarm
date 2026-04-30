@@ -163,6 +163,15 @@ export class ServicesService {
     });
   }
 
+  async listHistoryStock(id: string) {
+    const exists = await this.prisma.service.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Servicio no encontrado');
+    return [] as { warehouseId: string; ubicacion: string; stock: string; series: string }[];
+  }
+
   async create(dto: CreateServiceDto) {
     const unitId = await this.resolveServiceUnitId(dto.unitId);
     await this.validateReferences(dto);

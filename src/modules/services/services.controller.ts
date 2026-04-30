@@ -53,6 +53,12 @@ export class ServicesController {
     return this.servicesService.list(query);
   }
 
+  @Get(':id/history/stock')
+  @ApiOperation({ summary: 'Historial de stock del servicio' })
+  historyStock(@Param('id') id: string) {
+    return this.servicesService.listHistoryStock(id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Crear servicio' })
   @ApiBody({ type: CreateServiceDto })
