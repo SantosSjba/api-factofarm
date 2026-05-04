@@ -2,9 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma, ProductSerialStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
+import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
+import { CreateOutboundMovementDto } from './dto/create-outbound-movement.dto';
 import { ImportInventoryFileDto } from './dto/import-inventory-file.dto';
 import { InventoryMovementListQueryDto } from './dto/inventory-movement-list-query.dto';
 import { InventoryImportTemplateMode } from './dto/inventory-import-template-query.dto';
+import { LotCodeSearchQueryDto } from './dto/lot-code-search-query.dto';
 
 const serialAvailableStates: ProductSerialStatus[] = [
   ProductSerialStatus.DISPONIBLE,
@@ -72,6 +75,7 @@ export class InventoryMovementsService {
         id: row.id,
         productId: row.product.id,
         producto: row.product.nombre,
+        codigoInterno: row.product.codigoInterno ?? null,
         marca: row.product.brand?.nombre ?? '—',
         almacen: row.warehouse.nombre,
         stock: row.cantidad.toString(),
@@ -93,6 +97,263 @@ export class InventoryMovementsService {
         establishment: { select: { id: true, nombre: true, codigo: true } },
       },
     });
+  }
+
+  listTransferReasons() {
+    return this.prisma.inventoryTransferReason.findMany({
+      where: { deletedAt: null, activo: true, codigo: { not: { startsWith: 'OUT_' } } },
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+      },
+    });
+  }
+
+  listOutputReasons() {
+    return this.prisma.inventoryTransferReason.findMany({
+      where: { deletedAt: null, activo: true, codigo: { startsWith: 'OUT_' } },
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+      },
+    });
+  }
+
+  async searchLotCodes(query: LotCodeSearchQueryDto) {
+    const mode = query.mode ?? 'INBOUND';
+    const search = query.search?.trim();
+    const rows = await this.prisma.productLotStock.findMany({
+      where: {
+        productId: query.productId,
+        warehouseId: query.warehouseId,
+        deletedAt: null,
+        ...(search ? { codigoLote: { contains: search, mode: 'insensitive' } } : {}),
+        ...(mode === 'OUTBOUND' ? { stock: { gt: new Prisma.Decimal(0) } } : {}),
+      },
+      orderBy: [{ codigoLote: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        codigoLote: true,
+        stock: true,
+        fechaVencimiento: true,
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      codigoLote: row.codigoLote,
+      stock: row.stock.toString(),
+      fechaVencimiento: row.fechaVencimiento?.toISOString() ?? null,
+    }));
+  }
+
+  async createInboundMovement(dto: CreateInboundMovementDto) {
+    const [product, warehouse, transferReason] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: { id: dto.productId, deletedAt: null },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.warehouse.findFirst({
+        where: { id: dto.warehouseId, deletedAt: null },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.inventoryTransferReason.findFirst({
+        where: { id: dto.transferReasonId, deletedAt: null, activo: true },
+        select: { id: true, nombre: true },
+      }),
+    ]);
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    if (!warehouse) throw new NotFoundException('Almacén no encontrado');
+    if (!transferReason) throw new NotFoundException('Motivo de traslado no encontrado');
+
+    const amount = new Prisma.Decimal(dto.quantity);
+    const fechaVencimiento = dto.expirationDate ? new Date(dto.expirationDate) : null;
+    const fechaRegistro = dto.registeredAt ? new Date(dto.registeredAt) : new Date();
+    if (Number.isNaN(fechaRegistro.getTime())) {
+      throw new BadRequestException('Fecha de registro inválida');
+    }
+    if (fechaVencimiento && Number.isNaN(fechaVencimiento.getTime())) {
+      throw new BadRequestException('Fecha de vencimiento inválida');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.inventoryInboundMovement.create({
+        data: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+          transferReasonId: transferReason.id,
+          cantidad: amount,
+          codigoLote: dto.lotCode || null,
+          fechaVencimiento,
+          fechaRegistro,
+          comentario: dto.comment || null,
+        },
+      });
+
+      if (dto.lotCode) {
+        const existingLot = await tx.productLotStock.findFirst({
+          where: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+            codigoLote: dto.lotCode,
+            deletedAt: null,
+          },
+          select: { id: true, stock: true },
+        });
+        if (existingLot) {
+          await tx.productLotStock.update({
+            where: { id: existingLot.id },
+            data: {
+              stock: existingLot.stock.plus(amount),
+              fechaVencimiento: fechaVencimiento ?? undefined,
+            },
+          });
+        } else {
+          await tx.productLotStock.create({
+            data: {
+              productId: product.id,
+              warehouseId: warehouse.id,
+              codigoLote: dto.lotCode,
+              stock: amount,
+              fechaVencimiento,
+            },
+          });
+        }
+      }
+
+      const current = await tx.productWarehouseStock.findUnique({
+        where: {
+          productId_warehouseId: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          },
+        },
+        select: { cantidad: true },
+      });
+      await tx.productWarehouseStock.upsert({
+        where: {
+          productId_warehouseId: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          },
+        },
+        update: { cantidad: (current?.cantidad ?? new Prisma.Decimal(0)).plus(amount) },
+        create: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+          cantidad: amount,
+        },
+      });
+    });
+
+    return {
+      ok: true,
+      message: 'Ingreso registrado correctamente',
+    };
+  }
+
+  async createOutboundMovement(dto: CreateOutboundMovementDto) {
+    const [product, warehouse, transferReason, currentStock] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: { id: dto.productId, deletedAt: null },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.warehouse.findFirst({
+        where: { id: dto.warehouseId, deletedAt: null },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.inventoryTransferReason.findFirst({
+        where: {
+          id: dto.transferReasonId,
+          deletedAt: null,
+          activo: true,
+          codigo: { startsWith: 'OUT_' },
+        },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.productWarehouseStock.findUnique({
+        where: {
+          productId_warehouseId: {
+            productId: dto.productId,
+            warehouseId: dto.warehouseId,
+          },
+        },
+        select: { cantidad: true },
+      }),
+    ]);
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    if (!warehouse) throw new NotFoundException('Almacén no encontrado');
+    if (!transferReason) throw new NotFoundException('Motivo de salida no encontrado');
+
+    const amount = new Prisma.Decimal(dto.quantity);
+    const current = currentStock?.cantidad ?? new Prisma.Decimal(0);
+    if (current.lessThan(amount)) {
+      throw new BadRequestException('Stock insuficiente para realizar la salida');
+    }
+    const fechaRegistro = dto.registeredAt ? new Date(dto.registeredAt) : new Date();
+    if (Number.isNaN(fechaRegistro.getTime())) {
+      throw new BadRequestException('Fecha de registro inválida');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.inventoryInboundMovement.create({
+        data: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+          transferReasonId: transferReason.id,
+          cantidad: amount.negated(),
+          codigoLote: dto.lotCode || null,
+          fechaRegistro,
+          comentario: dto.comment || null,
+        },
+      });
+
+      if (dto.lotCode) {
+        const existingLot = await tx.productLotStock.findFirst({
+          where: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+            codigoLote: dto.lotCode,
+            deletedAt: null,
+          },
+          select: { id: true, stock: true },
+        });
+        if (!existingLot) {
+          throw new BadRequestException('No existe el lote indicado en el almacén seleccionado');
+        }
+        if (existingLot.stock.lessThan(amount)) {
+          throw new BadRequestException('Stock insuficiente en el lote indicado');
+        }
+        await tx.productLotStock.update({
+          where: { id: existingLot.id },
+          data: { stock: existingLot.stock.minus(amount) },
+        });
+      }
+
+      await tx.productWarehouseStock.upsert({
+        where: {
+          productId_warehouseId: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          },
+        },
+        update: { cantidad: current.minus(amount) },
+        create: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+          cantidad: new Prisma.Decimal(0),
+        },
+      });
+    });
+
+    return {
+      ok: true,
+      message: 'Salida registrada correctamente',
+    };
   }
 
   async importLots(dto: ImportInventoryFileDto, file: Express.Multer.File) {

@@ -13,12 +13,15 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
+import { CreateOutboundMovementDto } from './dto/create-outbound-movement.dto';
 import { ImportInventoryFileDto } from './dto/import-inventory-file.dto';
 import {
   InventoryImportTemplateQueryDto,
   inventoryImportTemplateModes,
 } from './dto/inventory-import-template-query.dto';
 import { InventoryMovementListQueryDto } from './dto/inventory-movement-list-query.dto';
+import { LotCodeSearchQueryDto } from './dto/lot-code-search-query.dto';
 import { InventoryMovementsService } from './inventory-movements.service';
 
 @ApiTags('InventoryMovements')
@@ -36,6 +39,36 @@ export class InventoryMovementsController {
   @ApiOperation({ summary: 'Listar almacenes para importación de inventario' })
   listWarehouses() {
     return this.service.listWarehouses();
+  }
+
+  @Get('catalogs/transfer-reasons')
+  @ApiOperation({ summary: 'Listar motivos de traslado para ingreso de inventario' })
+  listTransferReasons() {
+    return this.service.listTransferReasons();
+  }
+
+  @Get('catalogs/output-reasons')
+  @ApiOperation({ summary: 'Listar motivos de salida de inventario' })
+  listOutputReasons() {
+    return this.service.listOutputReasons();
+  }
+
+  @Get('catalogs/lot-codes')
+  @ApiOperation({ summary: 'Buscar códigos de lote por producto y almacén' })
+  searchLotCodes(@Query() query: LotCodeSearchQueryDto) {
+    return this.service.searchLotCodes(query);
+  }
+
+  @Post('inbound')
+  @ApiOperation({ summary: 'Registrar ingreso de inventario (acción +)' })
+  createInboundMovement(@Body() dto: CreateInboundMovementDto) {
+    return this.service.createInboundMovement(dto);
+  }
+
+  @Post('outbound')
+  @ApiOperation({ summary: 'Registrar salida de inventario (acción -)' })
+  createOutboundMovement(@Body() dto: CreateOutboundMovementDto) {
+    return this.service.createOutboundMovement(dto);
   }
 
   @Post('import/lots')

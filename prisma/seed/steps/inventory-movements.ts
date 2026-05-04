@@ -1,8 +1,41 @@
 import { Prisma } from '../../../src/generated/prisma/client';
+import { inventoryOutputReasonsSeed } from '../data/inventory-output-reasons';
 import { productLotStocksSeed } from '../data/inventory-movements';
+import { inventoryTransferReasonsSeed } from '../data/inventory-transfer-reasons';
 import type { SeedDb } from '../types';
 
 export async function seedInventoryMovements(prisma: SeedDb) {
+  for (const reason of inventoryTransferReasonsSeed) {
+    await prisma.inventoryTransferReason.upsert({
+      where: { codigo: reason.codigo },
+      update: {
+        nombre: reason.nombre,
+        activo: reason.activo ?? true,
+        deletedAt: null,
+      },
+      create: {
+        codigo: reason.codigo,
+        nombre: reason.nombre,
+        activo: reason.activo ?? true,
+      },
+    });
+  }
+  for (const reason of inventoryOutputReasonsSeed) {
+    await prisma.inventoryTransferReason.upsert({
+      where: { codigo: `OUT_${reason.codigo}` },
+      update: {
+        nombre: reason.nombre,
+        activo: reason.activo ?? true,
+        deletedAt: null,
+      },
+      create: {
+        codigo: `OUT_${reason.codigo}`,
+        nombre: reason.nombre,
+        activo: reason.activo ?? true,
+      },
+    });
+  }
+
   const defaultWarehouse = await prisma.warehouse.findFirst({
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' },

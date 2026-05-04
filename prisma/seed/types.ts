@@ -101,6 +101,18 @@ export type SeedProductLotInput = {
   fechaVencimiento?: string;
 };
 
+export type SeedInventoryTransferReasonInput = {
+  codigo: string;
+  nombre: string;
+  activo?: boolean;
+};
+
+export type SeedInventoryOutputReasonInput = {
+  codigo: string;
+  nombre: string;
+  activo?: boolean;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };
