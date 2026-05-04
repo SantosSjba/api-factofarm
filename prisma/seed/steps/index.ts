@@ -6,6 +6,7 @@ import { seedCompoundProducts } from './compound-products';
 import { seedCustomers } from './customers';
 import { seedCustomerTypes } from './customer-types';
 import { seedEstablishments } from './establishments';
+import { seedInventoryMovements } from './inventory-movements';
 import { seedProductCatalogs } from './product-catalogs';
 import { seedProducts } from './products';
 import { seedPermissions } from './permissions';
@@ -38,6 +39,7 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await runStep('Conjuntos/Packs/Promociones', () => seedCompoundProducts(prisma));
   await runStep('Servicios', () => seedServices(prisma));
   await runStep('Series', () => seedSeries(prisma));
+  await runStep('Inventario (lotes/series)', () => seedInventoryMovements(prisma));
   await runStep('Clientes', () => seedCustomers(prisma));
   await runStep('Permisos', () => seedPermissions(prisma));
   await runStep('Usuario admin', () => seedAdminUser(prisma));

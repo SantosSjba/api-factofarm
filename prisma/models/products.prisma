@@ -68,6 +68,8 @@ model Warehouse {
 
   productPrices ProductWarehousePrice[]
   productStocks ProductWarehouseStock[]
+  productLotStocks ProductLotStock[]
+  serials ProductSerial[]
   defaultForProducts Product[] @relation("ProductDefaultWarehouse")
 
   @@unique([establishmentId, nombre])
@@ -192,6 +194,7 @@ model Product {
   attributes      ProductAttribute[]
   warehousePrices ProductWarehousePrice[]
   warehouseStocks ProductWarehouseStock[]
+  lotStocks      ProductLotStock[]
   seriales       ProductSerial[]
   usedInCompounds CompoundProductItem[]
 
@@ -216,14 +219,16 @@ enum ProductSerialStatus {
 
 model ProductSerial {
   id        String            @id @default(uuid())
-  serie     String            @unique
+  serie     String
   productId String
+  warehouseId String
   fecha     DateTime          @default(now())
   estado    ProductSerialStatus @default(DISPONIBLE)
   vendido   Boolean           @default(false)
   soldAt    DateTime?
 
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
 
   deletedAt DateTime?
   createdAt DateTime @default(now())
@@ -232,7 +237,30 @@ model ProductSerial {
   @@index([deletedAt])
   @@index([serie])
   @@index([productId])
+  @@index([warehouseId])
   @@index([estado])
+  @@unique([warehouseId, serie])
+}
+
+model ProductLotStock {
+  id          String   @id @default(uuid())
+  productId   String
+  warehouseId String
+  codigoLote  String
+  stock       Decimal  @default(0) @db.Decimal(18, 4)
+  fechaVencimiento DateTime?
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([deletedAt])
+  @@unique([productId, warehouseId, codigoLote])
 }
 
 model ProductWarehousePrice {

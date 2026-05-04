@@ -1,7 +1,25 @@
 import type { SeedProductSerialInput } from '../types';
 
 export const productSerialsSeed: SeedProductSerialInput[] = [
-  { serie: 'SR-000001', productCodigoInterno: 'P001', estado: 'DISPONIBLE', vendido: false },
-  { serie: 'SR-000002', productCodigoInterno: 'P002', estado: 'RESERVADO', vendido: false },
-  { serie: 'SR-000003', productCodigoInterno: 'P003', estado: 'VENDIDO', vendido: true },
+  {
+    serie: 'SERB1001',
+    productCodigoInterno: '0001',
+    warehouseNombre: 'Almacén Oficina Principal',
+    estado: 'DISPONIBLE',
+    vendido: false,
+  },
+  {
+    serie: 'SERB1002',
+    productCodigoInterno: '0001',
+    warehouseNombre: 'Almacén Oficina Principal',
+    estado: 'ANULADO',
+    vendido: false,
+  },
+  {
+    serie: 'SERB1003',
+    productCodigoInterno: '0002',
+    warehouseNombre: 'Almacén - SUCURSAL',
+    estado: 'VENDIDO',
+    vendido: true,
+  },
 ];

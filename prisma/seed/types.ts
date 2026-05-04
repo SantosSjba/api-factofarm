@@ -87,9 +87,18 @@ export type SeedCompoundProductInput = {
 export type SeedProductSerialInput = {
   serie: string;
   productCodigoInterno: string;
+  warehouseNombre?: string;
   estado?: 'DISPONIBLE' | 'RESERVADO' | 'VENDIDO' | 'ANULADO';
   vendido?: boolean;
   fecha?: string;
+};
+
+export type SeedProductLotInput = {
+  productCodigoInterno: string;
+  warehouseNombre?: string;
+  codigoLote: string;
+  stock: string;
+  fechaVencimiento?: string;
 };
 
 export type SeedCustomerZoneInput = {
