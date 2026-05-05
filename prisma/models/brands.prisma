@@ -6,6 +6,8 @@ model Brand {
   updatedAt DateTime @updatedAt
 
   products Product[]
+  services Service[]
+  compoundProducts CompoundProduct[]
 
   @@index([deletedAt])
 }

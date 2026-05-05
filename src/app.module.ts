@@ -14,6 +14,10 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
+import { ServicesModule } from './modules/services/services.module';
+import { CompoundProductsModule } from './modules/compound-products/compound-products.module';
+import { SeriesModule } from './modules/series/series.module';
+import { InventoryMovementsModule } from './modules/inventory-movements/inventory-movements.module';
 
 @Module({
   imports: [
@@ -36,6 +40,10 @@ import { ProductsModule } from './modules/products/products.module';
     BrandsModule,
     CustomersModule,
     ProductsModule,
+    ServicesModule,
+    CompoundProductsModule,
+    SeriesModule,
+    InventoryMovementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

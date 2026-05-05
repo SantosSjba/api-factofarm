@@ -12,7 +12,10 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  const startedAt = Date.now();
+  console.log('[seed] ===== Inicio de seed =====');
   await runSeedSteps(prisma);
+  console.log(`[seed] ===== Seed finalizado correctamente (${Date.now() - startedAt}ms) =====`);
 }
 
 main()
@@ -20,6 +23,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (e) => {
+    console.error('[seed] ===== Seed finalizó con error =====');
     console.error(e);
     await prisma.$disconnect();
     process.exit(1);

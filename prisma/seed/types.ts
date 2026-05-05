@@ -63,6 +63,56 @@ export type SeedProductInput = {
   attributeObservacion?: string;
 };
 
+export type SeedCompoundProductItemInput = {
+  productCodigoInterno: string;
+  cantidad: string;
+  precioUnitario?: string;
+};
+
+export type SeedCompoundProductInput = {
+  codigoInterno: string;
+  nombre: string;
+  nombreSecundario?: string;
+  descripcion?: string;
+  modelo?: string;
+  precioUnitarioVenta: string;
+  precioUnitarioCompra: string;
+  codigoSunat?: string;
+  plataformaNombre?: string;
+  categoryNombre?: string;
+  brandNombre?: string;
+  items: SeedCompoundProductItemInput[];
+};
+
+export type SeedProductSerialInput = {
+  serie: string;
+  productCodigoInterno: string;
+  warehouseNombre?: string;
+  estado?: 'DISPONIBLE' | 'RESERVADO' | 'VENDIDO' | 'ANULADO';
+  vendido?: boolean;
+  fecha?: string;
+};
+
+export type SeedProductLotInput = {
+  productCodigoInterno: string;
+  warehouseNombre?: string;
+  codigoLote: string;
+  stock: string;
+  fechaVencimiento?: string;
+};
+
+export type SeedInventoryTransferReasonInput = {
+  codigo: string;
+  nombre: string;
+  activo?: boolean;
+};
+
+export type SeedInventoryOutputReasonInput = {
+  codigo: string;
+  nombre: string;
+  activo?: boolean;
+};
+
 export type SeedCustomerZoneInput = {
   nombre: string;
 };
