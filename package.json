@@ -4,6 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
+  "packageManager": "pnpm@10.12.1",
   "license": "UNLICENSED",
   "scripts": {
     "postinstall": "prisma generate",

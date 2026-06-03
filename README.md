@@ -58,7 +58,7 @@ Los **nuevos dominios** deben seguir el mismo patrón bajo `src/modules/<nombre>
 
 ## Requisitos previos
 
-- **Node.js** LTS (recomendado 20.x o superior) y **npm**.
+- **Node.js** LTS (recomendado 20.x o superior) y **pnpm** (versión fijada en `package.json` → `packageManager`).
 - **PostgreSQL** accesible (local o remoto) y una **base de datos vacía** creada para el proyecto (por ejemplo `bd_factofarm`).
 
 ---
@@ -70,7 +70,7 @@ Ejecuta los pasos **en orden** desde la raíz del repositorio `api-factofarm`.
 ### 1. Instalar dependencias
 
 ```bash
-npm install
+pnpm install
 ```
 
 Tras `install` se ejecuta `postinstall` → **`prisma generate`** (genera el cliente en `src/generated/prisma`).
@@ -105,7 +105,7 @@ Aplica el esquema a tu base de datos.
 **Desarrollo** (crea/aplica migraciones y sincroniza el historial local):
 
 ```bash
-npm run prisma:migrate
+pnpm run prisma:migrate
 ```
 
 Equivale a `prisma migrate dev`. Si es la primera vez, Prisma aplicará todas las migraciones existentes en `prisma/migrations/`.
@@ -113,7 +113,7 @@ Equivale a `prisma migrate dev`. Si es la primera vez, Prisma aplicará todas la
 **Producción / CI** (solo aplica migraciones ya versionadas, sin prompts):
 
 ```bash
-npm run prisma:deploy
+pnpm run prisma:deploy
 ```
 
 Equivale a `prisma migrate deploy`.
@@ -123,7 +123,7 @@ Equivale a `prisma migrate deploy`.
 Carga datos demo (admin, permisos, etc.) definidos en `prisma/seed/`:
 
 ```bash
-npm run db:seed
+pnpm run db:seed
 ```
 
 Credenciales de demostración (solo desarrollo; ver `prisma/seed/data/admin-demo.ts`):
@@ -134,20 +134,20 @@ Credenciales de demostración (solo desarrollo; ver `prisma/seed/data/admin-demo
 ### 5. Compilar y arrancar la API
 
 ```bash
-npm run build
-npm run start:dev
+ppnpm run build
+pppnpm run start:dev
 ```
 
 Modo desarrollo con recarga:
 
 ```bash
-npm run start:dev
+ppnpm run start:dev
 ```
 
 Arranque en producción (tras `build`):
 
 ```bash
-npm run start:prod
+ppnpm run start:prod
 ```
 
 En consola verás el **puerto**, la **conexión a PostgreSQL** (vía Prisma) y enlaces útiles con **`http://localhost:<PORT>`** (documentación, health, OpenAPI).
@@ -174,18 +174,18 @@ Content-Type: application/json
 
 ---
 
-## Scripts npm útiles
+## Scripts pnpm útiles
 
 | Script | Descripción |
 |--------|-------------|
-| `npm run start:dev` | API en modo watch |
-| `npm run build` | Compila Nest (antes ejecuta `prisma generate`) |
-| `npm run prisma:generate` | Regenera el cliente Prisma |
-| `npm run prisma:migrate` | Migraciones en desarrollo (`migrate dev`) |
-| `npm run prisma:deploy` | Aplicar migraciones en prod/CI (`migrate deploy`) |
-| `npm run db:seed` | Ejecuta el seed |
-| `npm run lint` | ESLint |
-| `npm run test` | Tests unitarios |
+| `ppnpm run start:dev` | API en modo watch |
+| `pnpm run build` | Compila Nest (antes ejecuta `prisma generate`) |
+| `pnpm run prisma:generate` | Regenera el cliente Prisma |
+| `pnpm run prisma:migrate` | Migraciones en desarrollo (`migrate dev`) |
+| `pnpm run prisma:deploy` | Aplicar migraciones en prod/CI (`migrate deploy`) |
+| `pnpm run db:seed` | Ejecuta el seed |
+| `pnpm run lint` | ESLint |
+| `pnpm run test` | Tests unitarios |
 
 ---
 
