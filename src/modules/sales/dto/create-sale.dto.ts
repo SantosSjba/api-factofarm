@@ -73,6 +73,22 @@ export class CreateSaleItemDto {
   manualLots?: SaleManualLotDto[];
 }
 
+class CreateSaleSubstitutionDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  originalProductId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  substituteProductId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  motivo?: string;
+}
+
 class CreatePaymentDto {
   @ApiProperty({ enum: PaymentMethod })
   @IsEnum(PaymentMethod)
@@ -139,6 +155,16 @@ export class CreateSaleDto {
   @IsBoolean()
   prescriptionValidated?: boolean;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  prescriptionId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  controlledApprovedById?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -162,6 +188,13 @@ export class CreateSaleDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
   items!: CreateSaleItemDto[];
+
+  @ApiPropertyOptional({ type: [CreateSaleSubstitutionDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSaleSubstitutionDto)
+  substitutions?: CreateSaleSubstitutionDto[];
 
   @ApiProperty({ type: [CreatePaymentDto] })
   @IsArray()

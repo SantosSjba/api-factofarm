@@ -175,6 +175,9 @@ model Sale {
   idempotencyKey        String?          @unique @db.VarChar(64)
   prescriptionValidated Boolean          @default(false)
   prescriptionNote      String?          @db.VarChar(500)
+  prescriptionId        String?
+  controlledApprovedById String?
+  controlledApprovedAt  DateTime?
   voidReason            String?          @db.VarChar(500)
   voidedById            String?
   voidedAt              DateTime?
@@ -190,15 +193,20 @@ model Sale {
   seller        User          @relation("SaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)
   voidedBy      User?         @relation("SaleVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   quotation     Quotation?    @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  prescription  Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  controlledApprovedBy User?  @relation("SaleControlledApprovedBy", fields: [controlledApprovedById], references: [id], onDelete: SetNull)
   items         SaleItem[]
   payments      Payment[]
   cashMovements CashMovement[]
   returns       SaleReturn[]
+  substitutions SaleSubstitution[]
+  electronicDocument ElectronicDocument?
 
   @@index([establishmentId])
   @@index([warehouseId])
   @@index([customerId])
   @@index([sellerId])
+  @@index([prescriptionId])
   @@index([estado])
   @@index([createdAt])
   @@index([deletedAt])
@@ -258,7 +266,8 @@ model SaleReturn {
 
   sale  Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
   user  User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items SaleReturnItem[]
+  items              SaleReturnItem[]
+  electronicDocument ElectronicDocument?
 
   @@index([saleId])
 }

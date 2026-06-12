@@ -55,6 +55,8 @@ model Customer {
   customerProductPrices CustomerProductPrice[]
   sales                Sale[]
   quotations           Quotation[]
+  prescriptions        Prescription[]
+  adverseEvents        AdverseEvent[]
 
   @@index([deletedAt])
   @@index([customerTypeId])

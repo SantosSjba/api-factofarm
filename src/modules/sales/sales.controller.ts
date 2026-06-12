@@ -41,6 +41,17 @@ export class SalesController {
     return this.service.posCatalog(actor.establecimientoId, warehouseId, search);
   }
 
+  @Get('pos-substitutes')
+  @RequirePermissions('sales.read', 'nav.punto_venta')
+  @ApiOperation({ summary: 'Sugerencias de sustitutos genéricos/bioequivalentes con stock' })
+  posSubstitutes(
+    @Query('productId', ParseUUIDPipe) productId: string,
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.suggestGenericSubstitutes(actor.establecimientoId, productId, warehouseId);
+  }
+
   @Post('check-interactions')
   @RequirePermissions('sales.read', 'nav.punto_venta')
   @ApiOperation({ summary: 'Alertas de interacciones entre principios activos del carrito' })

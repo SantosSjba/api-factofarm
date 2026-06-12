@@ -40,12 +40,17 @@ model User {
   adjustmentsApproved  InventoryPendingAdjustment[] @relation("AdjustmentApprovedBy")
   cashSessions         CashSession[]
   salesAsSeller        Sale[]                     @relation("SaleSeller")
+  salesControlledApproved Sale[]                @relation("SaleControlledApprovedBy")
   salesVoided          Sale[]                     @relation("SaleVoidedBy")
   saleReturns          SaleReturn[]
   quotations           Quotation[]
   purchaseOrdersCreated PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
   purchaseOrdersApproved PurchaseOrder[] @relation("PurchaseOrderApprovedBy")
   goodsReceipts        GoodsReceipt[] @relation("GoodsReceiptReceivedBy")
+  prescriptionsRegistered Prescription[] @relation("PrescriptionRegisteredBy")
+  adverseEventsRegistered AdverseEvent[] @relation("AdverseEventRegisteredBy")
+  controlledLedgerEntries ControlledSubstanceLedgerEntry[]
+  saleSubstitutions    SaleSubstitution[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

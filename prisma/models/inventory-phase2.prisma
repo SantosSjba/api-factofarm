@@ -160,7 +160,8 @@ model InventoryStockTransfer {
   fromWarehouse Warehouse @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
   toWarehouse   Warehouse @relation("TransferToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
   user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items         InventoryStockTransferItem[]
+  items              InventoryStockTransferItem[]
+  electronicDocument ElectronicDocument?
 
   @@index([fromWarehouseId])
   @@index([toWarehouseId])

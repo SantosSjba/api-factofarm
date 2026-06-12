@@ -18,16 +18,23 @@ export class LocalDiskFileStorage {
   async saveBuffer(
     file: Express.Multer.File,
   ): Promise<{ id: string; rutaRelativa: string; ext: string }> {
+    return this.saveRawBuffer(file.buffer, file.originalname);
+  }
+
+  async saveRawBuffer(
+    buffer: Buffer,
+    originalName: string,
+  ): Promise<{ id: string; rutaRelativa: string; ext: string }> {
     const now = new Date();
     const yearMonth = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const ext = extname(file.originalname) || '';
+    const ext = extname(originalName) || '';
     const id = randomUUID();
     const fileName = `${id}${ext}`;
     const rutaRelativa = `${yearMonth}/${fileName}`;
     const fullPath = join(this.uploadsRoot, rutaRelativa);
 
     await mkdir(dirname(fullPath), { recursive: true });
-    await writeFile(fullPath, file.buffer);
+    await writeFile(fullPath, buffer);
 
     return { id, rutaRelativa, ext };
   }

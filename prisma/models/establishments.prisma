@@ -61,6 +61,11 @@ model Establishment {
   goodsReceipts     GoodsReceipt[]
   accountPayables   AccountPayable[]
   supplierCreditNotes SupplierCreditNote[]
+  billingConfig     EstablishmentBillingConfig?
+  electronicDocuments ElectronicDocument[]
+  prescriptions     Prescription[]
+  controlledLedger  ControlledSubstanceLedgerEntry[]
+  adverseEvents     AdverseEvent[]
 
   @@index([departmentId])
   @@index([provinceId])

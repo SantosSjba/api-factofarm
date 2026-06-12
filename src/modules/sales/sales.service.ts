@@ -22,6 +22,9 @@ import {
 } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
+import { BillingService } from '../billing/billing.service';
+import { PrescriptionsService } from '../prescriptions/prescriptions.service';
+import { PharmaceuticalService } from '../pharmaceutical/pharmaceutical.service';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
   CreateSaleDto,
@@ -43,6 +46,9 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly inventory: InventoryMovementsService,
+    private readonly billing: BillingService,
+    private readonly prescriptions: PrescriptionsService,
+    private readonly pharmaceutical: PharmaceuticalService,
   ) {}
 
   async findAll(establishmentId: string, query: SaleListQueryDto) {
@@ -159,11 +165,30 @@ export class SalesService {
     }
 
     const pricedItems = await this.buildPricedItems(dto, actor.establecimientoId);
+    await this.validateSubstitutions(dto.substitutions);
+    await this.validateControlledApproval(
+      actor,
+      pricedItems.map((item) => item.productId),
+      dto.controlledApprovedById,
+    );
+
     const requiresRx = pricedItems.some((item) => item.necesitaRecetaMedica);
-    if (requiresRx && !dto.prescriptionValidated) {
-      throw new BadRequestException(
-        'La venta incluye productos con receta obligatoria. Valide la receta antes de confirmar.',
-      );
+    if (requiresRx) {
+      if (dto.prescriptionId) {
+        await this.prescriptions.validateForSale(
+          dto.prescriptionId,
+          actor.establecimientoId,
+          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+          dto.substitutions?.map((s) => ({
+            originalProductId: s.originalProductId,
+            substituteProductId: s.substituteProductId,
+          })),
+        );
+      } else if (!dto.prescriptionValidated) {
+        throw new BadRequestException(
+          'La venta incluye productos con receta obligatoria. Seleccione una receta o valide manualmente.',
+        );
+      }
     }
 
     let subtotal = new Prisma.Decimal(0);
@@ -261,8 +286,11 @@ export class SalesService {
               : null,
           promotionCode: dto.promotionCode?.trim() || null,
           idempotencyKey: idempotencyKey?.trim() || null,
-          prescriptionValidated: dto.prescriptionValidated ?? false,
+          prescriptionValidated: dto.prescriptionValidated ?? !!dto.prescriptionId,
           prescriptionNote: dto.prescriptionNote?.trim() || null,
+          prescriptionId: dto.prescriptionId ?? null,
+          controlledApprovedById: dto.controlledApprovedById ?? null,
+          controlledApprovedAt: dto.controlledApprovedById ? new Date() : null,
           comentario: dto.comentario?.trim() || null,
           items: {
             create: pricedItems.map((item) => ({
@@ -301,6 +329,18 @@ export class SalesService {
         }
       }
 
+      if (dto.substitutions?.length) {
+        await tx.saleSubstitution.createMany({
+          data: dto.substitutions.map((sub) => ({
+            saleId: sale.id,
+            productOriginalId: sub.originalProductId,
+            productSustitutoId: sub.substituteProductId,
+            motivo: sub.motivo?.trim() || null,
+            userId: actor.sub,
+          })),
+        });
+      }
+
       if (dto.cashSessionId) {
         const cashTotal = dto.payments
           .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
@@ -335,6 +375,27 @@ export class SalesService {
       entity: 'Sale',
       entityId: saleId,
     });
+
+    void this.billing.scheduleEmitFromSale(saleId).catch(() => undefined);
+
+    if (dto.prescriptionId) {
+      void this.prescriptions
+        .applyDispenseFromSale(
+          dto.prescriptionId,
+          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+          actor.sub,
+        )
+        .catch(() => undefined);
+    }
+
+    void this.pharmaceutical
+      .recordControlledOutflow(
+        actor.establecimientoId,
+        pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+        `Venta ${saleId}`,
+        actor.sub,
+      )
+      .catch(() => undefined);
 
     return this.findOne(saleId, actor.establecimientoId);
   }
@@ -408,6 +469,10 @@ export class SalesService {
       entityId: id,
     });
 
+    await this.billing
+      .voidFromSale(id, actor.establecimientoId, dto.reason.trim(), actor.sub)
+      .catch(() => undefined);
+
     return { ok: true, message: 'Venta anulada y stock revertido' };
   }
 
@@ -446,7 +511,7 @@ export class SalesService {
       });
     }
 
-    await this.prisma.saleReturn.create({
+    const saleReturn = await this.prisma.saleReturn.create({
       data: {
         saleId,
         userId: actor.sub,
@@ -462,15 +527,42 @@ export class SalesService {
       },
     });
 
-    const allReturned = dto.items.length === sale.items.length;
+    const allItemsFullyReturned = sale.items.every((item) => {
+      const returnedQty = dto.items
+        .filter((line) => line.saleItemId === item.id)
+        .reduce((acc, line) => acc.plus(new Prisma.Decimal(line.quantity)), new Prisma.Decimal(0));
+      return returnedQty.greaterThanOrEqualTo(item.cantidad);
+    });
     await this.prisma.sale.update({
       where: { id: saleId },
       data: {
-        estado: allReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
+        estado: allItemsFullyReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
       },
     });
 
-    return { ok: true, message: 'Devolución registrada', totalDevuelto: totalDevuelto.toString() };
+    if (sale.cashSessionId) {
+      await this.prisma.cashMovement.create({
+        data: {
+          cashSessionId: sale.cashSessionId,
+          tipo: CashMovementType.EGRESO,
+          monto: totalDevuelto.negated(),
+          saleId: sale.id,
+          comentario: `Devolución: ${dto.motivo.trim()}`,
+        },
+      });
+    }
+
+    const electronicDocumentId = await this.billing
+      .scheduleEmitFromReturn(saleReturn.id)
+      .catch(() => null);
+
+    return {
+      ok: true,
+      message: 'Devolución registrada',
+      saleReturnId: saleReturn.id,
+      totalDevuelto: totalDevuelto.toString(),
+      electronicDocumentId,
+    };
   }
 
   async checkInteractions(productIds: string[]) {
@@ -574,6 +666,7 @@ export class SalesService {
           where: { warehouseId },
           select: { cantidad: true },
         },
+        esControlado: true,
       },
     });
 
@@ -586,7 +679,108 @@ export class SalesService {
       stock: p.warehouseStocks[0]?.cantidad.toString() ?? '0',
       necesitaRecetaMedica: p.necesitaRecetaMedica,
       manejaLotes: p.manejaLotes,
+      esControlado: p.esControlado,
     }));
+  }
+
+  async suggestGenericSubstitutes(
+    establishmentId: string,
+    productId: string,
+    warehouseId: string,
+  ) {
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, establishmentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!warehouse) throw new NotFoundException('Almacén no válido');
+
+    const links = await this.prisma.productEquivalent.findMany({
+      where: { productId },
+      include: {
+        equivalentProduct: {
+          select: {
+            id: true,
+            nombre: true,
+            codigoInterno: true,
+            generico: true,
+            precioUnitarioVenta: true,
+            habilitado: true,
+            deletedAt: true,
+            warehouseStocks: {
+              where: { warehouseId },
+              select: { cantidad: true },
+            },
+          },
+        },
+      },
+    });
+
+    return links
+      .map((link) => link.equivalentProduct)
+      .filter((p) => p.deletedAt === null && p.habilitado)
+      .map((p) => ({
+        id: p.id,
+        nombre: p.nombre,
+        codigoInterno: p.codigoInterno,
+        generico: p.generico,
+        precio: p.precioUnitarioVenta.toString(),
+        stock: p.warehouseStocks[0]?.cantidad.toString() ?? '0',
+      }))
+      .filter((p) => Number.parseFloat(p.stock) > 0)
+      .sort((a, b) => (b.generico ? 1 : 0) - (a.generico ? 1 : 0));
+  }
+
+  private async validateSubstitutions(
+    substitutions?: CreateSaleDto['substitutions'],
+  ) {
+    if (!substitutions?.length) return;
+    for (const sub of substitutions) {
+      const link = await this.prisma.productEquivalent.findFirst({
+        where: {
+          OR: [
+            { productId: sub.originalProductId, equivalentProductId: sub.substituteProductId },
+            { productId: sub.substituteProductId, equivalentProductId: sub.originalProductId },
+          ],
+        },
+      });
+      if (!link) {
+        throw new BadRequestException(
+          `Sustituto no autorizado para el producto ${sub.originalProductId}`,
+        );
+      }
+    }
+  }
+
+  private async validateControlledApproval(
+    actor: { sub: string; establecimientoId: string },
+    productIds: string[],
+    controlledApprovedById?: string,
+  ) {
+    const controlledCount = await this.prisma.product.count({
+      where: { id: { in: productIds }, esControlado: true, deletedAt: null },
+    });
+    if (controlledCount === 0) return;
+
+    if (!controlledApprovedById) {
+      throw new BadRequestException(
+        'La venta incluye medicamentos controlados. Se requiere aprobación del farmacéutico titular.',
+      );
+    }
+    if (controlledApprovedById === actor.sub) {
+      throw new ForbiddenException('Un segundo usuario debe autorizar la dispensación de controlados');
+    }
+
+    const approver = await this.prisma.user.findFirst({
+      where: {
+        id: controlledApprovedById,
+        establecimientoId: actor.establecimientoId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!approver) {
+      throw new BadRequestException('Farmacéutico autorizador no válido');
+    }
   }
 
   private async buildPricedItems(dto: CreateSaleDto, establishmentId: string) {

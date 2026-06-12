@@ -49,6 +49,15 @@ const RBAC: RbacRow[] = [
   { code: 'purchases.read', description: 'Consultar órdenes de compra, AP y reportes' },
   { code: 'purchases.write', description: 'Crear OC, pagos y notas de crédito proveedor' },
   { code: 'purchases.receive', description: 'Recepción de mercadería contra OC' },
+  { code: 'billing.read', description: 'Consultar comprobantes electrónicos y configuración OSE' },
+  { code: 'billing.write', description: 'Emitir y configurar facturación electrónica' },
+  { code: 'billing.void', description: 'Anular comprobantes y comunicaciones de baja SUNAT' },
+  { code: 'medicos.read', description: 'Consultar médicos prescriptores' },
+  { code: 'medicos.write', description: 'Registrar y editar médicos' },
+  { code: 'prescriptions.read', description: 'Consultar recetas médicas' },
+  { code: 'prescriptions.write', description: 'Registrar recetas y dispensación' },
+  { code: 'pharmaceutical.read', description: 'Consultar controlados, farmacovigilancia y reportes pharma' },
+  { code: 'pharmaceutical.write', description: 'Registrar eventos adversos y movimientos pharma' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
@@ -209,17 +218,18 @@ export const MENU_GROUPS: MenuGroup[] = [
     sortOrder: 14,
     children: [
       { code: 'nav.reporte_digemid', label: 'Reporte Digemid', sortOrder: 1 },
-      { code: 'nav.medicos', label: 'Médicos', sortOrder: 2 },
-      { code: 'nav.cie_10', label: 'CIE 10', sortOrder: 3 },
+      { code: 'nav.recetas', label: 'Recetas', sortOrder: 2 },
+      { code: 'nav.medicos', label: 'Médicos', sortOrder: 3 },
+      { code: 'nav.cie_10', label: 'CIE 10', sortOrder: 4 },
       {
         code: 'nav.reporte_psicotropicos',
         label: 'Reporte psicotrópicos y estupefacientes',
-        sortOrder: 4,
+        sortOrder: 5,
       },
       {
         code: 'nav.recepcion_productos_farmaceuticos',
         label: 'Recepción productos farmacéuticos',
-        sortOrder: 5,
+        sortOrder: 6,
       },
     ],
   },

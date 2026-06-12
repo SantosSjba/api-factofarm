@@ -14,6 +14,6 @@ import { FilesService } from './application/files.service';
     LocalDiskFileStorage,
     { provide: FILE_REPOSITORY, useClass: PrismaFileRepository },
   ],
-  exports: [FilesService],
+  exports: [FilesService, FILE_REPOSITORY, LocalDiskFileStorage],
 })
 export class FilesModule {}

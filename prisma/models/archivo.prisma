@@ -13,6 +13,7 @@ model Archivo {
   productImagen Product? @relation("ProductImagen")
   serviceImagen Service? @relation("ServiceImagen")
   compoundProductImagen CompoundProduct? @relation("CompoundProductImagen")
+  prescriptionImagen Prescription? @relation("PrescriptionImagen")
 
   createdAt DateTime @default(now())
 

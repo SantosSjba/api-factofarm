@@ -7,6 +7,7 @@ import {
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BillingService } from '../billing/billing.service';
 import { CreateInventoryTransferDto } from './dto/create-inventory-transfer.dto';
 import { InventoryTransferListQueryDto } from './dto/inventory-transfer-list-query.dto';
 
@@ -18,6 +19,7 @@ export class InventoryTransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly billing: BillingService,
   ) {}
 
   async findAll(query: InventoryTransferListQueryDto) {
@@ -165,6 +167,8 @@ export class InventoryTransfersService {
       entity: 'InventoryStockTransfer',
       entityId: id,
     });
+
+    void this.billing.scheduleEmitFromTransfer(id);
 
     return { ok: true, message: 'Transferencia despachada' };
   }

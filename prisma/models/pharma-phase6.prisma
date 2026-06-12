@@ -1,0 +1,188 @@
+enum PrescriptionStatus {
+  ACTIVA
+  PARCIALMENTE_DISPENSADA
+  COMPLETADA
+  VENCIDA
+  ANULADA
+}
+
+enum ControlledLedgerMovementType {
+  ENTRADA
+  SALIDA
+}
+
+enum AdverseEventSeverity {
+  LEVE
+  MODERADO
+  GRAVE
+}
+
+/// Médico prescriptor (CMP)
+model Medico {
+  id            String    @id @default(uuid())
+  cmp           String    @unique @db.VarChar(20)
+  nombres       String    @db.VarChar(120)
+  apellidos     String    @db.VarChar(120)
+  especialidad  String?   @db.VarChar(120)
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  prescriptions Prescription[]
+
+  @@index([deletedAt])
+}
+
+/// Receta médica — paciente vía Customer
+model Prescription {
+  id               String             @id @default(uuid())
+  establishmentId  String
+  numero           String             @db.VarChar(30)
+  fechaEmision     DateTime
+  medicoId         String?
+  medicoNombre     String?            @db.VarChar(200)
+  medicoCmp        String?            @db.VarChar(20)
+  customerId       String
+  diagnostico      String?            @db.VarChar(500)
+  imagenArchivoId  String?            @unique
+  estado           PrescriptionStatus @default(ACTIVA)
+  validUntil       DateTime?
+  notas            String?            @db.VarChar(500)
+  registeredById   String?
+  deletedAt        DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  medico        Medico?       @relation(fields: [medicoId], references: [id], onDelete: SetNull)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  registeredBy  User?         @relation("PrescriptionRegisteredBy", fields: [registeredById], references: [id], onDelete: SetNull)
+  imagenArchivo Archivo?      @relation("PrescriptionImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
+  items         PrescriptionItem[]
+  sales         Sale[]
+
+  @@unique([establishmentId, numero])
+  @@index([establishmentId])
+  @@index([customerId])
+  @@index([medicoId])
+  @@index([estado])
+  @@index([deletedAt])
+}
+
+model PrescriptionItem {
+  id                  String  @id @default(uuid())
+  prescriptionId      String
+  productId           String
+  dosis               String? @db.VarChar(120)
+  cantidadPrescrita   Decimal @db.Decimal(18, 4)
+  cantidadDispensada  Decimal @default(0) @db.Decimal(18, 4)
+  indicaciones        String? @db.VarChar(500)
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([prescriptionId])
+  @@index([productId])
+}
+
+/// Catálogo categorías sustancias controladas (DIGEMID)
+model ControlledSubstanceCategory {
+  id          String    @id @default(uuid())
+  codigo      String    @unique @db.VarChar(20)
+  nombre      String    @db.VarChar(200)
+  schedule    String    @db.VarChar(20)
+  descripcion String?   @db.VarChar(500)
+  activo      Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+/// Libro de control — movimiento diario controlados
+model ControlledSubstanceLedgerEntry {
+  id              String                       @id @default(uuid())
+  establishmentId String
+  productId       String
+  fecha           DateTime                     @default(now())
+  movementType    ControlledLedgerMovementType
+  cantidad        Decimal                      @db.Decimal(18, 4)
+  saldo           Decimal                      @db.Decimal(18, 4)
+  referencia      String?                      @db.VarChar(120)
+  userId          String?
+  createdAt       DateTime                     @default(now())
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([establishmentId, fecha])
+  @@index([productId])
+}
+
+/// Farmacovigilancia — evento adverso
+model AdverseEvent {
+  id                String               @id @default(uuid())
+  establishmentId   String
+  productId         String
+  customerId        String?
+  fecha             DateTime             @default(now())
+  descripcion       String               @db.VarChar(2000)
+  severidad         AdverseEventSeverity @default(LEVE)
+  notificadoDigemid Boolean              @default(false)
+  digemidReportNumber String?            @db.VarChar(40)
+  medidasCorrectivas  String?            @db.VarChar(2000)
+  fechaNotificacion   DateTime?
+  pacienteEdad        Int?
+  pacienteSexo        String?            @db.VarChar(10)
+  reaccionTipo        String?            @db.VarChar(120)
+  cie10Codigo         String?            @db.VarChar(10)
+  registeredById    String?
+  deletedAt         DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  registeredBy  User?         @relation("AdverseEventRegisteredBy", fields: [registeredById], references: [id], onDelete: SetNull)
+
+  @@index([establishmentId])
+  @@index([productId])
+  @@index([deletedAt])
+}
+
+/// Auditoría sustitución genérica en venta
+model SaleSubstitution {
+  id                 String   @id @default(uuid())
+  saleId             String
+  productOriginalId  String
+  productSustitutoId String
+  motivo             String?  @db.VarChar(500)
+  userId             String?
+  createdAt          DateTime @default(now())
+
+  sale             Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productOriginal  Product @relation("SubstitutionOriginal", fields: [productOriginalId], references: [id], onDelete: Restrict)
+  productSustituto Product @relation("SubstitutionSubstitute", fields: [productSustitutoId], references: [id], onDelete: Restrict)
+  user             User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+}
+
+/// Código CIE-10 básico
+model Cie10Code {
+  id          String    @id @default(uuid())
+  codigo      String    @unique @db.VarChar(10)
+  descripcion String    @db.VarChar(500)
+  activo      Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([deletedAt])
+}

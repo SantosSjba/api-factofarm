@@ -38,6 +38,14 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.reporte_compras_sugerido': ['purchases.read'],
   'nav.comparativo_precios': ['purchases.read'],
   'nav.cuentas_pagar': ['purchases.read', 'purchases.write'],
+  'nav.comprobante_electronico': ['billing.read', 'billing.write'],
+  'nav.resumenes': ['billing.read', 'billing.write'],
+  'nav.medicos': ['medicos.read', 'medicos.write'],
+  'nav.recetas': ['prescriptions.read', 'prescriptions.write'],
+  'nav.cie_10': ['pharmaceutical.read'],
+  'nav.reporte_psicotropicos': ['pharmaceutical.read'],
+  'nav.reporte_digemid': ['pharmaceutical.read'],
+  'nav.recepcion_productos_farmaceuticos': ['pharmaceutical.read', 'pharmaceutical.write'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);

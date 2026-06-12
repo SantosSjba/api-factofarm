@@ -40,6 +40,10 @@ import { SalesModule } from './modules/sales/sales.module';
 import { CashRegistersModule } from './modules/cash-registers/cash-registers.module';
 import { QuotationsModule } from './modules/quotations/quotations.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { MedicosModule } from './modules/medicos/medicos.module';
+import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
+import { PharmaceuticalModule } from './modules/pharmaceutical/pharmaceutical.module';
 
 @Module({
   imports: [
@@ -114,6 +118,10 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
     CashRegistersModule,
     QuotationsModule,
     PurchasesModule,
+    BillingModule,
+    MedicosModule,
+    PrescriptionsModule,
+    PharmaceuticalModule,
   ],
   controllers: [AppController],
   providers: [

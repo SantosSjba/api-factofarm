@@ -166,6 +166,7 @@ model Product {
   incluyeIgvCompra  Boolean @default(true)
   generico                  Boolean  @default(false)
   esControlado              Boolean  @default(false)
+  controlledSubstanceCategoryId String?
   esRefrigerado             Boolean  @default(false)
   esHospitalario            Boolean  @default(false)
   necesitaRecetaMedica      Boolean  @default(false)
@@ -203,6 +204,7 @@ model Product {
   category             Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand                Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
   administrationRoute  AdministrationRoute? @relation(fields: [administrationRouteId], references: [id], onDelete: SetNull)
+  controlledSubstanceCategory ControlledSubstanceCategory? @relation(fields: [controlledSubstanceCategoryId], references: [id], onDelete: SetNull)
   productLocation      ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: SetNull)
   defaultWarehouse     Warehouse?          @relation("ProductDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
   imagenArchivo        Archivo?            @relation("ProductImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
@@ -227,6 +229,11 @@ model Product {
   quotationItems     QuotationItem[]
   purchaseOrderItems PurchaseOrderItem[]
   goodsReceiptItems  GoodsReceiptItem[]
+  prescriptionItems  PrescriptionItem[]
+  controlledLedger   ControlledSubstanceLedgerEntry[]
+  adverseEvents      AdverseEvent[]
+  substitutionsAsOriginal SaleSubstitution[] @relation("SubstitutionOriginal")
+  substitutionsAsSubstitute SaleSubstitution[] @relation("SubstitutionSubstitute")
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?
