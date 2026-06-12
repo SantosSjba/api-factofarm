@@ -7,8 +7,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
+import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
 import { EmailService } from '../../../common/services/email.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { UserRole } from '../../../generated/prisma/client';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import { LoginAttemptService } from './login-attempt.service';
 import type { AuthTokensView, AuthUserView, AuthJwtPayload } from '../domain/auth.types';
@@ -277,7 +279,7 @@ export class AuthService {
       permissions: { permission: { code: string } }[];
     },
   ): Promise<AuthTokensView> {
-    const permissionCodes = user.permissions.map((p) => p.permission.code);
+    const permissionCodes = this.resolvePermissionCodes(user);
     const payload: AuthJwtPayload = {
       sub: user.id,
       email: user.email,
@@ -332,8 +334,16 @@ export class AuthService {
       email: user.email,
       role: user.role,
       establecimientoId: user.establecimientoId,
-      permissionCodes: user.permissions.map((p) => p.permission.code),
+      permissionCodes: this.resolvePermissionCodes(user),
     };
+  }
+
+  private resolvePermissionCodes(user: {
+    role: UserRole;
+    permissions: { permission: { code: string } }[];
+  }): string[] {
+    const raw = user.permissions.map((p) => p.permission.code);
+    return expandUserPermissionCodes(raw, user.role);
   }
 
   private hashToken(token: string): string {

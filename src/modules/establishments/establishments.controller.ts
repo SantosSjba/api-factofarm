@@ -9,7 +9,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from './dto/create-establishment.dto';
 import { EstablishmentListQueryDto } from './dto/establishment-list-query.dto';
@@ -17,6 +18,7 @@ import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
 import { EstablishmentsService } from './application/establishments.service';
 
 @ApiTags('establishments')
+@ApiBearerAuth()
 @Controller('establishments')
 export class EstablishmentsController {
   constructor(private readonly establishmentsService: EstablishmentsService) {}
@@ -50,6 +52,7 @@ export class EstablishmentsController {
   }
 
   @Get()
+  @RequirePermissions('establishments.read', 'nav.establecimientos', 'users.write')
   @ApiOperation({
     summary: 'Listar establecimientos activos (paginado si se envía page)',
   })
@@ -63,6 +66,7 @@ export class EstablishmentsController {
   }
 
   @Post()
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Crear establecimiento' })
   @ApiBody({ type: CreateEstablishmentDto })
   create(@Body() dto: CreateEstablishmentDto) {
@@ -70,6 +74,7 @@ export class EstablishmentsController {
   }
 
   @Patch(':id')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Actualizar establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: UpdateEstablishmentDto })
@@ -78,6 +83,7 @@ export class EstablishmentsController {
   }
 
   @Delete(':id')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Eliminar establecimiento (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
@@ -85,6 +91,7 @@ export class EstablishmentsController {
   }
 
   @Get(':id/series')
+  @RequirePermissions('establishments.read', 'nav.establecimientos')
   @ApiOperation({ summary: 'Listar series de un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   listSeries(@Param('id', ParseUUIDPipe) id: string) {
@@ -92,6 +99,7 @@ export class EstablishmentsController {
   }
 
   @Post(':id/series')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Crear serie para un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: CreateEstablishmentSeriesDto })
@@ -103,6 +111,7 @@ export class EstablishmentsController {
   }
 
   @Delete(':id/series/:seriesId')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Eliminar serie de un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiParam({ name: 'seriesId', format: 'uuid' })

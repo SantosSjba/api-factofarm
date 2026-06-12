@@ -3,10 +3,20 @@ import { PERMISSIONS_REPOSITORY } from '../domain/permissions.repository';
 import type { IPermissionsRepository } from '../domain/permissions.repository';
 
 const MENU_ROOT_CODES = [
+  'nav.dashboard',
   'nav.usuarios_series',
   'nav.clientes',
   'nav.productos_catalogo',
   'nav.compras',
+  'nav.pos',
+  'nav.ventas',
+  'nav.inventario',
+  'nav.comprobantes_avanzados',
+  'nav.guias_remision',
+  'nav.reportes',
+  'nav.contabilidad',
+  'nav.finanzas',
+  'nav.farmacos',
 ] as const;
 
 @Injectable()

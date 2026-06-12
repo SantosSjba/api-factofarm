@@ -8,6 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import { USER_REPOSITORY } from '../domain/user.repository';
 import type { IUserRepository } from '../domain/user.repository';
@@ -177,13 +178,9 @@ export class UsersService {
     role: UserRole,
   ): string[] | undefined {
     if (codes === undefined) return undefined;
-    const set = new Set(codes.map((c) => c.trim()).filter(Boolean));
-    if (set.size === 0) return [];
-    set.add('users.read');
-    if (role === UserRole.ADMINISTRADOR) {
-      set.add('users.write');
-    }
-    return [...set];
+    const trimmed = codes.map((c) => c.trim()).filter(Boolean);
+    if (trimmed.length === 0) return [];
+    return expandUserPermissionCodes(trimmed, role);
   }
 
   private mapProfileDto(

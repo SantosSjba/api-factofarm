@@ -1,0 +1,60 @@
+import { UserRole } from '../../generated/prisma/client';
+import { MENU_NAV_LEAF_CODES } from '../../../prisma/seed/steps/permissions';
+
+/**
+ * Cada ítem `nav.*` del menú implica acceso funcional completo al módulo (lectura + escritura).
+ * Mantener alineado con `prisma/seed/steps/permissions.ts` (MENU_GROUPS children).
+ */
+export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> = {
+  'nav.usuarios': ['users.read', 'users.write'],
+  'nav.establecimientos': ['establishments.read', 'establishments.write'],
+  'nav.clientes_list': ['customers.read', 'customers.write', 'customers.delete'],
+  'nav.tipo_clientes': ['customer-types.read', 'customer-types.write'],
+  'nav.productos': ['products.read', 'products.write', 'products.delete'],
+  'nav.categorias': ['categories.read', 'categories.write'],
+  'nav.marcas': ['brands.read', 'brands.write'],
+  'nav.laboratorios': ['laboratories.read', 'laboratories.write'],
+  'nav.unidades': ['units.read', 'units.write'],
+  'nav.formas_farmaceuticas': ['pharma-forms.read', 'pharma-forms.write'],
+  'nav.principios_activos': ['active-principles.read', 'active-principles.write'],
+  'nav.vias_administracion': ['admin-routes.read', 'admin-routes.write'],
+  'nav.proveedores': ['suppliers.read', 'suppliers.write'],
+};
+
+const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);
+
+/** Códigos `nav.*` reconocidos en el catálogo de menú. */
+export function isNavPermissionCode(code: string): boolean {
+  return MENU_NAV_CODES.has(code);
+}
+
+/**
+ * Normaliza la lista enviada desde el front (solo `nav.*` seleccionados) y expande RBAC técnico.
+ */
+export function expandUserPermissionCodes(codes: string[], role: UserRole): string[] {
+  const set = new Set(codes.map((c) => c.trim()).filter(Boolean));
+
+  for (const code of [...set]) {
+    if (!code.startsWith('nav.')) {
+      continue;
+    }
+    const implied = NAV_TO_RBAC_EXPANSION[code];
+    if (implied) {
+      for (const rbac of implied) {
+        set.add(rbac);
+      }
+    }
+  }
+
+  set.add('users.read');
+  if (role === UserRole.ADMINISTRADOR) {
+    set.add('users.write');
+  }
+
+  return [...set].sort();
+}
+
+/** Para la UI: deja solo códigos de menú al editar checkboxes. */
+export function extractNavPermissionCodes(codes: string[]): string[] {
+  return codes.filter((c) => isNavPermissionCode(c));
+}
