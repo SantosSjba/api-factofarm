@@ -44,11 +44,11 @@ export async function seedProducts(prisma: PrismaClient): Promise<void> {
     throw new Error('No hay establecimientos para seed de productos.');
   }
 
-  const [defaultWarehouse, defaultLocation] = await Promise.all([
-    prisma.warehouse.findFirst({
-      where: { establishmentId: branch.id, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
+  const [establishmentWarehouses, defaultLocation] = await Promise.all([
+    prisma.warehouse.findMany({
+      where: { establishmentId: { in: establishments.map((e) => e.id) }, deletedAt: null },
+      orderBy: [{ establishmentId: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, establishmentId: true },
     }),
     prisma.productLocation.findFirst({
       where: { establishmentId: branch.id, deletedAt: null },
@@ -57,6 +57,10 @@ export async function seedProducts(prisma: PrismaClient): Promise<void> {
     }),
   ]);
 
+  const defaultWarehouse =
+    establishmentWarehouses.find((w) => w.establishmentId === branch.id) ??
+    establishmentWarehouses[0];
+
   if (!defaultWarehouse) {
     throw new Error('No hay almacén para seed de productos.');
   }
@@ -64,6 +68,31 @@ export async function seedProducts(prisma: PrismaClient): Promise<void> {
   const categoryByName = new Map(categories.map((c) => [c.nombre.toUpperCase(), c.id]));
   const brandByName = new Map(brands.map((b) => [b.nombre.toUpperCase(), b.id]));
   const attrByName = new Map(attrTypes.map((a) => [a.nombre.toUpperCase(), a.id]));
+
+  const syncWarehouseCatalog = async (
+    productId: string,
+    warehouseId: string,
+    row: (typeof productsData)[number],
+  ) => {
+    await prisma.productWarehouseStock.upsert({
+      where: { productId_warehouseId: { productId, warehouseId } },
+      update: { cantidad: new Prisma.Decimal(row.stockInicial ?? '0') },
+      create: {
+        productId,
+        warehouseId,
+        cantidad: new Prisma.Decimal(row.stockInicial ?? '0'),
+      },
+    });
+    await prisma.productWarehousePrice.upsert({
+      where: { productId_warehouseId: { productId, warehouseId } },
+      update: { precio: new Prisma.Decimal(row.precioUnitarioVenta) },
+      create: {
+        productId,
+        warehouseId,
+        precio: new Prisma.Decimal(row.precioUnitarioVenta),
+      },
+    });
+  };
 
   for (const row of productsData) {
     const codigoInterno = row.codigoInterno.trim();
@@ -117,39 +146,12 @@ export async function seedProducts(prisma: PrismaClient): Promise<void> {
           select: { id: true },
         });
 
-    await prisma.productWarehouseStock.upsert({
-      where: {
-        productId_warehouseId: {
-          productId: product.id,
-          warehouseId: defaultWarehouse.id,
-        },
-      },
-      update: {
-        cantidad: new Prisma.Decimal(row.stockInicial ?? '0'),
-      },
-      create: {
-        productId: product.id,
-        warehouseId: defaultWarehouse.id,
-        cantidad: new Prisma.Decimal(row.stockInicial ?? '0'),
-      },
-    });
-
-    await prisma.productWarehousePrice.upsert({
-      where: {
-        productId_warehouseId: {
-          productId: product.id,
-          warehouseId: defaultWarehouse.id,
-        },
-      },
-      update: {
-        precio: new Prisma.Decimal(row.precioUnitarioVenta),
-      },
-      create: {
-        productId: product.id,
-        warehouseId: defaultWarehouse.id,
-        precio: new Prisma.Decimal(row.precioUnitarioVenta),
-      },
-    });
+    const syncedWarehouseIds = new Set<string>();
+    for (const warehouse of establishmentWarehouses) {
+      if (syncedWarehouseIds.has(warehouse.id)) continue;
+      syncedWarehouseIds.add(warehouse.id);
+      await syncWarehouseCatalog(product.id, warehouse.id, row);
+    }
 
     await prisma.productPresentation.deleteMany({ where: { productId: product.id } });
     await prisma.productPresentation.create({

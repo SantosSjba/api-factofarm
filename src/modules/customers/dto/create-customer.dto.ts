@@ -18,7 +18,7 @@ import { CustomerDocumentType } from '../../../generated/prisma/client';
 import { CustomerAddressDto } from './customer-address.dto';
 
 export class CreateCustomerDto {
-  @ApiProperty({ maxLength: 200 })
+  @ApiProperty({ maxLength: 200, example: 'Juan Pérez García' })
   @IsString()
   @MaxLength(200)
   nombre!: string;
@@ -29,11 +29,11 @@ export class CreateCustomerDto {
   @MaxLength(200)
   nombreComercial?: string;
 
-  @ApiProperty({ enum: CustomerDocumentType })
+  @ApiProperty({ enum: CustomerDocumentType, example: CustomerDocumentType.DNI })
   @IsEnum(CustomerDocumentType)
   tipoDocumento!: CustomerDocumentType;
 
-  @ApiProperty({ maxLength: 30 })
+  @ApiProperty({ maxLength: 30, example: '45678912' })
   @IsString()
   @MaxLength(30)
   @IsPeruDocument()

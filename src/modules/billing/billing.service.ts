@@ -67,11 +67,12 @@ export class BillingService implements OnModuleInit {
   }
 
   private encryptionKey(): string {
-    return (
-      this.config.get<string>('BILLING_ENCRYPTION_KEY') ??
-      this.config.get<string>('JWT_SECRET') ??
-      'factofarm-dev-billing-key'
-    );
+    const dedicated = this.config.get<string>('BILLING_ENCRYPTION_KEY')?.trim();
+    if (dedicated) return dedicated;
+    if (this.config.get('NODE_ENV') === 'production') {
+      throw new Error('BILLING_ENCRYPTION_KEY es obligatoria en producción');
+    }
+    return this.config.get<string>('JWT_SECRET') ?? 'factofarm-dev-billing-key';
   }
 
   async getConfig(establishmentId: string) {

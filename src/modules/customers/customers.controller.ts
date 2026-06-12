@@ -37,6 +37,7 @@ import { UpdateCustomerZoneDto } from './dto/update-customer-zone.dto';
 import { UpdateCustomerStatusDto } from './dto/update-customer-status.dto';
 import { UpdateCustomerTagsDto } from './dto/update-customer-tags.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { CustomersService } from './customers.service';
 
 @ApiTags('customers')
@@ -54,6 +55,8 @@ export class CustomersController {
 
   @Post()
   @RequirePermissions('customers.write')
+  @ApiOperation({ summary: 'Crear cliente' })
+  @ApiBody({ type: CreateCustomerDto, examples: { natural: { value: OPENAPI_EXAMPLES.createCustomer } } })
   create(@Body() dto: CreateCustomerDto, @CurrentUser() actor: JwtRequestUser) {
     return this.customersService.create(dto, actor.sub);
   }

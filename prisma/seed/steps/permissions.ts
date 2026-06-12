@@ -12,6 +12,7 @@ type MenuGroup = {
 const RBAC: RbacRow[] = [
   { code: 'users.read', description: 'Listar y ver usuarios' },
   { code: 'users.write', description: 'Crear y editar usuarios' },
+  { code: 'audit.read', description: 'Consultar y exportar logs de auditoría' },
   { code: 'establishments.read', description: 'Listar y ver establecimientos' },
   { code: 'establishments.write', description: 'Crear y editar establecimientos' },
   { code: 'customers.read', description: 'Listar y ver clientes' },
@@ -41,6 +42,10 @@ const RBAC: RbacRow[] = [
   { code: 'inventory.read', description: 'Consultar inventario, lotes y kardex' },
   { code: 'inventory.write', description: 'Registrar ingresos, salidas y transferencias' },
   { code: 'inventory.adjust', description: 'Ajustes de inventario y autorizaciones especiales' },
+  {
+    code: 'inventory.transfer.cross',
+    description: 'Transferencias de stock entre sucursales distintas',
+  },
   { code: 'sales.read', description: 'Consultar ventas y cotizaciones' },
   { code: 'sales.write', description: 'Registrar ventas y cotizaciones' },
   { code: 'sales.void', description: 'Anular ventas' },
@@ -74,6 +79,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     children: [
       { code: 'nav.usuarios', label: 'Usuarios', sortOrder: 1 },
       { code: 'nav.establecimientos', label: 'Establecimientos', sortOrder: 2 },
+      { code: 'nav.auditoria', label: 'Auditoría', sortOrder: 3 },
     ],
   },
   {

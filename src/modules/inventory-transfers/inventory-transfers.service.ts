@@ -1,15 +1,22 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   InventoryMovementType,
   InventoryTransferStatus,
   Prisma,
 } from '../../generated/prisma/client';
+import { resolveEstablishmentScope } from '../../common/scoping/establishment-scope.util';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateInventoryTransferDto } from './dto/create-inventory-transfer.dto';
 import { InventoryTransferListQueryDto } from './dto/inventory-transfer-list-query.dto';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 
 const TRANSFER_IN_CODE = 'TRANSFERENCIA_ALMACENES';
 const TRANSFER_OUT_CODE = 'OUT_TRANSFERENCIA_ALMACENES';
@@ -22,14 +29,29 @@ export class InventoryTransfersService {
     private readonly billing: BillingService,
   ) {}
 
-  async findAll(query: InventoryTransferListQueryDto) {
+  async findAll(query: InventoryTransferListQueryDto, actor: JwtRequestUser) {
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
     });
 
+    const scopedEstablishmentId = resolveEstablishmentScope(actor, query.establishmentId);
+    const scopedWarehouses = await this.prisma.warehouse.findMany({
+      where: { establishmentId: scopedEstablishmentId, deletedAt: null },
+      select: { id: true },
+    });
+    const warehouseIds = scopedWarehouses.map((w) => w.id);
+
     const where: Prisma.InventoryStockTransferWhereInput = {
       deletedAt: null,
+      ...(warehouseIds.length
+        ? {
+            OR: [
+              { fromWarehouseId: { in: warehouseIds } },
+              { toWarehouseId: { in: warehouseIds } },
+            ],
+          }
+        : { id: '__none__' }),
       ...(query.estado ? { estado: query.estado } : {}),
       ...(query.warehouseId
         ? {
@@ -74,7 +96,7 @@ export class InventoryTransfersService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateInventoryTransferDto, actorId?: string) {
+  async create(dto: CreateInventoryTransferDto, actor: JwtRequestUser) {
     if (dto.fromWarehouseId === dto.toWarehouseId) {
       throw new BadRequestException('El almacén origen y destino deben ser distintos');
     }
@@ -82,22 +104,31 @@ export class InventoryTransfersService {
     const [fromWarehouse, toWarehouse] = await Promise.all([
       this.prisma.warehouse.findFirst({
         where: { id: dto.fromWarehouseId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, establishmentId: true },
       }),
       this.prisma.warehouse.findFirst({
         where: { id: dto.toWarehouseId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, establishmentId: true },
       }),
     ]);
     if (!fromWarehouse || !toWarehouse) {
       throw new NotFoundException('Almacén origen o destino no encontrado');
     }
 
+    if (fromWarehouse.establishmentId !== toWarehouse.establishmentId) {
+      const canCross = actor.permissionCodes.includes('inventory.transfer.cross');
+      if (!canCross) {
+        throw new ForbiddenException(
+          'Transferencia entre sucursales requiere permiso inventory.transfer.cross',
+        );
+      }
+    }
+
     const created = await this.prisma.inventoryStockTransfer.create({
       data: {
         fromWarehouseId: dto.fromWarehouseId,
         toWarehouseId: dto.toWarehouseId,
-        userId: actorId ?? null,
+        userId: actor.sub,
         guiaNumero: dto.guiaNumero?.trim() || null,
         comentario: dto.comentario?.trim() || null,
         items: {
@@ -114,7 +145,7 @@ export class InventoryTransfersService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'InventoryStockTransfer',
       entityId: created.id,

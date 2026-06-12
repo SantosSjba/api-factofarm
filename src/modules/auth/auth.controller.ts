@@ -8,11 +8,12 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { AuthService } from './application/auth.service';
 import { ChangePasswordDto } from './application/dto/change-password.dto';
 import { ForgotPasswordDto } from './application/dto/forgot-password.dto';
@@ -28,11 +29,17 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  /** Límite estricto; alinear con THROTTLE_LOGIN_LIMIT / THROTTLE_TTL_MS en `.env`. */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({
+    default: {
+      limit: Number(process.env.THROTTLE_LOGIN_LIMIT ?? 10),
+      ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
+    },
+  })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión (access + refresh token)' })
+  @ApiBody({ type: LoginDto, examples: { demo: { value: OPENAPI_EXAMPLES.loginRequest } } })
+  @ApiOkResponse({ schema: { example: OPENAPI_EXAMPLES.loginResponse } })
   login(@Body() dto: LoginDto, @Req() req: Request) {
     const ip =
       (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
@@ -59,6 +66,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      limit: Number(process.env.THROTTLE_LOGIN_LIMIT ?? 10),
+      ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
+    },
+  })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens con refresh token' })

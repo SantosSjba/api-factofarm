@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
+import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EmailService } from '../../../common/services/email.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRole } from '../../../generated/prisma/client';
@@ -26,6 +27,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly loginAttempts: LoginAttemptService,
     private readonly email: EmailService,
+    private readonly audit: AuditLogService,
   ) {}
 
   async login(
@@ -45,6 +47,12 @@ export class AuthService {
 
     if (!user) {
       await this.loginAttempts.recordAttempt(normalized, false, ipAddress);
+      await this.audit.log({
+        action: 'LOGIN_FAILED',
+        entity: 'Auth',
+        diff: { email: normalized, reason: 'USER_NOT_FOUND' },
+        ipAddress,
+      });
       throw new UnauthorizedException({
         code: 'INVALID_CREDENTIALS',
         message: 'Credenciales inválidas',
@@ -54,6 +62,14 @@ export class AuthService {
     const passwordOk = await bcrypt.compare(password, user.passwordHash);
     if (!passwordOk) {
       await this.loginAttempts.recordAttempt(normalized, false, ipAddress);
+      await this.audit.log({
+        userId: user.id,
+        action: 'LOGIN_FAILED',
+        entity: 'Auth',
+        entityId: user.id,
+        diff: { email: normalized, reason: 'BAD_PASSWORD' },
+        ipAddress,
+      });
       throw new UnauthorizedException({
         code: 'INVALID_CREDENTIALS',
         message: 'Credenciales inválidas',
@@ -61,6 +77,13 @@ export class AuthService {
     }
 
     await this.loginAttempts.recordAttempt(normalized, true, ipAddress);
+    await this.audit.log({
+      userId: user.id,
+      action: 'LOGIN_SUCCESS',
+      entity: 'Auth',
+      entityId: user.id,
+      ipAddress,
+    });
     return this.issueTokens(user);
   }
 

@@ -1902,9 +1902,9 @@ export class ProductsService {
     });
   }
 
-  listWarehouses() {
+  listWarehouses(establishmentId: string) {
     return this.prisma.warehouse.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, establishmentId },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,
@@ -2005,9 +2005,9 @@ export class ProductsService {
     };
   }
 
-  listProductLocations(establishmentId?: string) {
+  listProductLocations(establishmentId: string) {
     return this.prisma.productLocation.findMany({
-      where: { deletedAt: null, establishmentId: establishmentId || undefined },
+      where: { deletedAt: null, establishmentId },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,

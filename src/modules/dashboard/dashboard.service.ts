@@ -108,4 +108,54 @@ export class DashboardService {
       },
     };
   }
+
+  /** Vista consolidada multi-sucursal para administradores de cadena. */
+  async getChainSummary() {
+    const establishments = await this.prisma.establishment.findMany({
+      where: { deletedAt: null, activo: true },
+      select: { id: true, nombre: true, codigo: true },
+      orderBy: { nombre: 'asc' },
+    });
+
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const rows = await Promise.all(
+      establishments.map(async (est) => {
+        const [salesCount, salesTotal, stockValue] = await Promise.all([
+          this.prisma.sale.count({
+            where: {
+              establishmentId: est.id,
+              deletedAt: null,
+              estado: 'COMPLETADA',
+              createdAt: { gte: since },
+            },
+          }),
+          this.prisma.sale.aggregate({
+            where: {
+              establishmentId: est.id,
+              deletedAt: null,
+              estado: 'COMPLETADA',
+              createdAt: { gte: since },
+            },
+            _sum: { total: true },
+          }),
+          this.prisma.productWarehouseStock.aggregate({
+            where: { warehouse: { establishmentId: est.id, deletedAt: null } },
+            _sum: { cantidad: true },
+          }),
+        ]);
+        return {
+          establishmentId: est.id,
+          nombre: est.nombre,
+          codigo: est.codigo,
+          ventas30d: salesCount,
+          totalVentas30d: salesTotal._sum.total?.toString() ?? '0',
+          unidadesStock: stockValue._sum.cantidad?.toString() ?? '0',
+        };
+      }),
+    );
+
+    return { periodDays: 30, establishments: rows };
+  }
 }

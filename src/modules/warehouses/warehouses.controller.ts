@@ -27,8 +27,8 @@ export class WarehousesController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Listar almacenes' })
-  findAll(@Query() query: WarehouseListQueryDto) {
-    return this.warehousesService.findAll(query);
+  findAll(@Query() query: WarehouseListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.warehousesService.findAll(query, actor);
   }
 
   @Post()
@@ -36,7 +36,7 @@ export class WarehousesController {
   @ApiOperation({ summary: 'Crear almacén' })
   @ApiBody({ type: CreateWarehouseDto })
   create(@Body() dto: CreateWarehouseDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.warehousesService.create(dto, actor.sub);
+    return this.warehousesService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -48,7 +48,7 @@ export class WarehousesController {
     @Body() dto: UpdateWarehouseDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.warehousesService.update(id, dto, actor.sub);
+    return this.warehousesService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -56,6 +56,6 @@ export class WarehousesController {
   @ApiOperation({ summary: 'Eliminar almacén (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.warehousesService.remove(id, actor.sub);
+    return this.warehousesService.remove(id, actor);
   }
 }

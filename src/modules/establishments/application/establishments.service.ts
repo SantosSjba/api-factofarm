@@ -4,6 +4,7 @@ import {
   buildPaginatedResult,
   paginationArgs,
 } from '../../../common/dto/pagination.dto';
+import { CacheService } from '../../../common/cache/cache.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateEstablishmentSeriesDto } from '../dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from '../dto/create-establishment.dto';
@@ -93,7 +94,10 @@ const selectEstablishment = {
 
 @Injectable()
 export class EstablishmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   async findAll(filters?: {
     search?: string;
@@ -206,26 +210,32 @@ export class EstablishmentsService {
   }
 
   listDepartments() {
-    return this.prisma.department.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    });
+    return this.cache.getOrSet('ubigeo:departments', () =>
+      this.prisma.department.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      }),
+    );
   }
 
   listProvinces(departmentId: string) {
-    return this.prisma.province.findMany({
-      where: { departmentId },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, departmentId: true },
-    });
+    return this.cache.getOrSet(`ubigeo:provinces:${departmentId}`, () =>
+      this.prisma.province.findMany({
+        where: { departmentId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, departmentId: true },
+      }),
+    );
   }
 
   listDistricts(provinceId: string) {
-    return this.prisma.district.findMany({
-      where: { provinceId },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, provinceId: true },
-    });
+    return this.cache.getOrSet(`ubigeo:districts:${provinceId}`, () =>
+      this.prisma.district.findMany({
+        where: { provinceId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, provinceId: true },
+      }),
+    );
   }
 
   async listSeries(establishmentId: string) {

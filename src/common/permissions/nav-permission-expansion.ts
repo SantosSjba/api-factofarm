@@ -6,7 +6,8 @@ import { MENU_NAV_LEAF_CODES } from '../../../prisma/seed/steps/permissions';
  * Mantener alineado con `prisma/seed/steps/permissions.ts` (MENU_GROUPS children).
  */
 export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> = {
-  'nav.usuarios': ['users.read', 'users.write'],
+  'nav.usuarios': ['users.read', 'users.write', 'audit.read'],
+  'nav.auditoria': ['audit.read'],
   'nav.establecimientos': ['establishments.read', 'establishments.write'],
   'nav.clientes_list': ['customers.read', 'customers.write', 'customers.delete'],
   'nav.tipo_clientes': ['customer-types.read', 'customer-types.write'],
@@ -20,7 +21,7 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.vias_administracion': ['admin-routes.read', 'admin-routes.write'],
   'nav.proveedores': ['suppliers.read', 'suppliers.write'],
   'nav.inventario_movimientos': ['inventory.read', 'inventory.write'],
-  'nav.traslados': ['inventory.read', 'inventory.write'],
+  'nav.traslados': ['inventory.read', 'inventory.write', 'inventory.transfer.cross'],
   'nav.lotes': ['inventory.read', 'inventory.write'],
   'nav.salida_venta_lotes': ['inventory.read', 'inventory.write'],
   'nav.reporte_kardex': ['inventory.read'],

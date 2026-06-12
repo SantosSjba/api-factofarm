@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { RequestContextService } from './request-context.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type AuditLogInput = {
@@ -13,9 +14,13 @@ export type AuditLogInput = {
 
 @Injectable()
 export class AuditLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   async log(input: AuditLogInput): Promise<void> {
+    const ctx = this.requestContext.get();
     await this.prisma.auditLog.create({
       data: {
         userId: input.userId ?? null,
@@ -23,8 +28,8 @@ export class AuditLogService {
         entity: input.entity,
         entityId: input.entityId ?? null,
         diff: input.diff != null ? (input.diff as object) : undefined,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
+        ipAddress: input.ipAddress ?? ctx.ipAddress ?? null,
+        userAgent: input.userAgent ?? ctx.userAgent ?? null,
       },
     });
   }

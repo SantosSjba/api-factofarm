@@ -1,14 +1,17 @@
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
+import compression from 'compression';
+import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppService } from './app.service';
-import { ApiExceptionFilter } from './common/filters/api-exception.filter';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { parseCorsOrigins } from './config/env.validation';
 
-/** URL base para logs y enlaces humanos (evita `http://[::1]:…` que confunde en Windows). */
 function localBrowserBase(port: number): string {
   return `http://localhost:${port}`;
 }
@@ -17,9 +20,14 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
-  app.useLogger(app.get(Logger));
+
+  const config = app.get(ConfigService);
+  const logger = app.get(Logger);
+  app.useLogger(logger);
+
+  app.set('trust proxy', 1);
   app.setGlobalPrefix('api/v1');
-  app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -28,41 +36,56 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
-  app.enableCors({ origin: true });
-
-  const openApiConfig = new DocumentBuilder()
-    .setTitle('FactoFarm API')
-    .setDescription(
-      'API REST del backend FactoFarm (usuarios, establecimientos). Documentación generada con OpenAPI y Scalar.',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addTag('app', 'Estado del servicio')
-    .addTag('auth', 'Autenticación')
-    .addTag('users', 'Usuarios')
-    .addTag('establishments', 'Establecimientos')
-    .addTag('customer-types', 'Tipos de cliente')
-    .addTag('customers', 'Clientes')
-    .addTag('products', 'Productos')
-    .addTag('permissions', 'Permisos')
-    .addTag('files', 'Archivos')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, openApiConfig);
 
   app.use(
-    '/api/v1/docs',
-    apiReference({
-      theme: 'purple',
-      content: document,
+    helmet({
+      contentSecurityPolicy: config.get('NODE_ENV') === 'production' ? undefined : false,
+      crossOriginEmbedderPolicy: false,
     }),
   );
+  app.use(compression());
 
-  const httpAdapter = app.getHttpAdapter();
-  httpAdapter.get('/api/v1/openapi.json', (_req, res) => {
-    httpAdapter.reply(res, document, 200);
+  const corsOrigins = parseCorsOrigins(
+    config.get<string>('FRONTEND_URL', 'http://localhost:4200'),
+    config.get<string>('CORS_ORIGINS'),
+  );
+  app.enableCors({
+    origin:
+      config.get('NODE_ENV') === 'production'
+        ? corsOrigins
+        : (origin, callback) => callback(null, true),
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
   });
 
+  const swaggerEnabled = config.get<boolean>('SWAGGER_ENABLED', true);
+  if (swaggerEnabled) {
+    const openApiConfig = new DocumentBuilder()
+      .setTitle('FactoFarm API')
+      .setDescription(
+        'API REST FactoFarm — farmacia Perú (usuarios, POS, inventario, SUNAT, DIGEMID).',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, openApiConfig);
+    app.use(
+      '/api/v1/docs',
+      apiReference({
+        theme: 'purple',
+        content: document,
+      }),
+    );
+
+    const httpAdapter = app.getHttpAdapter();
+    httpAdapter.get('/api/v1/openapi.json', (_req, res) => {
+      httpAdapter.reply(res, document, 200);
+    });
+  }
+
+  const httpAdapter = app.getHttpAdapter();
   const appService = app.get(AppService);
   httpAdapter.get('/api/health', async (_req, res) => {
     const health = await appService.getHealth();
@@ -70,20 +93,18 @@ async function bootstrap() {
     httpAdapter.reply(res, health, status);
   });
 
-  const port = Number(process.env.PORT ?? 3000);
-  const host = process.env.HOST ?? '0.0.0.0';
+  app.enableShutdownHooks();
+
+  const port = Number(config.get('PORT') ?? 3000);
+  const host = config.get<string>('HOST') ?? '0.0.0.0';
   await app.listen(port, host);
 
-  const logger = app.get(Logger);
-  const bound = await app.getUrl();
   const browse = localBrowserBase(port);
-
-  logger.log(
-    `FactoFarm API · escucha ${host}:${port} (interno Nest: ${bound}) · prefijo /api/v1`,
-  );
-  logger.log(
-    `Abrir en el navegador: ${browse}/api/health · Docs: ${browse}/api/v1/docs · OpenAPI: ${browse}/api/v1/openapi.json`,
-  );
+  logger.log(`FactoFarm API · ${host}:${port} · prefijo /api/v1`);
+  logger.log(`Health: ${browse}/api/health`);
+  if (swaggerEnabled) {
+    logger.log(`Docs: ${browse}/api/v1/docs`);
+  }
 }
 
 bootstrap();

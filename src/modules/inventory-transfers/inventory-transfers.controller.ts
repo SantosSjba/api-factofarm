@@ -16,8 +16,8 @@ export class InventoryTransfersController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.traslados')
   @ApiOperation({ summary: 'Listar transferencias entre almacenes' })
-  findAll(@Query() query: InventoryTransferListQueryDto) {
-    return this.service.findAll(query);
+  findAll(@Query() query: InventoryTransferListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findAll(query, actor);
   }
 
   @Post()
@@ -25,7 +25,7 @@ export class InventoryTransfersController {
   @ApiOperation({ summary: 'Crear transferencia (borrador)' })
   @ApiBody({ type: CreateInventoryTransferDto })
   create(@Body() dto: CreateInventoryTransferDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(dto, actor.sub);
+    return this.service.create(dto, actor);
   }
 
   @Post(':id/dispatch')

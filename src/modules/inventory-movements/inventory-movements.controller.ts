@@ -44,43 +44,43 @@ export class InventoryMovementsController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Listar inventario por producto y almacén' })
-  list(@Query() query: InventoryMovementListQueryDto) {
-    return this.service.list(query);
+  list(@Query() query: InventoryMovementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.list(query, actor);
   }
 
   @Get('lots')
   @RequirePermissions('inventory.read', 'nav.lotes')
   @ApiOperation({ summary: 'Listar lotes con stock' })
-  listLots(@Query() query: InventoryLotListQueryDto) {
-    return this.service.listLots(query);
+  listLots(@Query() query: InventoryLotListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.listLots(query, actor);
   }
 
   @Get('kardex')
   @RequirePermissions('inventory.read', 'nav.reporte_kardex', 'nav.kardex_valorizado')
   @ApiOperation({ summary: 'Kardex valorizado por producto' })
-  kardex(@Query() query: KardexQueryDto) {
-    return this.service.kardex(query);
+  kardex(@Query() query: KardexQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.kardex(query, actor);
   }
 
   @Get('alerts')
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Alertas de inventario (stock bajo, vencimientos, cadena de frío)' })
-  alerts() {
-    return this.service.alerts();
+  alerts(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.alerts(actor);
   }
 
   @Get('valuation-report')
   @RequirePermissions('inventory.read', 'nav.reporte_inventario', 'nav.kardex_valorizado')
   @ApiOperation({ summary: 'Reporte de inventario valorizado (PEPS / promedio)' })
-  valuationReport(@Query() query: InventoryValuationReportQueryDto) {
-    return this.service.valuationReport(query);
+  valuationReport(@Query() query: InventoryValuationReportQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.valuationReport(query, actor);
   }
 
   @Get('adjustments/pending')
   @RequirePermissions('inventory.adjust')
   @ApiOperation({ summary: 'Listar ajustes pendientes de aprobación' })
-  listPendingAdjustments() {
-    return this.service.listPendingAdjustments();
+  listPendingAdjustments(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.listPendingAdjustments(actor);
   }
 
   @Post('adjustments')

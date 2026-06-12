@@ -11,6 +11,9 @@ import {
   ProductSerialStatus,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
@@ -47,9 +50,12 @@ export class InventoryMovementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly lotAllocation: InventoryLotAllocationService,
+    private readonly audit: AuditLogService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
-  async list(query: InventoryMovementListQueryDto) {
+  async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor, query.establishmentId);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -73,8 +79,8 @@ export class InventoryMovementsService {
       },
       warehouse: {
         deletedAt: null,
+        establishmentId,
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
-        ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
       },
       ...(or.length ? { OR: or } : {}),
     };
@@ -189,7 +195,8 @@ export class InventoryMovementsService {
     }));
   }
 
-  async listLots(query: InventoryLotListQueryDto) {
+  async listLots(query: InventoryLotListQueryDto, actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -221,8 +228,8 @@ export class InventoryMovementsService {
       },
       warehouse: {
         deletedAt: null,
+        establishmentId,
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
-        ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
       },
       ...expiryWhere,
       ...(or.length ? { OR: or } : {}),
@@ -282,7 +289,8 @@ export class InventoryMovementsService {
     );
   }
 
-  async kardex(query: KardexQueryDto) {
+  async kardex(query: KardexQueryDto, actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -293,7 +301,11 @@ export class InventoryMovementsService {
     const where: Prisma.InventoryInboundMovementWhereInput = {
       productId: query.productId,
       deletedAt: null,
-      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      warehouse: {
+        deletedAt: null,
+        establishmentId,
+        ...(query.warehouseId ? { id: query.warehouseId } : {}),
+      },
       ...(from || to
         ? {
             fechaRegistro: {
@@ -351,7 +363,8 @@ export class InventoryMovementsService {
     return { ...buildPaginatedResult(items, total, page, pageSize) };
   }
 
-  async alerts() {
+  async alerts(actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor);
     const now = new Date();
     const in30 = new Date(now);
     in30.setDate(in30.getDate() + 30);
@@ -360,12 +373,14 @@ export class InventoryMovementsService {
     const in90 = new Date(now);
     in90.setDate(in90.getDate() + 90);
 
+    const lotScope = { warehouse: { establishmentId } };
     const [vencidos, porVencer30, porVencer60, porVencer90, zonasFrioSinLogHoy] = await Promise.all([
         this.prisma.productLotStock.count({
           where: {
             deletedAt: null,
             stock: { gt: 0 },
             fechaVencimiento: { lt: now },
+            ...lotScope,
           },
         }),
         this.prisma.productLotStock.count({
@@ -373,6 +388,7 @@ export class InventoryMovementsService {
             deletedAt: null,
             stock: { gt: 0 },
             fechaVencimiento: { gte: now, lte: in30 },
+            ...lotScope,
           },
         }),
         this.prisma.productLotStock.count({
@@ -380,6 +396,7 @@ export class InventoryMovementsService {
             deletedAt: null,
             stock: { gt: 0 },
             fechaVencimiento: { gt: in30, lte: in60 },
+            ...lotScope,
           },
         }),
         this.prisma.productLotStock.count({
@@ -387,6 +404,7 @@ export class InventoryMovementsService {
             deletedAt: null,
             stock: { gt: 0 },
             fechaVencimiento: { gt: in60, lte: in90 },
+            ...lotScope,
           },
         }),
         this.prisma.warehouseZone.count({
@@ -394,6 +412,7 @@ export class InventoryMovementsService {
             deletedAt: null,
             activo: true,
             tipo: 'REFRIGERADO',
+            warehouse: { establishmentId },
             temperatureLogs: {
               none: {
                 fecha: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
@@ -403,7 +422,7 @@ export class InventoryMovementsService {
         }),
       ]);
 
-    const stockBajoCount = await this.countLowStock();
+    const stockBajoCount = await this.countLowStock(establishmentId);
 
     return {
       stockBajo: stockBajoCount,
@@ -469,12 +488,30 @@ export class InventoryMovementsService {
       userId: actorId,
     });
 
+    await this.audit.log({
+      userId: actorId,
+      action: 'ADJUST',
+      entity: 'InventoryMovement',
+      diff: {
+        productId: dto.productId,
+        warehouseId: dto.warehouseId,
+        lotCode: dto.lotCode?.trim() || null,
+        delta: delta.toString(),
+        reason: dto.reason.trim(),
+      },
+    });
+
     return { ok: true, applied: true, message: 'Ajuste aplicado correctamente' };
   }
 
-  async listPendingAdjustments() {
+  async listPendingAdjustments(actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor);
     return this.prisma.inventoryPendingAdjustment.findMany({
-      where: { estado: InventoryPendingAdjustmentStatus.PENDIENTE, deletedAt: null },
+      where: {
+        estado: InventoryPendingAdjustmentStatus.PENDIENTE,
+        deletedAt: null,
+        warehouse: { establishmentId },
+      },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -516,6 +553,13 @@ export class InventoryMovementsService {
       },
     });
 
+    await this.audit.log({
+      userId: actorId,
+      action: 'ADJUST_APPROVE',
+      entity: 'InventoryPendingAdjustment',
+      entityId: id,
+    });
+
     return { ok: true, message: 'Ajuste aprobado y aplicado' };
   }
 
@@ -541,7 +585,8 @@ export class InventoryMovementsService {
     return { ok: true, message: 'Ajuste rechazado' };
   }
 
-  async valuationReport(query: InventoryValuationReportQueryDto) {
+  async valuationReport(query: InventoryValuationReportQueryDto, actor: JwtRequestUser) {
+    const establishmentId = this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -551,8 +596,8 @@ export class InventoryMovementsService {
       product: { deletedAt: null },
       warehouse: {
         deletedAt: null,
+        establishmentId,
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
-        ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
       },
       cantidad: { gt: 0 },
     };
@@ -837,6 +882,18 @@ export class InventoryMovementsService {
       });
     });
 
+    await this.audit.log({
+      userId: actorId,
+      action: 'INBOUND',
+      entity: 'InventoryMovement',
+      diff: {
+        productId: product.id,
+        warehouseId: warehouse.id,
+        quantity: amount.toString(),
+        lotCode: dto.lotCode || null,
+      },
+    });
+
     return {
       ok: true,
       message: 'Ingreso registrado correctamente',
@@ -1013,6 +1070,18 @@ export class InventoryMovementsService {
       reference: dto.reference ?? null,
       comment: dto.comment ?? null,
       userId: actorId ?? null,
+    });
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'OUTBOUND',
+      entity: 'InventoryMovement',
+      diff: {
+        productId: product.id,
+        warehouseId: warehouse.id,
+        quantity: amount.toString(),
+        lotCode: dto.lotCode?.trim() || null,
+      },
     });
 
     return {
@@ -1473,11 +1542,11 @@ export class InventoryMovementsService {
     return lot?.costoUnitario ?? productCost ?? new Prisma.Decimal(0);
   }
 
-  private async countLowStock(): Promise<number> {
+  private async countLowStock(establishmentId: string): Promise<number> {
     const rows = await this.prisma.productWarehouseStock.findMany({
       where: {
         product: { deletedAt: null, habilitado: true },
-        warehouse: { deletedAt: null },
+        warehouse: { deletedAt: null, establishmentId },
       },
       select: {
         cantidad: true,

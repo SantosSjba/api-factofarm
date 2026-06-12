@@ -35,31 +35,35 @@ import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { SetProductEquivalentsDto } from './dto/set-product-equivalents.dto';
 import { UpsertProductSupplierDto } from './dto/upsert-product-supplier.dto';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { ProductsService } from './products.service';
 
 @ApiTags('products')
 @ApiBearerAuth()
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get('catalogs/units')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Catálogo de unidades de medida' })
+  @ApiOperation({ summary: 'Cat?logo de unidades de medida' })
   catalogUnits() {
     return this.productsService.listUnits();
   }
 
   @Get('catalogs/currencies')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Catálogo de monedas' })
+  @ApiOperation({ summary: 'Cat?logo de monedas' })
   catalogCurrencies() {
     return this.productsService.listCurrencies();
   }
 
   @Get('catalogs/tax-affectation-types')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Catálogo de tipos de afectación al IGV' })
+  @ApiOperation({ summary: 'Cat?logo de tipos de afectaci?n al IGV' })
   catalogTaxTypes() {
     return this.productsService.listTaxAffectationTypes();
   }
@@ -67,42 +71,46 @@ export class ProductsController {
   @Get('catalogs/warehouses')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Almacenes por establecimiento' })
-  catalogWarehouses() {
-    return this.productsService.listWarehouses();
+  catalogWarehouses(@CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.listWarehouses(this.scope.resolve(actor));
   }
 
   @Get('catalogs/product-locations')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Ubicaciones de producto por establecimiento' })
-  catalogLocations(@Query('establishmentId') establishmentId?: string) {
-    return this.productsService.listProductLocations(establishmentId);
+  catalogLocations(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('establishmentId') establishmentId?: string,
+  ) {
+    return this.productsService.listProductLocations(this.scope.resolve(actor, establishmentId));
   }
 
   @Post('catalogs/product-locations')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Crear ubicación de producto por establecimiento' })
+  @ApiOperation({ summary: 'Crear ubicaci?n de producto por establecimiento' })
   @ApiBody({ type: CreateProductLocationDto })
-  createLocation(@Body() dto: CreateProductLocationDto) {
+  createLocation(@Body() dto: CreateProductLocationDto, @CurrentUser() actor: JwtRequestUser) {
+    this.scope.assertAccess(actor, dto.establishmentId);
     return this.productsService.createProductLocation(dto);
   }
 
   @Get('catalogs/attribute-types')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Tipos de atributo para el listado dinámico' })
+  @ApiOperation({ summary: 'Tipos de atributo para el listado din?mico' })
   catalogAttributeTypes() {
     return this.productsService.listAttributeTypes();
   }
 
   @Get('catalogs/isc-systems')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Catálogo de tipos de sistema ISC' })
+  @ApiOperation({ summary: 'Cat?logo de tipos de sistema ISC' })
   catalogIscSystems() {
     return this.productsService.listIscSystems();
   }
 
   @Get(':id/equivalents')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Productos bioequivalentes / genéricos relacionados' })
+  @ApiOperation({ summary: 'Productos bioequivalentes / gen?ricos relacionados' })
   listEquivalents(@Param('id') id: string) {
     return this.productsService.listEquivalents(id);
   }
@@ -149,7 +157,7 @@ export class ProductsController {
 
   @Get(':id/history/stock')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Historial de stock por ubicación del producto' })
+  @ApiOperation({ summary: 'Historial de stock por ubicaci?n del producto' })
   historyStock(@Param('id') id: string) {
     return this.productsService.historyStock(id);
   }
@@ -178,7 +186,7 @@ export class ProductsController {
 
   @Get()
   @RequirePermissions('products.read', 'nav.productos')
-  @ApiOperation({ summary: 'Listar productos con paginación' })
+  @ApiOperation({ summary: 'Listar productos con paginaci?n' })
   list(@Query() query: ProductListQueryDto) {
     return this.productsService.list(query);
   }
@@ -205,7 +213,7 @@ export class ProductsController {
 
   @Delete(':id')
   @RequirePermissions('products.delete')
-  @ApiOperation({ summary: 'Eliminar (lógico) producto' })
+  @ApiOperation({ summary: 'Eliminar (l?gico) producto' })
   remove(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
     return this.productsService.remove(id, actor.sub);
   }
@@ -230,7 +238,7 @@ export class ProductsController {
 
   @Patch(':id/barcode')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Actualizar código de barras del producto' })
+  @ApiOperation({ summary: 'Actualizar c?digo de barras del producto' })
   updateBarcode(
     @Param('id') id: string,
     @Body() dto: UpdateProductBarcodeDto,
@@ -241,7 +249,7 @@ export class ProductsController {
 
   @Post('export')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Exportar catálogo de productos a Excel' })
+  @ApiOperation({ summary: 'Exportar cat?logo de productos a Excel' })
   async exportProducts(@Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
     const buffer = await this.productsService.buildExportBuffer();
     res.setHeader(
@@ -254,7 +262,7 @@ export class ProductsController {
 
   @Post('import/preview')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Vista previa de importación sin persistir cambios' })
+  @ApiOperation({ summary: 'Vista previa de importaci?n sin persistir cambios' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -309,7 +317,7 @@ export class ProductsController {
 
   @Get('import/template')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Descargar plantilla de importación por modo' })
+  @ApiOperation({ summary: 'Descargar plantilla de importaci?n por modo' })
   async downloadImportTemplate(
     @Query('mode') mode: ImportProductsDto['mode'],
     @Res({ passthrough: true }) res: Response,

@@ -2,6 +2,8 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
@@ -21,9 +23,11 @@ export class WarehousesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
-  async findAll(query: WarehouseListQueryDto) {
+  async findAll(query: WarehouseListQueryDto, actor: JwtRequestUser) {
+    const scopedEstablishmentId = this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -31,7 +35,7 @@ export class WarehousesService {
     const search = query.search?.trim();
     const where: Prisma.WarehouseWhereInput = {
       deletedAt: null,
-      ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
+      establishmentId: scopedEstablishmentId,
       ...(search
         ? {
             OR: [
@@ -56,7 +60,9 @@ export class WarehousesService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateWarehouseDto, actorId?: string) {
+  async create(dto: CreateWarehouseDto, actor: JwtRequestUser) {
+    this.scope.assertAccess(actor, dto.establishmentId);
+
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: dto.establishmentId, deletedAt: null },
       select: { id: true },
@@ -70,7 +76,7 @@ export class WarehousesService {
         select: selectRow,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor.sub,
         action: 'CREATE',
         entity: 'Warehouse',
         entityId: created.id,
@@ -81,12 +87,13 @@ export class WarehousesService {
     }
   }
 
-  async update(id: string, dto: UpdateWarehouseDto, actorId?: string) {
+  async update(id: string, dto: UpdateWarehouseDto, actor: JwtRequestUser) {
     const current = await this.prisma.warehouse.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, establishmentId: true },
     });
     if (!current) throw new NotFoundException('Almacén no encontrado');
+    this.scope.assertAccess(actor, current.establishmentId);
 
     try {
       const updated = await this.prisma.warehouse.update({
@@ -95,7 +102,7 @@ export class WarehousesService {
         select: selectRow,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor.sub,
         action: 'UPDATE',
         entity: 'Warehouse',
         entityId: id,
@@ -107,23 +114,25 @@ export class WarehousesService {
     }
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor: JwtRequestUser) {
     const current = await this.prisma.warehouse.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, establishmentId: true },
     });
     if (!current) throw new NotFoundException('Almacén no encontrado');
+    this.scope.assertAccess(actor, current.establishmentId);
 
     await this.prisma.warehouse.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'DELETE',
       entity: 'Warehouse',
       entityId: id,
     });
+    return { ok: true };
   }
 
-  private handleKnownError(err: unknown): never {
+  private handleKnownError(err: unknown): void {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw new ConflictException('Ya existe un almacén con ese nombre en el establecimiento');
     }

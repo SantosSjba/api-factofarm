@@ -11,6 +11,11 @@ export class InventoryTransferListQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()
+  establishmentId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
   warehouseId?: string;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })

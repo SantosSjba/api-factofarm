@@ -8,9 +8,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateSaleDto, CreateSaleReturnDto, VoidSaleDto } from './dto/create-sale.dto';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
@@ -70,6 +71,8 @@ export class SalesController {
   @RequirePermissions('sales.write', 'nav.punto_venta')
   @ApiOperation({ summary: 'Registrar venta (POS)' })
   @ApiHeader({ name: 'Idempotency-Key', required: false })
+  @ApiBody({ type: CreateSaleDto, examples: { posBoleta: { value: OPENAPI_EXAMPLES.createSale } } })
+  @ApiOkResponse({ description: 'Venta registrada' })
   create(
     @Body() dto: CreateSaleDto,
     @CurrentUser() actor: JwtRequestUser,

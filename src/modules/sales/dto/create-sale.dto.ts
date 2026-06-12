@@ -108,7 +108,7 @@ class CreatePaymentDto {
 }
 
 export class CreateSaleDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiProperty({ format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000' })
   @IsUUID()
   warehouseId!: string;
 
@@ -122,7 +122,7 @@ export class CreateSaleDto {
   @IsUUID()
   customerId?: string;
 
-  @ApiProperty({ enum: SaleDocumentType })
+  @ApiProperty({ enum: SaleDocumentType, example: 'BOLETA' })
   @IsEnum(SaleDocumentType)
   documentType!: SaleDocumentType;
 

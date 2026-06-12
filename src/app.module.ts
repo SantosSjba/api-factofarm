@@ -44,6 +44,8 @@ import { BillingModule } from './modules/billing/billing.module';
 import { MedicosModule } from './modules/medicos/medicos.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
 import { PharmaceuticalModule } from './modules/pharmaceutical/pharmaceutical.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -122,6 +124,8 @@ import { PharmaceuticalModule } from './modules/pharmaceutical/pharmaceutical.mo
     MedicosModule,
     PrescriptionsModule,
     PharmaceuticalModule,
+    AuditModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
