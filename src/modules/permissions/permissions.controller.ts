@@ -1,14 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PermissionsService } from './application/permissions.service';
 
-/**
- * Catálogo de permisos para la UI (árbol del modal) y futura autorización por menú.
- */
 @ApiTags('permissions')
 @Controller('permissions')
 export class PermissionsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('menu-tree')
   @ApiOperation({
@@ -16,12 +13,7 @@ export class PermissionsController {
     description:
       'Nodo raíz `nav.usuarios_series` con hijos (Usuarios, Establecimientos).',
   })
-  async menuTree() {
-    return this.prisma.permission.findFirst({
-      where: { code: 'nav.usuarios_series' },
-      include: {
-        children: { orderBy: { sortOrder: 'asc' } },
-      },
-    });
+  menuTree() {
+    return this.permissionsService.menuTree();
   }
 }

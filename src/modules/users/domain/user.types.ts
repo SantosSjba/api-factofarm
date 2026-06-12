@@ -38,6 +38,7 @@ export type CreateUserInput = {
   role: UserRole;
   establecimientoId: string;
   profile?: Partial<UserProfileSnapshot>;
+  permissionCodes?: string[];
 };
 
 export type UpdateUserInput = {
@@ -47,9 +48,12 @@ export type UpdateUserInput = {
   role?: UserRole;
   establecimientoId?: string;
   profile?: Partial<UserProfileSnapshot>;
+  permissionCodes?: string[];
 };
 
 export type UserListFilters = {
   search?: string;
   role?: UserRole;
+  page?: number;
+  pageSize?: number;
 };

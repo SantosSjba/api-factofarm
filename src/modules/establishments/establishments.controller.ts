@@ -9,11 +9,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from './dto/create-establishment.dto';
+import { EstablishmentListQueryDto } from './dto/establishment-list-query.dto';
 import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
-import { EstablishmentsService } from './establishments.service';
+import { EstablishmentsService } from './application/establishments.service';
 
 @ApiTags('establishments')
 @Controller('establishments')
@@ -50,19 +51,15 @@ export class EstablishmentsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Listar establecimientos activos',
+    summary: 'Listar establecimientos activos (paginado si se envía page)',
   })
-  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por nombre/código/dirección' })
-  @ApiQuery({
-    name: 'hospital',
-    required: false,
-    description: 'Filtrar por hospital (all|hospital|no-hospital)',
-  })
-  findAll(
-    @Query('search') search?: string,
-    @Query('hospital') hospital?: string,
-  ) {
-    return this.establishmentsService.findAll({ search, hospital });
+  findAll(@Query() query: EstablishmentListQueryDto) {
+    return this.establishmentsService.findAll({
+      search: query.search,
+      hospital: query.hospital === 'all' ? undefined : query.hospital,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
   }
 
   @Post()

@@ -16,10 +16,10 @@ export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
   const { email, passwordPlain } = adminDemoCredentials;
 
   const estCentral = await prisma.establishment.findFirst({
-    where: { codigo: 'EST-001' },
+    where: { codigo: '0000' },
   });
   if (!estCentral) {
-    throw new Error('Seed admin: falta establecimiento EST-001');
+    throw new Error('Seed admin: falta establecimiento 0000 (Oficina Principal)');
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });

@@ -1,15 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsEmail,
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  MinLength,
-  ValidateNested,
-} from 'class-validator';
+import { IsArray, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../../../generated/prisma/client';
 import { UserProfileDto } from './user-profile.dto';
@@ -51,4 +41,13 @@ export class CreateUserDto {
   @ValidateNested()
   @Type(() => UserProfileDto)
   profile?: UserProfileDto;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Códigos Permission.code (nav.*, users.read, users.write)',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionCodes?: string[];
 }

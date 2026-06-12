@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from './common/decorators/public.decorator';
 import { AppService, type HealthResponse } from './app.service';
 
 @ApiTags('app')
@@ -7,12 +8,14 @@ import { AppService, type HealthResponse } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Comprobación de que el API responde' })
   getHello(): string {
     return this.appService.getHello();
   }
 
+  @Public()
   @Get('health')
   @ApiOperation({
     summary: 'Estado del servicio y conexión a la base de datos',

@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { CommonModule } from './common/common.module';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { EstablishmentsModule } from './modules/establishments/establishments.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { FilesModule } from './modules/files/files.module';
 import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
@@ -18,6 +24,7 @@ import { ServicesModule } from './modules/services/services.module';
 import { CompoundProductsModule } from './modules/compound-products/compound-products.module';
 import { SeriesModule } from './modules/series/series.module';
 import { InventoryMovementsModule } from './modules/inventory-movements/inventory-movements.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +36,38 @@ import { InventoryMovementsModule } from './modules/inventory-movements/inventor
         allowUnknown: true,
       },
     }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { singleLine: true } }
+            : undefined,
+        genReqId: (req, res) => {
+          const incoming = req.headers['x-request-id'];
+          const id =
+            typeof incoming === 'string' && incoming.trim()
+              ? incoming.trim()
+              : crypto.randomUUID();
+          res.setHeader('X-Request-Id', id);
+          return id;
+        },
+        customProps: (req) => ({ requestId: req.id }),
+        autoLogging: true,
+      },
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: config.get<number>('THROTTLE_TTL_MS', 60_000),
+            limit: config.get<number>('THROTTLE_LIMIT', 120),
+          },
+        ],
+      }),
+    }),
+    CommonModule,
     PrismaModule,
     AuthModule,
     EstablishmentsModule,
@@ -44,8 +83,14 @@ import { InventoryMovementsModule } from './modules/inventory-movements/inventor
     CompoundProductsModule,
     SeriesModule,
     InventoryMovementsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+  ],
 })
 export class AppModule {}

@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../../generated/prisma/client';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../../common/dto/pagination.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { IUserRepository } from '../domain/user.repository';
 import type {
@@ -47,7 +51,7 @@ function mapUser(row: UserRow): UserSnapshot {
           fotoUrl:
             row.profile.fotoUrl ??
             (row.profile.fotoArchivoId != null
-              ? `/api/files/${row.profile.fotoArchivoId}`
+              ? `/api/v1/files/${row.profile.fotoArchivoId}`
               : null),
         }
       : null,
@@ -59,24 +63,39 @@ export class PrismaUserRepository implements IUserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(input: CreateUserInput): Promise<UserSnapshot> {
-    const created = await this.prisma.user.create({
-      data: {
-        nombre: input.nombre,
-        email: input.email,
-        passwordHash: input.passwordHash,
-        role: input.role,
-        establecimientoId: input.establecimientoId,
-        profile: input.profile
-          ? { create: this.toProfileCreate(input.profile) }
-          : undefined,
-      },
-      include: userSnapshotInclude,
+    const created = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          nombre: input.nombre,
+          email: input.email,
+          passwordHash: input.passwordHash,
+          role: input.role,
+          establecimientoId: input.establecimientoId,
+          profile: input.profile
+            ? { create: this.toProfileCreate(input.profile) }
+            : undefined,
+        },
+      });
+
+      if (input.permissionCodes?.length) {
+        await this.replacePermissions(tx, user.id, input.permissionCodes);
+      }
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: user.id },
+        include: userSnapshotInclude,
+      });
     });
     return mapUser(created);
   }
 
-  async findAll(filters?: UserListFilters): Promise<UserSnapshot[]> {
+  async findAll(filters?: UserListFilters) {
     const search = filters?.search?.trim();
+    const { page, pageSize, skip, take } = paginationArgs({
+      page: filters?.page,
+      pageSize: filters?.pageSize,
+    });
+
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(filters?.role ? { role: filters.role } : {}),
@@ -90,12 +109,18 @@ export class PrismaUserRepository implements IUserRepository {
         : {}),
     };
 
-    const rows = await this.prisma.user.findMany({
-      where,
-      include: userSnapshotInclude,
-      orderBy: { createdAt: 'desc' },
-    });
-    return rows.map(mapUser);
+    const [total, rows] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        include: userSnapshotInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+    ]);
+
+    return buildPaginatedResult(rows.map(mapUser), total, page, pageSize);
   }
 
   async findById(id: string): Promise<UserSnapshot | null> {
@@ -144,6 +169,10 @@ export class PrismaUserRepository implements IUserRepository {
         });
       }
 
+      if (input.permissionCodes !== undefined) {
+        await this.replacePermissions(tx, id, input.permissionCodes);
+      }
+
       return tx.user.findUniqueOrThrow({
         where: { id },
         include: userSnapshotInclude,
@@ -158,6 +187,34 @@ export class PrismaUserRepository implements IUserRepository {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async syncPermissions(userId: string, permissionCodes: string[]): Promise<UserSnapshot> {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.replacePermissions(tx, userId, permissionCodes);
+      return tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: userSnapshotInclude,
+      });
+    });
+    return mapUser(updated);
+  }
+
+  private async replacePermissions(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    codes: string[],
+  ): Promise<void> {
+    const unique = [...new Set(codes.map((c) => c.trim()).filter(Boolean))];
+    const permissions = await tx.permission.findMany({
+      where: { code: { in: unique } },
+    });
+    await tx.userPermission.deleteMany({ where: { userId } });
+    if (permissions.length > 0) {
+      await tx.userPermission.createMany({
+        data: permissions.map((p) => ({ userId, permissionId: p.id })),
+      });
+    }
   }
 
   private toProfileCreate(

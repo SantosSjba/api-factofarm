@@ -12,6 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsPeruDocument } from '../../../common/validators/is-peru-document.decorator';
 import { CustomerDocumentType } from '../../../generated/prisma/client';
 import { CustomerAddressDto } from './customer-address.dto';
 
@@ -34,6 +35,7 @@ export class CreateCustomerDto {
   @ApiProperty({ maxLength: 30 })
   @IsString()
   @MaxLength(30)
+  @IsPeruDocument()
   numeroDocumento!: string;
 
   @ApiPropertyOptional({ maxLength: 80 })

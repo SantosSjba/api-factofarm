@@ -4,11 +4,9 @@ import {
   Get,
   Param,
   Post,
-  Req,
   Res,
   StreamableFile,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,20 +18,20 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { JwtAuthGuard, type JwtRequestUser } from '../auth/jwt-auth.guard';
-import type { Request } from 'express';
 import { memoryStorage } from 'multer';
+import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { FilesService } from './application/files.service';
 import { UploadFileResponseDto } from './application/dto/upload-file-response.dto';
 
 @ApiTags('files')
+@ApiBearerAuth()
 @Controller('files')
 export class FilesController {
   constructor(private readonly files: FilesService) {}
 
   @Post('upload')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -51,14 +49,15 @@ export class FilesController {
   )
   async upload(
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Req() req: Request & { user?: JwtRequestUser },
+    @CurrentUser() user: JwtRequestUser,
   ): Promise<UploadFileResponseDto> {
     if (!file) {
       throw new BadRequestException('Se requiere un archivo en el campo `file`');
     }
-    return this.files.saveUploaded(file, req.user?.sub);
+    return this.files.saveUploaded(file, user.sub);
   }
 
+  @Public()
   @Get(':id')
   @ApiOkResponse({ description: 'Cuerpo binario del archivo (p. ej. imagen)' })
   async download(
