@@ -38,6 +38,11 @@ model User {
   physicalCounts      InventoryPhysicalCount[]
   adjustmentsRequested InventoryPendingAdjustment[] @relation("AdjustmentRequestedBy")
   adjustmentsApproved  InventoryPendingAdjustment[] @relation("AdjustmentApprovedBy")
+  cashSessions         CashSession[]
+  salesAsSeller        Sale[]                     @relation("SaleSeller")
+  salesVoided          Sale[]                     @relation("SaleVoidedBy")
+  saleReturns          SaleReturn[]
+  quotations           Quotation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

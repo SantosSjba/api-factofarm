@@ -11,8 +11,8 @@ export class ColdChainService {
     private readonly audit: AuditLogService,
   ) {}
 
-  listByZone(warehouseZoneId: string) {
-    return this.prisma.coldChainTemperatureLog.findMany({
+  async listByZone(warehouseZoneId: string) {
+    const rows = await this.prisma.coldChainTemperatureLog.findMany({
       where: { warehouseZoneId },
       orderBy: { fecha: 'desc' },
       take: 100,
@@ -24,6 +24,11 @@ export class ColdChainService {
         user: { select: { nombre: true } },
       },
     });
+    return rows.map((row) => ({
+      ...row,
+      fecha: row.fecha.toISOString(),
+      temperaturaCelsius: row.temperaturaCelsius.toString(),
+    }));
   }
 
   async create(dto: CreateTemperatureLogDto, actorId?: string) {
@@ -60,6 +65,10 @@ export class ColdChainService {
       entityId: created.id,
     });
 
-    return created;
+    return {
+      ...created,
+      fecha: created.fecha.toISOString(),
+      temperaturaCelsius: created.temperaturaCelsius.toString(),
+    };
   }
 }

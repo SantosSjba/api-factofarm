@@ -1,0 +1,324 @@
+enum SaleStatus {
+  COMPLETADA
+  ANULADA
+  PARCIALMENTE_DEVUELTA
+}
+
+enum SaleDocumentType {
+  BOLETA
+  FACTURA
+  NOTA_VENTA
+  TICKET
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  YAPE
+  PLIN
+  TRANSFERENCIA
+  CREDITO
+  MIXTO
+}
+
+enum DiscountType {
+  PORCENTAJE
+  MONTO_FIJO
+}
+
+enum CashSessionStatus {
+  ABIERTA
+  CERRADA
+}
+
+enum CashMovementType {
+  APERTURA
+  INGRESO
+  EGRESO
+  VENTA
+  ANULACION
+  CIERRE
+}
+
+enum QuotationStatus {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  CONVERTIDA
+  VENCIDA
+}
+
+enum PromotionType {
+  PORCENTAJE_ITEM
+  MONTO_ITEM
+  PORCENTAJE_VENTA
+  CANTIDAD_MINIMA
+  DOS_POR_UNO
+}
+
+/// Caja física / terminal POS por establecimiento
+model CashRegister {
+  id              String   @id @default(uuid())
+  establishmentId String
+  nombre          String   @db.VarChar(120)
+  activo          Boolean  @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  sessions      CashSession[]
+
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+/// Sesión de caja (apertura → cierre con arqueo)
+model CashSession {
+  id                 String            @id @default(uuid())
+  cashRegisterId     String
+  userId             String
+  estado             CashSessionStatus @default(ABIERTA)
+  montoApertura      Decimal           @default(0) @db.Decimal(18, 4)
+  montoCierreSistema Decimal?          @db.Decimal(18, 4)
+  montoCierreFisico  Decimal?          @db.Decimal(18, 4)
+  diferenciaArqueo   Decimal?          @db.Decimal(18, 4)
+  notasCierre        String?           @db.VarChar(500)
+  openedAt           DateTime          @default(now())
+  closedAt           DateTime?
+
+  cashRegister CashRegister   @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  movements    CashMovement[]
+  sales        Sale[]
+
+  @@index([cashRegisterId])
+  @@index([userId])
+  @@index([estado])
+}
+
+model CashMovement {
+  id            String           @id @default(uuid())
+  cashSessionId String
+  tipo          CashMovementType
+  monto         Decimal          @db.Decimal(18, 4)
+  metodoPago    PaymentMethod?
+  referencia    String?          @db.VarChar(120)
+  comentario    String?          @db.VarChar(500)
+  saleId        String?
+  createdAt     DateTime         @default(now())
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+  sale        Sale?       @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@index([cashSessionId])
+  @@index([saleId])
+}
+
+/// Promoción configurable por establecimiento
+model Promotion {
+  id              String        @id @default(uuid())
+  establishmentId String
+  codigo          String        @db.VarChar(40)
+  nombre          String        @db.VarChar(200)
+  tipo            PromotionType
+  valor           Decimal       @db.Decimal(18, 4)
+  cantidadMinima  Int?
+  activo          Boolean       @default(true)
+  validFrom       DateTime?
+  validTo         DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+
+  @@unique([establishmentId, codigo])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+/// Precio convenio por cliente y producto
+model CustomerProductPrice {
+  id         String  @id @default(uuid())
+  customerId String
+  productId  String
+  precio     Decimal @db.Decimal(18, 4)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId])
+  @@index([productId])
+}
+
+model Sale {
+  id                    String           @id @default(uuid())
+  establishmentId       String
+  warehouseId           String
+  cashSessionId         String?
+  customerId            String?
+  sellerId              String
+  quotationId           String?          @unique
+  documentType          SaleDocumentType @default(BOLETA)
+  serie                 String?          @db.VarChar(10)
+  numero                String?          @db.VarChar(20)
+  estado                SaleStatus       @default(COMPLETADA)
+  subtotal              Decimal          @db.Decimal(18, 4)
+  descuentoTotal        Decimal          @default(0) @db.Decimal(18, 4)
+  igvTotal              Decimal          @default(0) @db.Decimal(18, 4)
+  total                 Decimal          @db.Decimal(18, 4)
+  saleDiscountType      DiscountType?
+  saleDiscountValue     Decimal?         @db.Decimal(18, 4)
+  promotionCode         String?          @db.VarChar(40)
+  idempotencyKey        String?          @unique @db.VarChar(64)
+  prescriptionValidated Boolean          @default(false)
+  prescriptionNote      String?          @db.VarChar(500)
+  voidReason            String?          @db.VarChar(500)
+  voidedById            String?
+  voidedAt              DateTime?
+  comentario            String?          @db.VarChar(500)
+  deletedAt             DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  cashSession   CashSession?  @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  seller        User          @relation("SaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  voidedBy      User?         @relation("SaleVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  quotation     Quotation?    @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  items         SaleItem[]
+  payments      Payment[]
+  cashMovements CashMovement[]
+  returns       SaleReturn[]
+
+  @@index([establishmentId])
+  @@index([warehouseId])
+  @@index([customerId])
+  @@index([sellerId])
+  @@index([estado])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model SaleItem {
+  id              String        @id @default(uuid())
+  saleId          String
+  productId       String
+  cantidad        Decimal       @db.Decimal(18, 4)
+  precioUnitario  Decimal       @db.Decimal(18, 4)
+  discountType    DiscountType?
+  discountValue   Decimal?      @db.Decimal(18, 4)
+  subtotalLinea   Decimal       @db.Decimal(18, 4)
+  igvLinea        Decimal       @db.Decimal(18, 4)
+  totalLinea      Decimal       @db.Decimal(18, 4)
+  promotionLabel  String?       @db.VarChar(120)
+
+  sale     Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  lotLines SaleItemLot[]
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model SaleItemLot {
+  id         String  @id @default(uuid())
+  saleItemId String
+  codigoLote String  @db.VarChar(120)
+  cantidad   Decimal @db.Decimal(18, 4)
+
+  saleItem SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+
+  @@index([saleItemId])
+}
+
+model Payment {
+  id         String        @id @default(uuid())
+  saleId     String
+  metodo     PaymentMethod
+  monto      Decimal       @db.Decimal(18, 4)
+  referencia String?       @db.VarChar(120)
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+}
+
+model SaleReturn {
+  id          String   @id @default(uuid())
+  saleId      String
+  userId      String
+  motivo      String   @db.VarChar(500)
+  totalDevuelto Decimal @db.Decimal(18, 4)
+  createdAt   DateTime @default(now())
+
+  sale  Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items SaleReturnItem[]
+
+  @@index([saleId])
+}
+
+model SaleReturnItem {
+  id           String  @id @default(uuid())
+  saleReturnId String
+  saleItemId   String
+  cantidad     Decimal @db.Decimal(18, 4)
+  codigoLote   String? @db.VarChar(120)
+
+  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+
+  @@index([saleReturnId])
+}
+
+model Quotation {
+  id              String          @id @default(uuid())
+  establishmentId String
+  customerId      String?
+  sellerId        String
+  warehouseId     String
+  estado          QuotationStatus @default(BORRADOR)
+  validezDias     Int             @default(7)
+  subtotal        Decimal         @default(0) @db.Decimal(18, 4)
+  descuentoTotal  Decimal         @default(0) @db.Decimal(18, 4)
+  igvTotal        Decimal         @default(0) @db.Decimal(18, 4)
+  total           Decimal         @default(0) @db.Decimal(18, 4)
+  comentario      String?         @db.VarChar(500)
+  deletedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  establishment Establishment   @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  customer      Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  seller        User            @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  items         QuotationItem[]
+  sale          Sale?
+
+  @@index([establishmentId])
+  @@index([estado])
+  @@index([deletedAt])
+}
+
+model QuotationItem {
+  id             String  @id @default(uuid())
+  quotationId    String
+  productId      String
+  cantidad       Decimal @db.Decimal(18, 4)
+  precioUnitario Decimal @db.Decimal(18, 4)
+  discountType   DiscountType?
+  discountValue  Decimal? @db.Decimal(18, 4)
+  subtotalLinea  Decimal @db.Decimal(18, 4)
+  igvLinea       Decimal @db.Decimal(18, 4)
+  totalLinea     Decimal @db.Decimal(18, 4)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([quotationId])
+  @@index([productId])
+}

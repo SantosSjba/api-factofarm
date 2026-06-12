@@ -217,6 +217,27 @@ export class InventoryTransfersService {
     return { ok: true, message: 'Transferencia recibida en almacén destino' };
   }
 
+  async cancel(id: string, actorId?: string) {
+    const transfer = await this.loadTransfer(id);
+    if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
+      throw new BadRequestException('Solo se pueden anular transferencias en borrador');
+    }
+
+    await this.prisma.inventoryStockTransfer.update({
+      where: { id },
+      data: { estado: InventoryTransferStatus.ANULADO },
+    });
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'CANCEL',
+      entity: 'InventoryStockTransfer',
+      entityId: id,
+    });
+
+    return { ok: true, message: 'Transferencia anulada' };
+  }
+
   private async loadTransfer(id: string) {
     const transfer = await this.prisma.inventoryStockTransfer.findFirst({
       where: { id, deletedAt: null },

@@ -1,0 +1,727 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CashMovementType,
+  DocumentSeriesType,
+  PaymentMethod,
+  Prisma,
+  PromotionType,
+  QuotationStatus,
+  SaleDocumentType,
+  SaleStatus,
+} from '../../generated/prisma/client';
+import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  applySaleLevelDiscount,
+  computeSaleLineTotals,
+} from '../../common/utils/sale-pricing.util';
+import { PrismaService } from '../../prisma/prisma.service';
+import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
+import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
+import {
+  CreateSaleDto,
+  CreateSaleReturnDto,
+  VoidSaleDto,
+} from './dto/create-sale.dto';
+import { SaleListQueryDto } from './dto/sale-list-query.dto';
+
+const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
+  BOLETA: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
+  FACTURA: DocumentSeriesType.FACTURA_ELECTRONICA,
+  NOTA_VENTA: DocumentSeriesType.NOTA_VENTA,
+  TICKET: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
+};
+
+@Injectable()
+export class SalesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLogService,
+    private readonly inventory: InventoryMovementsService,
+  ) {}
+
+  async findAll(establishmentId: string, query: SaleListQueryDto) {
+    const { page, pageSize, skip, take } = paginationArgs(query);
+    const where: Prisma.SaleWhereInput = {
+      establishmentId,
+      deletedAt: null,
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.sellerId ? { sellerId: query.sellerId } : {}),
+      ...(query.estado ? { estado: query.estado } : {}),
+      ...(query.documentType ? { documentType: query.documentType } : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.sale.count({ where }),
+      this.prisma.sale.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          documentType: true,
+          serie: true,
+          numero: true,
+          estado: true,
+          subtotal: true,
+          descuentoTotal: true,
+          igvTotal: true,
+          total: true,
+          createdAt: true,
+          customer: { select: { id: true, nombre: true } },
+          seller: { select: { id: true, nombre: true } },
+        },
+      }),
+    ]);
+
+    return buildPaginatedResult(
+      rows.map((row) => ({
+        ...row,
+        subtotal: row.subtotal.toString(),
+        descuentoTotal: row.descuentoTotal.toString(),
+        igvTotal: row.igvTotal.toString(),
+        total: row.total.toString(),
+      })),
+      total,
+      page,
+      pageSize,
+    );
+  }
+
+  async findOne(id: string, establishmentId: string) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, establishmentId, deletedAt: null },
+      include: {
+        customer: { select: { id: true, nombre: true, numeroDocumento: true } },
+        seller: { select: { id: true, nombre: true } },
+        items: {
+          include: {
+            product: { select: { id: true, nombre: true, codigoInterno: true } },
+            lotLines: true,
+          },
+        },
+        payments: true,
+      },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    return this.mapSaleDetail(sale);
+  }
+
+  async create(
+    dto: CreateSaleDto,
+    actor: { sub: string; establecimientoId: string },
+    idempotencyKey?: string,
+  ) {
+    if (idempotencyKey?.trim()) {
+      const existing = await this.prisma.sale.findFirst({
+        where: { idempotencyKey: idempotencyKey.trim() },
+        select: { id: true },
+      });
+      if (existing) {
+        return this.findOne(existing.id, actor.establecimientoId);
+      }
+    }
+
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: {
+        id: dto.warehouseId,
+        establishmentId: actor.establecimientoId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!warehouse) throw new NotFoundException('Almacén no válido');
+
+    if (dto.cashSessionId) {
+      const session = await this.prisma.cashSession.findFirst({
+        where: {
+          id: dto.cashSessionId,
+          estado: 'ABIERTA',
+          cashRegister: { establishmentId: actor.establecimientoId },
+        },
+        select: { id: true },
+      });
+      if (!session) throw new BadRequestException('Sesión de caja no abierta');
+    }
+
+    const pricedItems = await this.buildPricedItems(dto, actor.establecimientoId);
+    const requiresRx = pricedItems.some((item) => item.necesitaRecetaMedica);
+    if (requiresRx && !dto.prescriptionValidated) {
+      throw new BadRequestException(
+        'La venta incluye productos con receta obligatoria. Valide la receta antes de confirmar.',
+      );
+    }
+
+    let subtotal = new Prisma.Decimal(0);
+    let igvTotal = new Prisma.Decimal(0);
+    let total = new Prisma.Decimal(0);
+    for (const item of pricedItems) {
+      subtotal = subtotal.plus(item.subtotalLinea);
+      igvTotal = igvTotal.plus(item.igvLinea);
+      total = total.plus(item.totalLinea);
+    }
+
+    let descuentoTotal = new Prisma.Decimal(0);
+    if (dto.saleDiscountType && dto.saleDiscountValue) {
+      const adjusted = applySaleLevelDiscount(
+        subtotal,
+        igvTotal,
+        total,
+        dto.saleDiscountType,
+        new Prisma.Decimal(dto.saleDiscountValue),
+      );
+      subtotal = adjusted.subtotal;
+      igvTotal = adjusted.igv;
+      total = adjusted.total;
+      descuentoTotal = adjusted.descuento;
+    }
+
+    if (dto.promotionCode?.trim()) {
+      const promoDiscount = await this.applyPromotion(
+        actor.establecimientoId,
+        dto.promotionCode.trim(),
+        pricedItems,
+        total,
+      );
+      if (promoDiscount.greaterThan(0)) {
+        descuentoTotal = descuentoTotal.plus(promoDiscount);
+        total = Prisma.Decimal.max(total.minus(promoDiscount), new Prisma.Decimal(0));
+      }
+    }
+
+    const paymentsTotal = dto.payments.reduce(
+      (acc, p) => acc.plus(new Prisma.Decimal(p.monto)),
+      new Prisma.Decimal(0),
+    );
+    if (!paymentsTotal.equals(total)) {
+      throw new BadRequestException('Los pagos no coinciden con el total de la venta');
+    }
+
+    const { serie, numero } = await this.resolveDocumentNumber(
+      actor.establecimientoId,
+      dto.documentType,
+      dto.serie,
+    );
+
+    const stockAllocations: Array<{
+      index: number;
+      asignacion: { codigoLote: string; cantidad: string }[];
+    }> = [];
+    for (let i = 0; i < pricedItems.length; i++) {
+      const priced = pricedItems[i];
+      const dispatch = await this.inventory.dispatchSaleStock(
+        {
+          productId: priced.productId,
+          warehouseId: dto.warehouseId,
+          quantity: Number(priced.cantidad.toString()),
+          mode: priced.lotAllocationMode ?? SaleLotAllocationMode.AUTO,
+          manualLots: priced.manualLots,
+          reference: `${serie}-${numero}`,
+          comment: 'Reserva previa venta POS',
+        },
+        actor.sub,
+      );
+      stockAllocations.push({ index: i, asignacion: dispatch.asignacion ?? [] });
+    }
+
+    const saleId = await this.prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.create({
+        data: {
+          establishmentId: actor.establecimientoId,
+          warehouseId: dto.warehouseId,
+          cashSessionId: dto.cashSessionId ?? null,
+          customerId: dto.customerId ?? null,
+          sellerId: actor.sub,
+          quotationId: dto.quotationId ?? null,
+          documentType: dto.documentType,
+          serie,
+          numero,
+          subtotal,
+          descuentoTotal,
+          igvTotal,
+          total,
+          saleDiscountType: dto.saleDiscountType ?? null,
+          saleDiscountValue:
+            dto.saleDiscountValue !== undefined
+              ? new Prisma.Decimal(dto.saleDiscountValue)
+              : null,
+          promotionCode: dto.promotionCode?.trim() || null,
+          idempotencyKey: idempotencyKey?.trim() || null,
+          prescriptionValidated: dto.prescriptionValidated ?? false,
+          prescriptionNote: dto.prescriptionNote?.trim() || null,
+          comentario: dto.comentario?.trim() || null,
+          items: {
+            create: pricedItems.map((item) => ({
+              productId: item.productId,
+              cantidad: item.cantidad,
+              precioUnitario: item.precioUnitario,
+              discountType: item.discountType ?? null,
+              discountValue: item.discountValue ?? null,
+              subtotalLinea: item.subtotalLinea,
+              igvLinea: item.igvLinea,
+              totalLinea: item.totalLinea,
+              promotionLabel: item.promotionLabel ?? null,
+            })),
+          },
+          payments: {
+            create: dto.payments.map((p) => ({
+              metodo: p.metodo,
+              monto: new Prisma.Decimal(p.monto),
+              referencia: p.referencia?.trim() || null,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+
+      for (const alloc of stockAllocations) {
+        const saleItem = sale.items[alloc.index];
+        if (alloc.asignacion.length > 0) {
+          await tx.saleItemLot.createMany({
+            data: alloc.asignacion.map((line) => ({
+              saleItemId: saleItem.id,
+              codigoLote: line.codigoLote,
+              cantidad: new Prisma.Decimal(line.cantidad),
+            })),
+          });
+        }
+      }
+
+      if (dto.cashSessionId) {
+        const cashTotal = dto.payments
+          .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
+          .reduce((acc, p) => acc.plus(new Prisma.Decimal(p.monto)), new Prisma.Decimal(0));
+        if (cashTotal.greaterThan(0)) {
+          await tx.cashMovement.create({
+            data: {
+              cashSessionId: dto.cashSessionId,
+              tipo: CashMovementType.VENTA,
+              monto: cashTotal,
+              metodoPago: PaymentMethod.EFECTIVO,
+              saleId: sale.id,
+              referencia: `${serie}-${numero}`,
+            },
+          });
+        }
+      }
+
+      if (dto.quotationId) {
+        await tx.quotation.update({
+          where: { id: dto.quotationId },
+          data: { estado: QuotationStatus.CONVERTIDA },
+        });
+      }
+
+      return sale.id;
+    });
+
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'CREATE',
+      entity: 'Sale',
+      entityId: saleId,
+    });
+
+    return this.findOne(saleId, actor.establecimientoId);
+  }
+
+  async voidSale(id: string, dto: VoidSaleDto, actor: { sub: string; establecimientoId: string }) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
+      include: { items: { include: { lotLines: true } } },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.estado !== SaleStatus.COMPLETADA) {
+      throw new BadRequestException('Solo se pueden anular ventas completadas');
+    }
+    if (sale.sellerId === actor.sub) {
+      throw new ForbiddenException('Otro usuario debe autorizar la anulación');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of sale.items) {
+        const delta = item.cantidad;
+        if (item.lotLines.length > 0) {
+          for (const lot of item.lotLines) {
+            await this.inventory.executeAdjustmentDelta({
+              productId: item.productId,
+              warehouseId: sale.warehouseId,
+              lotCode: lot.codigoLote,
+              delta: lot.cantidad,
+              reason: `Anulación venta ${sale.serie}-${sale.numero}: ${dto.reason}`,
+              userId: actor.sub,
+            });
+          }
+        } else {
+          await this.inventory.executeAdjustmentDelta({
+            productId: item.productId,
+            warehouseId: sale.warehouseId,
+            lotCode: null,
+            delta,
+            reason: `Anulación venta ${sale.serie}-${sale.numero}`,
+            userId: actor.sub,
+          });
+        }
+      }
+
+      await tx.sale.update({
+        where: { id },
+        data: {
+          estado: SaleStatus.ANULADA,
+          voidReason: dto.reason.trim(),
+          voidedById: actor.sub,
+          voidedAt: new Date(),
+        },
+      });
+
+      if (sale.cashSessionId) {
+        await tx.cashMovement.create({
+          data: {
+            cashSessionId: sale.cashSessionId,
+            tipo: CashMovementType.ANULACION,
+            monto: sale.total.negated(),
+            saleId: sale.id,
+            comentario: dto.reason.trim(),
+          },
+        });
+      }
+    });
+
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'VOID',
+      entity: 'Sale',
+      entityId: id,
+    });
+
+    return { ok: true, message: 'Venta anulada y stock revertido' };
+  }
+
+  async createReturn(
+    saleId: string,
+    dto: CreateSaleReturnDto,
+    actor: { sub: string; establecimientoId: string },
+  ) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
+      include: { items: true },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.estado === SaleStatus.ANULADA) {
+      throw new BadRequestException('No se puede devolver una venta anulada');
+    }
+
+    let totalDevuelto = new Prisma.Decimal(0);
+    for (const line of dto.items) {
+      const item = sale.items.find((row) => row.id === line.saleItemId);
+      if (!item) throw new BadRequestException('Ítem de venta no válido');
+      const qty = new Prisma.Decimal(line.quantity);
+      if (qty.greaterThan(item.cantidad)) {
+        throw new BadRequestException('Cantidad devuelta supera la vendida');
+      }
+      totalDevuelto = totalDevuelto.plus(
+        item.totalLinea.times(qty).div(item.cantidad),
+      );
+      await this.inventory.executeAdjustmentDelta({
+        productId: item.productId,
+        warehouseId: sale.warehouseId,
+        lotCode: line.lotCode?.trim() || null,
+        delta: qty,
+        reason: `Devolución venta ${sale.serie}-${sale.numero}`,
+        userId: actor.sub,
+      });
+    }
+
+    await this.prisma.saleReturn.create({
+      data: {
+        saleId,
+        userId: actor.sub,
+        motivo: dto.motivo.trim(),
+        totalDevuelto,
+        items: {
+          create: dto.items.map((line) => ({
+            saleItemId: line.saleItemId,
+            cantidad: new Prisma.Decimal(line.quantity),
+            codigoLote: line.lotCode?.trim() || null,
+          })),
+        },
+      },
+    });
+
+    const allReturned = dto.items.length === sale.items.length;
+    await this.prisma.sale.update({
+      where: { id: saleId },
+      data: {
+        estado: allReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
+      },
+    });
+
+    return { ok: true, message: 'Devolución registrada', totalDevuelto: totalDevuelto.toString() };
+  }
+
+  async posCatalog(establishmentId: string, warehouseId: string, search?: string) {
+    const term = search?.trim();
+    const products = await this.prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        habilitado: true,
+        ...(term
+          ? {
+              OR: [
+                { nombre: { contains: term, mode: 'insensitive' } },
+                { codigoInterno: { contains: term, mode: 'insensitive' } },
+                { codigoBarra: { contains: term, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+        warehouseStocks: { some: { warehouseId, cantidad: { gt: 0 } } },
+      },
+      take: 20,
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        nombre: true,
+        codigoInterno: true,
+        codigoBarra: true,
+        precioUnitarioVenta: true,
+        incluyeIgvVenta: true,
+        necesitaRecetaMedica: true,
+        manejaLotes: true,
+        saleTaxAffectation: { select: { codigo: true } },
+        warehouseStocks: {
+          where: { warehouseId },
+          select: { cantidad: true },
+        },
+      },
+    });
+
+    return products.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      codigoInterno: p.codigoInterno,
+      codigoBarra: p.codigoBarra,
+      precio: p.precioUnitarioVenta.toString(),
+      stock: p.warehouseStocks[0]?.cantidad.toString() ?? '0',
+      necesitaRecetaMedica: p.necesitaRecetaMedica,
+      manejaLotes: p.manejaLotes,
+    }));
+  }
+
+  private async buildPricedItems(dto: CreateSaleDto, establishmentId: string) {
+    const items: Array<{
+      productId: string;
+      cantidad: Prisma.Decimal;
+      precioUnitario: Prisma.Decimal;
+      discountType?: CreateSaleDto['items'][0]['discountType'];
+      discountValue?: Prisma.Decimal | null;
+      subtotalLinea: Prisma.Decimal;
+      igvLinea: Prisma.Decimal;
+      totalLinea: Prisma.Decimal;
+      necesitaRecetaMedica: boolean;
+      lotAllocationMode?: SaleLotAllocationMode;
+      manualLots?: { lotCode: string; quantity: number }[];
+      promotionLabel?: string;
+    }> = [];
+
+    for (const line of dto.items) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: line.productId, deletedAt: null, habilitado: true },
+        select: {
+          id: true,
+          precioUnitarioVenta: true,
+          incluyeIgvVenta: true,
+          necesitaRecetaMedica: true,
+          saleTaxAffectation: { select: { codigo: true } },
+        },
+      });
+      if (!product) throw new NotFoundException(`Producto no encontrado: ${line.productId}`);
+
+      const unitPrice = line.unitPrice
+        ? new Prisma.Decimal(line.unitPrice)
+        : await this.resolveUnitPrice(line.productId, dto.warehouseId, dto.customerId);
+
+      const qty = new Prisma.Decimal(line.quantity);
+      const totals = computeSaleLineTotals({
+        unitPrice,
+        quantity: qty,
+        incluyeIgv: product.incluyeIgvVenta,
+        taxCodigo: product.saleTaxAffectation.codigo,
+        discountType: line.discountType,
+        discountValue:
+          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+      });
+
+      items.push({
+        productId: product.id,
+        cantidad: qty,
+        precioUnitario: unitPrice,
+        discountType: line.discountType,
+        discountValue:
+          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+        ...totals,
+        necesitaRecetaMedica: product.necesitaRecetaMedica,
+        lotAllocationMode: line.lotAllocationMode,
+        manualLots: line.manualLots,
+      });
+    }
+
+    return items;
+  }
+
+  private async resolveUnitPrice(productId: string, warehouseId: string, customerId?: string) {
+    if (customerId) {
+      const custom = await this.prisma.customerProductPrice.findUnique({
+        where: { customerId_productId: { customerId, productId } },
+        select: { precio: true },
+      });
+      if (custom) return custom.precio;
+    }
+    const whPrice = await this.prisma.productWarehousePrice.findUnique({
+      where: { productId_warehouseId: { productId, warehouseId } },
+      select: { precio: true },
+    });
+    if (whPrice) return whPrice.precio;
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId },
+      select: { precioUnitarioVenta: true },
+    });
+    return product!.precioUnitarioVenta;
+  }
+
+  private async resolveDocumentNumber(
+    establishmentId: string,
+    documentType: SaleDocumentType,
+    serieInput?: string,
+  ) {
+    const seriesType = DOC_SERIES_MAP[documentType];
+    const series = await this.prisma.establishmentSeries.findFirst({
+      where: { establishmentId, documentType: seriesType },
+      orderBy: { numero: 'asc' },
+      select: { numero: true },
+    });
+    const serie = serieInput?.trim() || series?.numero || 'NV01';
+
+    const last = await this.prisma.sale.findFirst({
+      where: { establishmentId, documentType, serie },
+      orderBy: { numero: 'desc' },
+      select: { numero: true },
+    });
+    const next = String((Number.parseInt(last?.numero ?? '0', 10) || 0) + 1).padStart(8, '0');
+    return { serie, numero: next };
+  }
+
+  private async applyPromotion(
+    establishmentId: string,
+    code: string,
+    items: { cantidad: Prisma.Decimal; totalLinea: Prisma.Decimal }[],
+    saleTotal: Prisma.Decimal,
+  ) {
+    const promo = await this.prisma.promotion.findFirst({
+      where: {
+        establishmentId,
+        codigo: code,
+        activo: true,
+        deletedAt: null,
+        OR: [{ validFrom: null }, { validFrom: { lte: new Date() } }],
+      },
+    });
+    if (!promo) return new Prisma.Decimal(0);
+    if (promo.validTo && promo.validTo.getTime() < Date.now()) {
+      return new Prisma.Decimal(0);
+    }
+
+    switch (promo.tipo) {
+      case PromotionType.PORCENTAJE_VENTA:
+        return saleTotal.times(promo.valor).div(100);
+      case PromotionType.CANTIDAD_MINIMA: {
+        const qty = items.reduce((acc, row) => acc.plus(row.cantidad), new Prisma.Decimal(0));
+        if (promo.cantidadMinima && qty.greaterThanOrEqualTo(promo.cantidadMinima)) {
+          return promo.valor;
+        }
+        return new Prisma.Decimal(0);
+      }
+      default:
+        return new Prisma.Decimal(0);
+    }
+  }
+
+  private mapSaleDetail(sale: {
+    id: string;
+    documentType: SaleDocumentType;
+    serie: string | null;
+    numero: string | null;
+    estado: SaleStatus;
+    subtotal: Prisma.Decimal;
+    descuentoTotal: Prisma.Decimal;
+    igvTotal: Prisma.Decimal;
+    total: Prisma.Decimal;
+    prescriptionValidated: boolean;
+    prescriptionNote: string | null;
+    comentario: string | null;
+    createdAt: Date;
+    customer: { id: string; nombre: string; numeroDocumento: string } | null;
+    seller: { id: string; nombre: string };
+    items: Array<{
+      id: string;
+      cantidad: Prisma.Decimal;
+      precioUnitario: Prisma.Decimal;
+      subtotalLinea: Prisma.Decimal;
+      igvLinea: Prisma.Decimal;
+      totalLinea: Prisma.Decimal;
+      product: { id: string; nombre: string; codigoInterno: string | null };
+      lotLines: Array<{ codigoLote: string; cantidad: Prisma.Decimal }>;
+    }>;
+    payments: Array<{ metodo: PaymentMethod; monto: Prisma.Decimal; referencia: string | null }>;
+  }) {
+    return {
+      id: sale.id,
+      documentType: sale.documentType,
+      serie: sale.serie,
+      numero: sale.numero,
+      estado: sale.estado,
+      subtotal: sale.subtotal.toString(),
+      descuentoTotal: sale.descuentoTotal.toString(),
+      igvTotal: sale.igvTotal.toString(),
+      total: sale.total.toString(),
+      prescriptionValidated: sale.prescriptionValidated,
+      prescriptionNote: sale.prescriptionNote,
+      comentario: sale.comentario,
+      createdAt: sale.createdAt.toISOString(),
+      customer: sale.customer,
+      seller: sale.seller,
+      items: sale.items.map((item) => ({
+        id: item.id,
+        producto: item.product.nombre,
+        codigoInterno: item.product.codigoInterno,
+        cantidad: item.cantidad.toString(),
+        precioUnitario: item.precioUnitario.toString(),
+        subtotalLinea: item.subtotalLinea.toString(),
+        igvLinea: item.igvLinea.toString(),
+        totalLinea: item.totalLinea.toString(),
+        lotes: item.lotLines.map((lot) => ({
+          codigoLote: lot.codigoLote,
+          cantidad: lot.cantidad.toString(),
+        })),
+      })),
+      payments: sale.payments.map((p) => ({
+        metodo: p.metodo,
+        monto: p.monto.toString(),
+        referencia: p.referencia,
+      })),
+    };
+  }
+}

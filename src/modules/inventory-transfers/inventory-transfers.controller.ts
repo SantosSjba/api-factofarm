@@ -43,4 +43,12 @@ export class InventoryTransfersController {
   receive(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
     return this.service.receive(id, actor.sub);
   }
+
+  @Post(':id/cancel')
+  @RequirePermissions('inventory.write', 'nav.traslados')
+  @ApiOperation({ summary: 'Anular transferencia en borrador' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.cancel(id, actor.sub);
+  }
 }

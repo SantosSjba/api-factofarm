@@ -157,11 +157,13 @@ export class InventoryPhysicalCountsService {
     });
     if (!count) throw new NotFoundException('Conteo no encontrado o ya finalizado');
 
+    let applied = 0;
+    let pendingApproval = 0;
     for (const item of count.items) {
       const delta = item.stockContado.minus(item.stockSistema);
       if (delta.isZero()) continue;
 
-      await this.movements.createAdjustment(
+      const result = await this.movements.createAdjustment(
         {
           productId: item.productId,
           warehouseId: count.warehouseId,
@@ -171,6 +173,18 @@ export class InventoryPhysicalCountsService {
         },
         actorId,
       );
+      if (result.pendingApproval) pendingApproval += 1;
+      else if (result.applied) applied += 1;
+    }
+
+    if (pendingApproval > 0) {
+      return {
+        ok: true,
+        finalized: false,
+        applied,
+        pendingApproval,
+        message: `${applied} ajuste(s) aplicados; ${pendingApproval} pendiente(s) de aprobación. El conteo permanece en proceso hasta aprobar los ajustes.`,
+      };
     }
 
     await this.prisma.inventoryPhysicalCount.update({
@@ -185,7 +199,13 @@ export class InventoryPhysicalCountsService {
       entityId: countId,
     });
 
-    return { ok: true, message: 'Conteo finalizado; ajustes generados según diferencias' };
+    return {
+      ok: true,
+      finalized: true,
+      applied,
+      pendingApproval: 0,
+      message: 'Conteo finalizado; ajustes generados según diferencias',
+    };
   }
 
   private async loadOpenCount(id: string) {

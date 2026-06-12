@@ -27,6 +27,12 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.reporte_inventario': ['inventory.read'],
   'nav.kardex_valorizado': ['inventory.read'],
   'nav.devolucion_retiro': ['inventory.read', 'inventory.write', 'inventory.adjust'],
+  'nav.cadena_frio': ['inventory.read', 'inventory.write'],
+  'nav.punto_venta': ['sales.read', 'sales.write', 'cash.open'],
+  'nav.caja_chica_pos': ['cash.open', 'cash.close', 'sales.read'],
+  'nav.notas_venta': ['sales.read'],
+  'nav.anulaciones': ['sales.read', 'sales.void'],
+  'nav.cotizaciones': ['sales.read', 'sales.write'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);

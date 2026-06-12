@@ -53,6 +53,10 @@ model Establishment {
   series            EstablishmentSeries[]
   warehouses        Warehouse[]
   productLocations  ProductLocation[]
+  cashRegisters     CashRegister[]
+  promotions        Promotion[]
+  sales             Sale[]
+  quotations        Quotation[]
 
   @@index([departmentId])
   @@index([provinceId])

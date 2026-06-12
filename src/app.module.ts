@@ -36,6 +36,9 @@ import { WarehouseZonesModule } from './modules/warehouse-zones/warehouse-zones.
 import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
 import { ColdChainModule } from './modules/cold-chain/cold-chain.module';
 import { InventoryPhysicalCountsModule } from './modules/inventory-physical-counts/inventory-physical-counts.module';
+import { SalesModule } from './modules/sales/sales.module';
+import { CashRegistersModule } from './modules/cash-registers/cash-registers.module';
+import { QuotationsModule } from './modules/quotations/quotations.module';
 
 @Module({
   imports: [
@@ -106,6 +109,9 @@ import { InventoryPhysicalCountsModule } from './modules/inventory-physical-coun
     InventoryTransfersModule,
     ColdChainModule,
     InventoryPhysicalCountsModule,
+    SalesModule,
+    CashRegistersModule,
+    QuotationsModule,
   ],
   controllers: [AppController],
   providers: [

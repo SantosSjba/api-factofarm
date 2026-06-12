@@ -41,6 +41,11 @@ const RBAC: RbacRow[] = [
   { code: 'inventory.read', description: 'Consultar inventario, lotes y kardex' },
   { code: 'inventory.write', description: 'Registrar ingresos, salidas y transferencias' },
   { code: 'inventory.adjust', description: 'Ajustes de inventario y autorizaciones especiales' },
+  { code: 'sales.read', description: 'Consultar ventas y cotizaciones' },
+  { code: 'sales.write', description: 'Registrar ventas y cotizaciones' },
+  { code: 'sales.void', description: 'Anular ventas' },
+  { code: 'cash.open', description: 'Apertura de caja y movimientos' },
+  { code: 'cash.close', description: 'Cierre de caja y arqueo' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
@@ -128,6 +133,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.kardex_valorizado', label: 'Kardex valorizado', sortOrder: 6 },
       { code: 'nav.lotes', label: 'Lotes', sortOrder: 7 },
       { code: 'nav.salida_venta_lotes', label: 'Salida venta (lotes)', sortOrder: 8 },
+      { code: 'nav.cadena_frio', label: 'Cadena de frío', sortOrder: 9 },
     ],
   },
   {

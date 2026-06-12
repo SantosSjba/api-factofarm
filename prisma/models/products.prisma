@@ -78,6 +78,8 @@ model Warehouse {
   transfersTo      InventoryStockTransfer[] @relation("TransferToWarehouse")
   physicalCounts   InventoryPhysicalCount[]
   pendingAdjustments InventoryPendingAdjustment[]
+  sales              Sale[]
+  quotations         Quotation[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -218,6 +220,9 @@ model Product {
   transferItems   InventoryStockTransferItem[]
   physicalCountItems InventoryPhysicalCountItem[]
   pendingAdjustments InventoryPendingAdjustment[]
+  customerProductPrices CustomerProductPrice[]
+  saleItems          SaleItem[]
+  quotationItems     QuotationItem[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?

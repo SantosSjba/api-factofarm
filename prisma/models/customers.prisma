@@ -51,7 +51,10 @@ model Customer {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  addresses CustomerAddress[]
+  addresses            CustomerAddress[]
+  customerProductPrices CustomerProductPrice[]
+  sales                Sale[]
+  quotations           Quotation[]
 
   @@index([deletedAt])
   @@index([customerTypeId])
