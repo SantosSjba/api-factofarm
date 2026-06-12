@@ -231,6 +231,21 @@ export class CreateProductDto {
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
+  esControlado?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  esRefrigerado?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  esHospitalario?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
   necesitaRecetaMedica?: boolean;
 
   @ApiPropertyOptional({ default: false })
@@ -313,6 +328,17 @@ export class CreateProductDto {
   @IsInt()
   @Min(0)
   stockMinimo?: number;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  stockMaximo?: number;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  administrationRouteId?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

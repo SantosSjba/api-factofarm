@@ -1,0 +1,38 @@
+/// Campo de precio registrado en el historial
+enum ProductPriceField {
+  PRECIO_VENTA
+  PRECIO_COMPRA
+  COSTO_UNITARIO
+  PRECIO_ALMACEN
+  PRESENTACION_PRECIO_1
+  PRESENTACION_PRECIO_2
+  PRESENTACION_PRECIO_3
+}
+
+/// Origen del cambio de precio
+enum ProductPriceChangeSource {
+  MANUAL
+  IMPORT
+  DUPLICATE
+}
+
+model ProductPriceHistory {
+  id             String                   @id @default(uuid())
+  productId      String
+  field          ProductPriceField
+  warehouseId    String?
+  presentationKey String?                 @db.VarChar(120)
+  previousValue  Decimal?                 @db.Decimal(18, 4)
+  newValue       Decimal                  @db.Decimal(18, 4)
+  changedById    String?
+  source         ProductPriceChangeSource @default(MANUAL)
+  createdAt      DateTime                 @default(now())
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  changedBy User?      @relation("ProductPriceHistoryChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([warehouseId])
+  @@index([changedById])
+}

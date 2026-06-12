@@ -9,4 +9,5 @@ export type PermissionMenuNode = {
 
 export interface IPermissionsRepository {
   findMenuTreeRoot(rootCode: string): Promise<PermissionMenuNode | null>;
+  findMenuTreeRoots(rootCodes: string[]): Promise<PermissionMenuNode[]>;
 }

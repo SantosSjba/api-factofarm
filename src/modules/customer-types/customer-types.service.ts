@@ -1,5 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
+import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerTypeDto } from './dto/create-customer-type.dto';
 import { UpdateCustomerTypeDto } from './dto/update-customer-type.dto';
@@ -13,48 +19,61 @@ const selectCustomerType = {
 
 @Injectable()
 export class CustomerTypesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLogService,
+  ) {}
 
-  findAll(filters?: { search?: string; field?: string }) {
-    const search = filters?.search?.trim();
-    const field = filters?.field?.trim().toLowerCase();
+  async findAll(filters?: MaestroListQueryDto) {
+    const where = this.buildWhere(filters);
 
-    const searchableFields: Prisma.CustomerTypeWhereInput[] = [
-      { descripcion: { contains: search, mode: 'insensitive' } },
-    ];
+    if (filters?.page == null) {
+      return this.prisma.customerType.findMany({
+        where,
+        orderBy: { descripcion: 'asc' },
+        select: selectCustomerType,
+      });
+    }
 
-    const where: Prisma.CustomerTypeWhereInput = {
-      deletedAt: null,
-      ...(search
-        ? {
-            OR:
-              field === 'descripcion' || !field || field === 'all'
-                ? searchableFields
-                : searchableFields,
-          }
-        : {}),
-    };
-
-    return this.prisma.customerType.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: selectCustomerType,
+    const { page, pageSize, skip, take } = paginationArgs({
+      page: filters.page,
+      pageSize: filters.pageSize,
     });
+
+    const [items, total] = await Promise.all([
+      this.prisma.customerType.findMany({
+        where,
+        orderBy: { descripcion: 'asc' },
+        skip,
+        take,
+        select: selectCustomerType,
+      }),
+      this.prisma.customerType.count({ where }),
+    ]);
+
+    return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateCustomerTypeDto) {
+  async create(dto: CreateCustomerTypeDto, actorId?: string) {
     const descripcion = this.normalizeDescripcion(dto.descripcion);
     try {
-      return await this.prisma.customerType.create({
+      const created = await this.prisma.customerType.create({
         data: { descripcion },
         select: selectCustomerType,
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'CustomerType',
+        entityId: created.id,
+      });
+      return created;
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async update(id: string, dto: UpdateCustomerTypeDto) {
+  async update(id: string, dto: UpdateCustomerTypeDto, actorId?: string) {
     const current = await this.prisma.customerType.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -69,17 +88,25 @@ export class CustomerTypesService {
     }
 
     try {
-      return await this.prisma.customerType.update({
+      const updated = await this.prisma.customerType.update({
         where: { id },
         data,
         select: selectCustomerType,
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'CustomerType',
+        entityId: id,
+        diff: dto,
+      });
+      return updated;
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId?: string) {
     const current = await this.prisma.customerType.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -87,10 +114,38 @@ export class CustomerTypesService {
     if (!current) {
       throw new NotFoundException('Tipo de cliente no encontrado');
     }
+
     await this.prisma.customerType.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'CustomerType',
+      entityId: id,
+    });
+  }
+
+  private buildWhere(filters?: MaestroListQueryDto): Prisma.CustomerTypeWhereInput {
+    const search = filters?.search?.trim();
+    const field = filters?.field?.trim().toLowerCase();
+
+    const searchableFields: Prisma.CustomerTypeWhereInput[] = [
+      { descripcion: { contains: search, mode: 'insensitive' } },
+    ];
+
+    return {
+      deletedAt: null,
+      ...(search
+        ? {
+            OR:
+              field === 'descripcion' || !field || field === 'all'
+                ? searchableFields
+                : searchableFields,
+          }
+        : {}),
+    };
   }
 
   private normalizeDescripcion(value: string): string {

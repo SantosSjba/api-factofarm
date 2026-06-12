@@ -27,6 +27,7 @@ model Customer {
   numeroDocumento     String
   nacionalidad        String?              @default("PERU")
   diasCredito         Int                  @default(0)
+  limiteCredito       Decimal?             @db.Decimal(18, 4)
   codigoInterno       String?
   codigoBarra         String?
   observaciones       String?

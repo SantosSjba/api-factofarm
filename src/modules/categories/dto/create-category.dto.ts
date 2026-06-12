@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'FERTILIZANTES', maxLength: 120 })
@@ -7,4 +7,9 @@ export class CreateCategoryDto {
   @IsNotEmpty()
   @MaxLength(120)
   nombre!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Categoría padre (subcategoría)' })
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
 }

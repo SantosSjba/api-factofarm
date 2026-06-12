@@ -5,13 +5,6 @@ import { adminDemoCredentials } from '../data/admin-demo';
 
 const SALT_ROUNDS = 10;
 
-const ADMIN_PERMISSION_CODES = [
-  'users.read',
-  'users.write',
-  'nav.usuarios',
-  'nav.establecimientos',
-] as const;
-
 export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
   const { email, passwordPlain } = adminDemoCredentials;
 
@@ -47,10 +40,10 @@ export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
       },
     });
 
-    await assignPermissionsToUser(prisma, admin.id);
+    await syncAllPermissionsToUser(prisma, admin.id);
     console.info('Seed: usuario administrador creado.');
   } else {
-    await assignPermissionsToUser(prisma, existing.id);
+    await syncAllPermissionsToUser(prisma, existing.id);
     console.info('Seed: usuario administrador ya existía; permisos sincronizados.');
   }
 
@@ -58,24 +51,17 @@ export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
   console.info(`  ${email} / ${passwordPlain}`);
 }
 
-async function assignPermissionsToUser(
+/** Asigna todos los permisos del catálogo al admin demo (desarrollo). */
+async function syncAllPermissionsToUser(
   prisma: PrismaClient,
   userId: string,
 ): Promise<void> {
-  for (const code of ADMIN_PERMISSION_CODES) {
-    const perm = await prisma.permission.findUnique({
-      where: { code },
-    });
-    if (!perm) {
-      console.warn(`Seed admin: falta permiso ${code}, omitiendo asignación.`);
-      continue;
-    }
-    await prisma.userPermission.upsert({
-      where: {
-        userId_permissionId: { userId, permissionId: perm.id },
-      },
-      create: { userId, permissionId: perm.id },
-      update: {},
-    });
-  }
+  const permissions = await prisma.permission.findMany({ select: { id: true } });
+  await prisma.userPermission.deleteMany({ where: { userId } });
+  if (permissions.length === 0) return;
+
+  await prisma.userPermission.createMany({
+    data: permissions.map((p) => ({ userId, permissionId: p.id })),
+    skipDuplicates: true,
+  });
 }

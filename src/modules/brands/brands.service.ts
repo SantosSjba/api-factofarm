@@ -1,5 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
+import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
@@ -13,45 +19,61 @@ const selectBrand = {
 
 @Injectable()
 export class BrandsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLogService,
+  ) {}
 
-  findAll(filters?: { search?: string; field?: string }) {
-    const search = filters?.search?.trim();
-    const field = filters?.field?.trim().toLowerCase();
+  async findAll(filters?: MaestroListQueryDto) {
+    const where = this.buildWhere(filters);
 
-    const searchableFields: Prisma.BrandWhereInput[] = [
-      { nombre: { contains: search, mode: 'insensitive' } },
-    ];
+    if (filters?.page == null) {
+      return this.prisma.brand.findMany({
+        where,
+        orderBy: { nombre: 'asc' },
+        select: selectBrand,
+      });
+    }
 
-    const where: Prisma.BrandWhereInput = {
-      deletedAt: null,
-      ...(search
-        ? {
-            OR: field === 'nombre' || !field || field === 'all' ? searchableFields : searchableFields,
-          }
-        : {}),
-    };
-
-    return this.prisma.brand.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: selectBrand,
+    const { page, pageSize, skip, take } = paginationArgs({
+      page: filters.page,
+      pageSize: filters.pageSize,
     });
+
+    const [items, total] = await Promise.all([
+      this.prisma.brand.findMany({
+        where,
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+        select: selectBrand,
+      }),
+      this.prisma.brand.count({ where }),
+    ]);
+
+    return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateBrandDto) {
+  async create(dto: CreateBrandDto, actorId?: string) {
     const nombre = this.normalizeNombre(dto.nombre);
     try {
-      return await this.prisma.brand.create({
+      const created = await this.prisma.brand.create({
         data: { nombre },
         select: selectBrand,
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'Brand',
+        entityId: created.id,
+      });
+      return created;
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async update(id: string, dto: UpdateBrandDto) {
+  async update(id: string, dto: UpdateBrandDto, actorId?: string) {
     const current = await this.prisma.brand.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -66,17 +88,25 @@ export class BrandsService {
     }
 
     try {
-      return await this.prisma.brand.update({
+      const updated = await this.prisma.brand.update({
         where: { id },
         data,
         select: selectBrand,
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'Brand',
+        entityId: id,
+        diff: dto,
+      });
+      return updated;
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId?: string) {
     const current = await this.prisma.brand.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -89,6 +119,33 @@ export class BrandsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'Brand',
+      entityId: id,
+    });
+  }
+
+  private buildWhere(filters?: MaestroListQueryDto): Prisma.BrandWhereInput {
+    const search = filters?.search?.trim();
+    const field = filters?.field?.trim().toLowerCase();
+
+    const searchableFields: Prisma.BrandWhereInput[] = [
+      { nombre: { contains: search, mode: 'insensitive' } },
+    ];
+
+    return {
+      deletedAt: null,
+      ...(search
+        ? {
+            OR:
+              field === 'nombre' || !field || field === 'all'
+                ? searchableFields
+                : searchableFields,
+          }
+        : {}),
+    };
   }
 
   private normalizeNombre(value: string): string {

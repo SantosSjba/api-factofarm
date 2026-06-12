@@ -25,6 +25,12 @@ import { CompoundProductsModule } from './modules/compound-products/compound-pro
 import { SeriesModule } from './modules/series/series.module';
 import { InventoryMovementsModule } from './modules/inventory-movements/inventory-movements.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { LaboratoriesModule } from './modules/laboratories/laboratories.module';
+import { PharmaceuticalFormsModule } from './modules/pharmaceutical-forms/pharmaceutical-forms.module';
+import { ActivePrinciplesModule } from './modules/active-principles/active-principles.module';
+import { UnitsModule } from './modules/units/units.module';
+import { AdministrationRoutesModule } from './modules/administration-routes/administration-routes.module';
 
 @Module({
   imports: [
@@ -84,6 +90,12 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     SeriesModule,
     InventoryMovementsModule,
     DashboardModule,
+    SuppliersModule,
+    LaboratoriesModule,
+    PharmaceuticalFormsModule,
+    ActivePrinciplesModule,
+    UnitsModule,
+    AdministrationRoutesModule,
   ],
   controllers: [AppController],
   providers: [

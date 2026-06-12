@@ -6,6 +6,15 @@ import type { IPermissionsRepository, PermissionMenuNode } from '../domain/permi
 export class PrismaPermissionsRepository implements IPermissionsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findMenuTreeRoots(rootCodes: string[]): Promise<PermissionMenuNode[]> {
+    const trees: PermissionMenuNode[] = [];
+    for (const code of rootCodes) {
+      const tree = await this.findMenuTreeRoot(code);
+      if (tree) trees.push(tree);
+    }
+    return trees;
+  }
+
   async findMenuTreeRoot(rootCode: string): Promise<PermissionMenuNode | null> {
     const row = await this.prisma.permission.findFirst({
       where: { code: rootCode },

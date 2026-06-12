@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -49,6 +50,13 @@ export class CreateCustomerDto {
   @IsInt()
   @Min(0)
   diasCredito?: number;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  limiteCredito?: number;
 
   @ApiPropertyOptional({ maxLength: 30 })
   @IsOptional()

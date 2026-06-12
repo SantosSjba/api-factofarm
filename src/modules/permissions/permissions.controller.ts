@@ -16,4 +16,10 @@ export class PermissionsController {
   menuTree() {
     return this.permissionsService.menuTree();
   }
+
+  @Get('menu-trees')
+  @ApiOperation({ summary: 'Árboles de permisos del menú lateral (Fase 0 + Fase 1)' })
+  menuTrees() {
+    return this.permissionsService.menuTrees();
+  }
 }

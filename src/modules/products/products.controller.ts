@@ -13,53 +13,73 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateProductLocationDto } from './dto/create-product-location.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ImportProductsDto } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
+import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
+import { SetProductEquivalentsDto } from './dto/set-product-equivalents.dto';
+import { UpsertProductSupplierDto } from './dto/upsert-product-supplier.dto';
 import { ProductsService } from './products.service';
 
 @ApiTags('products')
+@ApiBearerAuth()
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get('catalogs/units')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Catálogo de unidades de medida' })
   catalogUnits() {
     return this.productsService.listUnits();
   }
 
   @Get('catalogs/currencies')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Catálogo de monedas' })
   catalogCurrencies() {
     return this.productsService.listCurrencies();
   }
 
   @Get('catalogs/tax-affectation-types')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Catálogo de tipos de afectación al IGV' })
   catalogTaxTypes() {
     return this.productsService.listTaxAffectationTypes();
   }
 
   @Get('catalogs/warehouses')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Almacenes por establecimiento' })
   catalogWarehouses() {
     return this.productsService.listWarehouses();
   }
 
   @Get('catalogs/product-locations')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Ubicaciones de producto por establecimiento' })
   catalogLocations(@Query('establishmentId') establishmentId?: string) {
     return this.productsService.listProductLocations(establishmentId);
   }
 
   @Post('catalogs/product-locations')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Crear ubicación de producto por establecimiento' })
   @ApiBody({ type: CreateProductLocationDto })
   createLocation(@Body() dto: CreateProductLocationDto) {
@@ -67,74 +87,200 @@ export class ProductsController {
   }
 
   @Get('catalogs/attribute-types')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Tipos de atributo para el listado dinámico' })
   catalogAttributeTypes() {
     return this.productsService.listAttributeTypes();
   }
 
   @Get('catalogs/isc-systems')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Catálogo de tipos de sistema ISC' })
   catalogIscSystems() {
     return this.productsService.listIscSystems();
   }
 
+  @Get(':id/equivalents')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Productos bioequivalentes / genéricos relacionados' })
+  listEquivalents(@Param('id') id: string) {
+    return this.productsService.listEquivalents(id);
+  }
+
+  @Post(':id/equivalents')
+  @RequirePermissions('products.write')
+  @ApiOperation({ summary: 'Definir productos bioequivalentes' })
+  setEquivalents(
+    @Param('id') id: string,
+    @Body() dto: SetProductEquivalentsDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.setEquivalents(id, dto.equivalentProductIds, actor.sub);
+  }
+
+  @Get(':id/suppliers')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Proveedores vinculados al producto' })
+  listSuppliers(@Param('id') id: string) {
+    return this.productsService.listSupplierLinks(id);
+  }
+
+  @Post(':id/suppliers')
+  @RequirePermissions('products.write')
+  @ApiOperation({ summary: 'Vincular o actualizar proveedor del producto' })
+  upsertSupplier(
+    @Param('id') id: string,
+    @Body() dto: UpsertProductSupplierDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.upsertSupplierLink(id, dto, actor.sub);
+  }
+
+  @Delete(':id/suppliers/:supplierId')
+  @RequirePermissions('products.write')
+  @ApiOperation({ summary: 'Desvincular proveedor del producto' })
+  removeSupplier(
+    @Param('id') id: string,
+    @Param('supplierId') supplierId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.removeSupplierLink(id, supplierId, actor.sub);
+  }
+
   @Get(':id/history/stock')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Historial de stock por ubicación del producto' })
   historyStock(@Param('id') id: string) {
     return this.productsService.historyStock(id);
   }
 
+  @Get(':id/history/prices')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Historial de cambios de precio del producto' })
+  historyPrices(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
+    return this.productsService.listPriceHistory(id, query);
+  }
+
   @Get(':id/stock')
+  @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Stock de producto y lista de precios creados' })
   stock(@Param('id') id: string) {
     return this.productsService.stockSummary(id);
   }
 
+  @Get(':id')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Detalle completo del producto' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  findOne(@Param('id') id: string) {
+    return this.productsService.findOne(id);
+  }
+
   @Get()
+  @RequirePermissions('products.read', 'nav.productos')
   @ApiOperation({ summary: 'Listar productos con paginación' })
   list(@Query() query: ProductListQueryDto) {
     return this.productsService.list(query);
   }
 
   @Post()
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Crear producto' })
   @ApiBody({ type: CreateProductDto })
-  create(@Body() dto: CreateProductDto) {
-    return this.productsService.create(dto);
+  create(@Body() dto: CreateProductDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.create(dto, actor.sub);
   }
 
   @Patch(':id')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Actualizar producto' })
   @ApiBody({ type: CreateProductDto })
-  update(@Param('id') id: string, @Body() dto: CreateProductDto) {
-    return this.productsService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: CreateProductDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.update(id, dto, actor.sub);
   }
 
   @Delete(':id')
+  @RequirePermissions('products.delete')
   @ApiOperation({ summary: 'Eliminar (lógico) producto' })
-  remove(@Param('id') id: string) {
-    return this.productsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.remove(id, actor.sub);
   }
 
   @Post(':id/duplicate')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Duplicar producto' })
-  duplicate(@Param('id') id: string) {
-    return this.productsService.duplicate(id);
+  duplicate(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.duplicate(id, actor.sub);
   }
 
   @Patch(':id/status')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Actualizar estado habilitado del producto' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateProductStatusDto) {
-    return this.productsService.updateStatus(id, dto);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductStatusDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.updateStatus(id, dto, actor.sub);
   }
 
   @Patch(':id/barcode')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Actualizar código de barras del producto' })
-  updateBarcode(@Param('id') id: string, @Body() dto: UpdateProductBarcodeDto) {
-    return this.productsService.updateBarcode(id, dto);
+  updateBarcode(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductBarcodeDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.updateBarcode(id, dto, actor.sub);
+  }
+
+  @Post('export')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Exportar catálogo de productos a Excel' })
+  async exportProducts(@Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
+    const buffer = await this.productsService.buildExportBuffer();
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent('productos-export.xlsx')}`,
+    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return new StreamableFile(buffer);
+  }
+
+  @Post('import/preview')
+  @RequirePermissions('products.write')
+  @ApiOperation({ summary: 'Vista previa de importación sin persistir cambios' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'] },
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['mode', 'file'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
+  previewImportProducts(
+    @Body() dto: ImportProductsDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.productsService.previewImportFromExcel(dto.mode, file);
   }
 
   @Post('import')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Importar productos (productos, lista de precios, actualizar precios)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -153,11 +299,16 @@ export class ProductsController {
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
-  importProducts(@Body() dto: ImportProductsDto, @UploadedFile() file: Express.Multer.File) {
-    return this.productsService.importFromExcel(dto.mode, file);
+  importProducts(
+    @Body() dto: ImportProductsDto,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.importFromExcel(dto.mode, file, actor.sub);
   }
 
   @Get('import/template')
+  @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Descargar plantilla de importación por modo' })
   async downloadImportTemplate(
     @Query('mode') mode: ImportProductsDto['mode'],

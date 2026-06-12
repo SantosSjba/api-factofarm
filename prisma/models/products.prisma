@@ -67,6 +67,7 @@ model Warehouse {
   establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
 
   productPrices ProductWarehousePrice[]
+  priceHistory  ProductPriceHistory[]
   productStocks ProductWarehouseStock[]
   productLotStocks ProductLotStock[]
   serials ProductSerial[]
@@ -155,6 +156,9 @@ model Product {
   incluyeIgvVenta   Boolean @default(true)
   incluyeIgvCompra  Boolean @default(true)
   generico                  Boolean  @default(false)
+  esControlado              Boolean  @default(false)
+  esRefrigerado             Boolean  @default(false)
+  esHospitalario            Boolean  @default(false)
   necesitaRecetaMedica      Boolean  @default(false)
   calcularCantidadPorPrecio Boolean  @default(false)
   manejaLotes               Boolean  @default(false)
@@ -171,10 +175,12 @@ model Product {
   porcentajeGanancia        Decimal? @db.Decimal(9, 4)
   costoUnitario             Decimal? @db.Decimal(18, 4)
 
-  stockMinimo Int @default(1)
+  stockMinimo Int  @default(1)
+  stockMaximo Int?
 
   categoryId String?
   brandId    String?
+  administrationRouteId String?
 
   productLocationId  String?
   defaultWarehouseId String?
@@ -187,6 +193,7 @@ model Product {
   tipoSistemaIsc       ProductIscSystem?   @relation(fields: [tipoSistemaIscId], references: [id], onDelete: SetNull)
   category             Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand                Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  administrationRoute  AdministrationRoute? @relation(fields: [administrationRouteId], references: [id], onDelete: SetNull)
   productLocation      ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: SetNull)
   defaultWarehouse     Warehouse?          @relation("ProductDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
   imagenArchivo        Archivo?            @relation("ProductImagen", fields: [imagenArchivoId], references: [id], onDelete: SetNull)
@@ -199,6 +206,10 @@ model Product {
   seriales       ProductSerial[]
   inboundMovements InventoryInboundMovement[]
   usedInCompounds CompoundProductItem[]
+  supplierLinks   SupplierProduct[]
+  priceHistory    ProductPriceHistory[]
+  equivalents     ProductEquivalent[] @relation("ProductEquivalents")
+  equivalentOf    ProductEquivalent[] @relation("EquivalentOf")
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?
@@ -514,4 +525,17 @@ model ServiceAttribute {
   attributeType ProductAttributeType @relation(fields: [attributeTypeId], references: [id], onDelete: Restrict)
 
   @@index([serviceId])
+}
+
+model ProductEquivalent {
+  id                  String   @id @default(uuid())
+  productId           String
+  equivalentProductId String
+  createdAt           DateTime @default(now())
+
+  product           Product @relation("ProductEquivalents", fields: [productId], references: [id], onDelete: Cascade)
+  equivalentProduct Product @relation("EquivalentOf", fields: [equivalentProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, equivalentProductId])
+  @@index([equivalentProductId])
 }

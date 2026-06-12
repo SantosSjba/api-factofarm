@@ -9,50 +9,60 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateCustomerTypeDto } from './dto/create-customer-type.dto';
 import { UpdateCustomerTypeDto } from './dto/update-customer-type.dto';
 import { CustomerTypesService } from './customer-types.service';
 
 @ApiTags('customer-types')
+@ApiBearerAuth()
 @Controller('customer-types')
 export class CustomerTypesController {
   constructor(private readonly customerTypesService: CustomerTypesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar tipos de cliente' })
-  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda textual' })
-  @ApiQuery({
-    name: 'field',
-    required: false,
-    description: 'Campo de búsqueda (all|descripcion)',
-  })
-  findAll(
-    @Query('search') search?: string,
-    @Query('field') field?: string,
-  ) {
-    return this.customerTypesService.findAll({ search, field });
+  @RequirePermissions('customer-types.read', 'nav.tipo_clientes')
+  @ApiOperation({ summary: 'Listar tipos de cliente (paginado si page está presente)' })
+  findAll(@Query() query: MaestroListQueryDto) {
+    return this.customerTypesService.findAll(query);
   }
 
   @Post()
+  @RequirePermissions('customer-types.write')
   @ApiOperation({ summary: 'Crear tipo de cliente' })
   @ApiBody({ type: CreateCustomerTypeDto })
-  create(@Body() dto: CreateCustomerTypeDto) {
-    return this.customerTypesService.create(dto);
+  create(@Body() dto: CreateCustomerTypeDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.customerTypesService.create(dto, actor.sub);
   }
 
   @Patch(':id')
+  @RequirePermissions('customer-types.write')
   @ApiOperation({ summary: 'Actualizar tipo de cliente' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: UpdateCustomerTypeDto })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCustomerTypeDto) {
-    return this.customerTypesService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCustomerTypeDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.customerTypesService.update(id, dto, actor.sub);
   }
 
   @Delete(':id')
+  @RequirePermissions('customer-types.write')
   @ApiOperation({ summary: 'Eliminar tipo de cliente (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.customerTypesService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.customerTypesService.remove(id, actor.sub);
   }
 }

@@ -1,0 +1,50 @@
+model Supplier {
+  id                String               @id @default(uuid())
+  razonSocial       String
+  nombreComercial   String?
+  tipoDocumento     CustomerDocumentType @default(RUC)
+  numeroDocumento   String
+  departmentId      String?
+  provinceId        String?
+  districtId        String?
+  direccion         String?
+  telefono          String?
+  correoElectronico String?
+  contactoNombre    String?
+  contactoTelefono  String?
+  diasCredito       Int                  @default(0)
+  condicionesPago   String?
+  observaciones     String?
+  habilitado        Boolean              @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  department Department? @relation("SupplierDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  province   Province?   @relation("SupplierProvince", fields: [provinceId], references: [id], onDelete: Restrict)
+  district   District?   @relation("SupplierDistrict", fields: [districtId], references: [id], onDelete: Restrict)
+
+  products SupplierProduct[]
+
+  @@unique([tipoDocumento, numeroDocumento])
+  @@index([deletedAt])
+  @@index([razonSocial])
+  @@index([numeroDocumento])
+}
+
+model SupplierProduct {
+  id              String   @id @default(uuid())
+  supplierId      String
+  productId       String
+  codigoProveedor String?
+  precioCompra    Decimal? @db.Decimal(18, 4)
+  plazoDias       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, productId])
+  @@index([productId])
+}

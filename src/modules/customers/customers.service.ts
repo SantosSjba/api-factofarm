@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerDocumentType, Prisma } from '../../generated/prisma/client';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerZoneDto } from './dto/create-customer-zone.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -42,6 +43,7 @@ const selectCustomer = {
   numeroDocumento: true,
   nacionalidad: true,
   diasCredito: true,
+  limiteCredito: true,
   codigoInterno: true,
   codigoBarra: true,
   observaciones: true,
@@ -70,7 +72,10 @@ type CustomerRow = Prisma.CustomerGetPayload<{ select: typeof selectCustomer }>;
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLogService,
+  ) {}
 
   async list(query: CustomerListQueryDto) {
     const page = query.page ?? 1;
@@ -134,7 +139,7 @@ export class CustomersService {
     return row;
   }
 
-  async create(dto: CreateCustomerDto) {
+  async create(dto: CreateCustomerDto, actorId?: string) {
     try {
       const created = await this.prisma.customer.create({
         data: this.toCreateInput(dto),
@@ -143,13 +148,19 @@ export class CustomersService {
       if (dto.addresses?.length) {
         await this.replaceAddresses(created.id, dto.addresses);
       }
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'Customer',
+        entityId: created.id,
+      });
       return this.findOne(created.id);
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async update(id: string, dto: UpdateCustomerDto) {
+  async update(id: string, dto: UpdateCustomerDto, actorId?: string) {
     await this.ensureCustomer(id);
     const data: Prisma.CustomerUncheckedUpdateInput = this.toUpdateInput(dto);
     try {
@@ -157,47 +168,84 @@ export class CustomersService {
       if (dto.addresses) {
         await this.replaceAddresses(id, dto.addresses);
       }
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'Customer',
+        entityId: id,
+        diff: dto,
+      });
       return this.findOne(id);
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId?: string) {
     await this.ensureCustomer(id);
     await this.prisma.customer.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false, habilitado: false },
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'Customer',
+      entityId: id,
+    });
   }
 
-  async updateStatus(id: string, dto: UpdateCustomerStatusDto) {
+  async updateStatus(id: string, dto: UpdateCustomerStatusDto, actorId?: string) {
     await this.ensureCustomer(id);
-    return this.prisma.customer.update({
+    const updated = await this.prisma.customer.update({
       where: { id },
       data: { habilitado: dto.habilitado },
       select: selectCustomer,
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPDATE_STATUS',
+      entity: 'Customer',
+      entityId: id,
+      diff: dto,
+    });
+    return updated;
   }
 
-  async updateBarcode(id: string, dto: UpdateCustomerBarcodeDto) {
+  async updateBarcode(id: string, dto: UpdateCustomerBarcodeDto, actorId?: string) {
     await this.ensureCustomer(id);
-    return this.prisma.customer.update({
+    const updated = await this.prisma.customer.update({
       where: { id },
       data: { codigoBarra: dto.codigoBarra.trim() || null },
       select: selectCustomer,
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPDATE_BARCODE',
+      entity: 'Customer',
+      entityId: id,
+      diff: dto,
+    });
+    return updated;
   }
 
-  async updateTags(id: string, dto: UpdateCustomerTagsDto) {
+  async updateTags(id: string, dto: UpdateCustomerTagsDto, actorId?: string) {
     await this.ensureCustomer(id);
-    return this.prisma.customer.update({
+    const updated = await this.prisma.customer.update({
       where: { id },
       data: {
         etiquetas: dto.etiquetas.map((x) => x.trim()).filter(Boolean),
       },
       select: selectCustomer,
     });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPDATE_TAGS',
+      entity: 'Customer',
+      entityId: id,
+      diff: dto,
+    });
+    return updated;
   }
 
   listZones() {
@@ -208,35 +256,50 @@ export class CustomersService {
     });
   }
 
-  async createZone(dto: CreateCustomerZoneDto) {
+  async createZone(dto: CreateCustomerZoneDto, actorId?: string) {
     try {
-      return await this.prisma.customerZone.create({
+      const created = await this.prisma.customerZone.create({
         data: { nombre: dto.nombre.trim().toUpperCase() },
         select: { id: true, nombre: true },
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'CustomerZone',
+        entityId: created.id,
+      });
+      return created;
     } catch (err) {
       this.handleKnownError(err, 'Ya existe una zona con ese nombre.');
     }
   }
 
-  async updateZone(id: string, dto: UpdateCustomerZoneDto) {
+  async updateZone(id: string, dto: UpdateCustomerZoneDto, actorId?: string) {
     const zone = await this.prisma.customerZone.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
     });
     if (!zone) throw new NotFoundException('Zona no encontrada');
     try {
-      return await this.prisma.customerZone.update({
+      const updated = await this.prisma.customerZone.update({
         where: { id },
         data: { nombre: dto.nombre?.trim().toUpperCase() || undefined },
         select: { id: true, nombre: true },
       });
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'CustomerZone',
+        entityId: id,
+        diff: dto,
+      });
+      return updated;
     } catch (err) {
       this.handleKnownError(err, 'Ya existe una zona con ese nombre.');
     }
   }
 
-  async removeZone(id: string) {
+  async removeZone(id: string, actorId?: string) {
     const zone = await this.prisma.customerZone.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -251,6 +314,12 @@ export class CustomersService {
         where: { id },
         data: { deletedAt: new Date() },
       });
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'CustomerZone',
+      entityId: id,
     });
   }
 
@@ -276,7 +345,15 @@ export class CustomersService {
     }));
   }
 
-  async importFromExcel(file: Express.Multer.File) {
+  async previewImportFromExcel(file: Express.Multer.File) {
+    return this.importFromExcel(file, undefined, { dryRun: true });
+  }
+
+  async importFromExcel(
+    file: Express.Multer.File,
+    actorId?: string,
+    options?: { dryRun?: boolean },
+  ) {
     if (!file?.buffer?.length) {
       throw new NotFoundException('Archivo no válido para importar');
     }
@@ -343,6 +420,11 @@ export class CustomersService {
           },
           select: { id: true, deletedAt: true },
         });
+        if (options?.dryRun) {
+          if (existing) updated++;
+          else created++;
+          continue;
+        }
         if (existing) {
           await this.prisma.customer.update({
             where: { id: existing.id },
@@ -422,12 +504,22 @@ export class CustomersService {
       }
     }
 
-    return {
+    const result = {
       totalRows: rows.length,
       created,
       updated,
       errors,
+      preview: options?.dryRun ?? false,
     };
+    if (!options?.dryRun) {
+      await this.audit.log({
+        userId: actorId,
+        action: 'IMPORT',
+        entity: 'Customer',
+        diff: result,
+      });
+    }
+    return result;
   }
 
   buildImportTemplateBuffer() {
@@ -564,6 +656,10 @@ export class CustomersService {
       numeroDocumento: dto.numeroDocumento.trim(),
       nacionalidad: this.normUpper(dto.nacionalidad) ?? 'PERU',
       diasCredito: dto.diasCredito ?? 0,
+      limiteCredito:
+        dto.limiteCredito !== undefined && dto.limiteCredito !== null
+          ? new Prisma.Decimal(dto.limiteCredito)
+          : null,
       codigoInterno: this.norm(dto.codigoInterno),
       codigoBarra: this.norm(dto.codigoBarra),
       observaciones: this.norm(dto.observaciones),
@@ -591,6 +687,10 @@ export class CustomersService {
     if (dto.numeroDocumento !== undefined) data.numeroDocumento = dto.numeroDocumento.trim();
     if (dto.nacionalidad !== undefined) data.nacionalidad = this.normUpper(dto.nacionalidad);
     if (dto.diasCredito !== undefined) data.diasCredito = dto.diasCredito;
+    if (dto.limiteCredito !== undefined) {
+      data.limiteCredito =
+        dto.limiteCredito !== null ? new Prisma.Decimal(dto.limiteCredito) : null;
+    }
     if (dto.codigoInterno !== undefined) data.codigoInterno = this.norm(dto.codigoInterno);
     if (dto.codigoBarra !== undefined) data.codigoBarra = this.norm(dto.codigoBarra);
     if (dto.observaciones !== undefined) data.observaciones = this.norm(dto.observaciones);

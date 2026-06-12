@@ -9,47 +9,60 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { BrandsService } from './brands.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 
 @ApiTags('brands')
+@ApiBearerAuth()
 @Controller('brands')
 export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar marcas' })
-  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda textual' })
-  @ApiQuery({
-    name: 'field',
-    required: false,
-    description: 'Campo de búsqueda (all|nombre)',
-  })
-  findAll(@Query('search') search?: string, @Query('field') field?: string) {
-    return this.brandsService.findAll({ search, field });
+  @RequirePermissions('brands.read', 'nav.marcas')
+  @ApiOperation({ summary: 'Listar marcas (paginado si page está presente)' })
+  findAll(@Query() query: MaestroListQueryDto) {
+    return this.brandsService.findAll(query);
   }
 
   @Post()
+  @RequirePermissions('brands.write')
   @ApiOperation({ summary: 'Crear marca' })
   @ApiBody({ type: CreateBrandDto })
-  create(@Body() dto: CreateBrandDto) {
-    return this.brandsService.create(dto);
+  create(@Body() dto: CreateBrandDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.brandsService.create(dto, actor.sub);
   }
 
   @Patch(':id')
+  @RequirePermissions('brands.write')
   @ApiOperation({ summary: 'Actualizar marca' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: UpdateBrandDto })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBrandDto) {
-    return this.brandsService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBrandDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.brandsService.update(id, dto, actor.sub);
   }
 
   @Delete(':id')
+  @RequirePermissions('brands.write')
   @ApiOperation({ summary: 'Eliminar marca (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.brandsService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.brandsService.remove(id, actor.sub);
   }
 }
