@@ -14,6 +14,7 @@ import { seedServices } from './services';
 import { seedSeries } from './series';
 import { seedUbigeo } from './ubigeo';
 import { seedCashRegisters } from './cash-registers';
+import { seedDrugInteractions } from './drug-interactions';
 
 async function runStep(name: string, fn: () => Promise<void>) {
   const start = Date.now();
@@ -44,5 +45,6 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await runStep('Clientes', () => seedCustomers(prisma));
   await runStep('Permisos', () => seedPermissions(prisma));
   await runStep('Cajas POS', () => seedCashRegisters(prisma));
+  await runStep('Interacciones farmacológicas', () => seedDrugInteractions(prisma));
   await runStep('Usuario admin', () => seedAdminUser(prisma));
 }

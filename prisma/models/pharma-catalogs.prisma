@@ -28,6 +28,30 @@ model ActivePrinciple {
   @@index([deletedAt])
 }
 
+enum DrugInteractionSeverity {
+  LEVE
+  MODERADA
+  GRAVE
+}
+
+/// Catálogo básico de interacciones entre principios activos (alerta POS).
+model DrugInteraction {
+  id            String                  @id @default(uuid())
+  principioA    String                  @db.VarChar(200)
+  principioB    String                  @db.VarChar(200)
+  severidad     DrugInteractionSeverity @default(MODERADA)
+  descripcion   String                  @db.VarChar(500)
+  recomendacion String?                 @db.VarChar(500)
+  deletedAt     DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([principioA, principioB])
+  @@index([deletedAt])
+  @@index([principioA])
+  @@index([principioB])
+}
+
 model AdministrationRoute {
   id        String    @id @default(uuid())
   nombre    String    @unique

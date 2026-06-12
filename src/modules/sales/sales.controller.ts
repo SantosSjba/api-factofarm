@@ -13,6 +13,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateSaleDto, CreateSaleReturnDto, VoidSaleDto } from './dto/create-sale.dto';
+import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalesService } from './sales.service';
 
@@ -38,6 +39,13 @@ export class SalesController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.posCatalog(actor.establecimientoId, warehouseId, search);
+  }
+
+  @Post('check-interactions')
+  @RequirePermissions('sales.read', 'nav.punto_venta')
+  @ApiOperation({ summary: 'Alertas de interacciones entre principios activos del carrito' })
+  checkInteractions(@Body() dto: CheckSaleInteractionsDto) {
+    return this.service.checkInteractions(dto.productIds);
   }
 
   @Get(':id')

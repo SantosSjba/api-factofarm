@@ -473,6 +473,74 @@ export class SalesService {
     return { ok: true, message: 'Devolución registrada', totalDevuelto: totalDevuelto.toString() };
   }
 
+  async checkInteractions(productIds: string[]) {
+    const uniqueIds = [...new Set(productIds)];
+    const catalogRows = await this.prisma.drugInteraction.findMany({
+      where: { deletedAt: null },
+      select: {
+        principioA: true,
+        principioB: true,
+        severidad: true,
+        descripcion: true,
+        recomendacion: true,
+      },
+    });
+
+    const knownPrinciples = new Set<string>();
+    for (const row of catalogRows) {
+      knownPrinciples.add(row.principioA);
+      knownPrinciples.add(row.principioB);
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: uniqueIds }, deletedAt: null },
+      select: { id: true, nombre: true, principioActivo: true },
+    });
+
+    const mapped = products.map((p) => {
+      const resolved = this.resolveActivePrinciple(p.principioActivo, knownPrinciples);
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        principioActivo: p.principioActivo,
+        resolved,
+      };
+    });
+
+    const withPrinciple = mapped.filter((p) => p.resolved != null);
+    const principlesInCart = new Set(withPrinciple.map((p) => p.resolved!));
+    const missingPrinciples = mapped
+      .filter((p) => !p.resolved)
+      .map((p) => ({ id: p.id, nombre: p.nombre }));
+
+    if (principlesInCart.size < 2 || catalogRows.length === 0) {
+      return { hasAlerts: false, alerts: [], missingPrinciples };
+    }
+
+    const alerts = catalogRows
+      .filter((row) => principlesInCart.has(row.principioA) && principlesInCart.has(row.principioB))
+      .map((row) => ({
+        severidad: row.severidad,
+        principioA: row.principioA,
+        principioB: row.principioB,
+        descripcion: row.descripcion,
+        recomendacion: row.recomendacion,
+        productos: withPrinciple
+          .filter((p) => p.resolved === row.principioA || p.resolved === row.principioB)
+          .map((p) => ({
+            id: p.id,
+            nombre: p.nombre,
+            principioActivo: p.principioActivo ?? p.resolved!,
+          })),
+      }));
+
+    return {
+      hasAlerts: alerts.length > 0,
+      alerts,
+      missingPrinciples,
+    };
+  }
+
   async posCatalog(establishmentId: string, warehouseId: string, search?: string) {
     const term = search?.trim();
     const products = await this.prisma.product.findMany({
@@ -723,5 +791,20 @@ export class SalesService {
         referencia: p.referencia,
       })),
     };
+  }
+
+  private resolveActivePrinciple(
+    raw: string | null | undefined,
+    knownPrinciples: Set<string>,
+  ): string | null {
+    const normalized = raw?.trim().toUpperCase().replace(/\s+/g, ' ') ?? '';
+    if (!normalized) return null;
+    if (knownPrinciples.has(normalized)) return normalized;
+    for (const principle of knownPrinciples) {
+      if (normalized.includes(principle) || principle.includes(normalized)) {
+        return principle;
+      }
+    }
+    return null;
   }
 }
