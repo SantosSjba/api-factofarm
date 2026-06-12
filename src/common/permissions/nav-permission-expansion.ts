@@ -19,6 +19,14 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.principios_activos': ['active-principles.read', 'active-principles.write'],
   'nav.vias_administracion': ['admin-routes.read', 'admin-routes.write'],
   'nav.proveedores': ['suppliers.read', 'suppliers.write'],
+  'nav.inventario_movimientos': ['inventory.read', 'inventory.write'],
+  'nav.traslados': ['inventory.read', 'inventory.write'],
+  'nav.lotes': ['inventory.read', 'inventory.write'],
+  'nav.salida_venta_lotes': ['inventory.read', 'inventory.write'],
+  'nav.reporte_kardex': ['inventory.read'],
+  'nav.reporte_inventario': ['inventory.read'],
+  'nav.kardex_valorizado': ['inventory.read'],
+  'nav.devolucion_retiro': ['inventory.read', 'inventory.write', 'inventory.adjust'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);

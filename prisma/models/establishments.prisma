@@ -36,6 +36,11 @@ model Establishment {
   logoArchivoId   String?
   sujetoIgv31556  Boolean  @default(false)
   esHospital      Boolean  @default(false)
+  inventoryValuationMethod InventoryValuationMethod @default(PEPS)
+  inventoryLotAllocationMethod InventoryLotAllocationMethod @default(FEFO)
+  blockExpiredProductSales Boolean @default(true)
+  /// Cantidad absoluta a partir de la cual un ajuste requiere segunda autorización
+  adjustmentQtyThreshold Decimal @default(50) @db.Decimal(18, 4)
   deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

@@ -45,4 +45,16 @@ export class CreateInboundMovementDto {
   @IsNotEmpty()
   @MaxLength(500)
   comment?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  unitCost?: number;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MaxLength(120)
+  reference?: string;
 }

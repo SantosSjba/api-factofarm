@@ -83,6 +83,10 @@ const selectEstablishment = {
   logoArchivoId: true,
   sujetoIgv31556: true,
   esHospital: true,
+  inventoryValuationMethod: true,
+  inventoryLotAllocationMethod: true,
+  blockExpiredProductSales: true,
+  adjustmentQtyThreshold: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.EstablishmentSelect;
@@ -324,6 +328,13 @@ export class EstablishmentsService {
       logoArchivoId: this.normNullable(dto.logoArchivoId) ?? null,
       sujetoIgv31556: dto.sujetoIgv31556 ?? false,
       esHospital: dto.esHospital ?? false,
+      inventoryValuationMethod: dto.inventoryValuationMethod,
+      inventoryLotAllocationMethod: dto.inventoryLotAllocationMethod,
+      blockExpiredProductSales: dto.blockExpiredProductSales,
+      adjustmentQtyThreshold:
+        dto.adjustmentQtyThreshold !== undefined
+          ? new Prisma.Decimal(dto.adjustmentQtyThreshold)
+          : undefined,
     };
   }
 
@@ -351,6 +362,18 @@ export class EstablishmentsService {
     if (dto.logoArchivoId !== undefined) data.logoArchivoId = this.normNullable(dto.logoArchivoId);
     if (dto.sujetoIgv31556 !== undefined) data.sujetoIgv31556 = dto.sujetoIgv31556;
     if (dto.esHospital !== undefined) data.esHospital = dto.esHospital;
+    if (dto.inventoryValuationMethod !== undefined) {
+      data.inventoryValuationMethod = dto.inventoryValuationMethod;
+    }
+    if (dto.inventoryLotAllocationMethod !== undefined) {
+      data.inventoryLotAllocationMethod = dto.inventoryLotAllocationMethod;
+    }
+    if (dto.blockExpiredProductSales !== undefined) {
+      data.blockExpiredProductSales = dto.blockExpiredProductSales;
+    }
+    if (dto.adjustmentQtyThreshold !== undefined) {
+      data.adjustmentQtyThreshold = new Prisma.Decimal(dto.adjustmentQtyThreshold);
+    }
 
     return data;
   }

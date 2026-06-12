@@ -73,6 +73,11 @@ model Warehouse {
   serials ProductSerial[]
   inboundMovements InventoryInboundMovement[]
   defaultForProducts Product[] @relation("ProductDefaultWarehouse")
+  zones            WarehouseZone[]
+  transfersFrom    InventoryStockTransfer[] @relation("TransferFromWarehouse")
+  transfersTo      InventoryStockTransfer[] @relation("TransferToWarehouse")
+  physicalCounts   InventoryPhysicalCount[]
+  pendingAdjustments InventoryPendingAdjustment[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -210,6 +215,9 @@ model Product {
   priceHistory    ProductPriceHistory[]
   equivalents     ProductEquivalent[] @relation("ProductEquivalents")
   equivalentOf    ProductEquivalent[] @relation("EquivalentOf")
+  transferItems   InventoryStockTransferItem[]
+  physicalCountItems InventoryPhysicalCountItem[]
+  pendingAdjustments InventoryPendingAdjustment[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?
@@ -274,15 +282,20 @@ model InventoryInboundMovement {
   productId        String
   warehouseId      String
   transferReasonId String
+  movementType     InventoryMovementType @default(INGRESO)
   cantidad         Decimal  @db.Decimal(18, 4)
+  costoUnitario    Decimal? @db.Decimal(18, 4)
   codigoLote       String?
   fechaVencimiento DateTime?
   fechaRegistro    DateTime @default(now())
+  referencia       String?  @db.VarChar(120)
   comentario       String?  @db.VarChar(500)
+  userId           String?
 
   product        Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
   warehouse      Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   transferReason InventoryTransferReason @relation(fields: [transferReasonId], references: [id], onDelete: Restrict)
+  user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   deletedAt DateTime?
   createdAt DateTime @default(now())
@@ -291,6 +304,8 @@ model InventoryInboundMovement {
   @@index([productId])
   @@index([warehouseId])
   @@index([transferReasonId])
+  @@index([movementType])
+  @@index([userId])
   @@index([fechaRegistro])
   @@index([deletedAt])
 }
@@ -301,6 +316,7 @@ model ProductLotStock {
   warehouseId String
   codigoLote  String
   stock       Decimal  @default(0) @db.Decimal(18, 4)
+  costoUnitario Decimal? @db.Decimal(18, 4)
   fechaVencimiento DateTime?
 
   product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)

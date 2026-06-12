@@ -38,6 +38,9 @@ const RBAC: RbacRow[] = [
   { code: 'units.write', description: 'Crear y editar unidades de medida' },
   { code: 'admin-routes.read', description: 'Listar vías de administración' },
   { code: 'admin-routes.write', description: 'Crear y editar vías de administración' },
+  { code: 'inventory.read', description: 'Consultar inventario, lotes y kardex' },
+  { code: 'inventory.write', description: 'Registrar ingresos, salidas y transferencias' },
+  { code: 'inventory.adjust', description: 'Ajustes de inventario y autorizaciones especiales' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
@@ -124,6 +127,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.reporte_inventario', label: 'Reporte Inventario', sortOrder: 5 },
       { code: 'nav.kardex_valorizado', label: 'Kardex valorizado', sortOrder: 6 },
       { code: 'nav.lotes', label: 'Lotes', sortOrder: 7 },
+      { code: 'nav.salida_venta_lotes', label: 'Salida venta (lotes)', sortOrder: 8 },
     ],
   },
   {

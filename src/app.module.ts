@@ -31,6 +31,11 @@ import { PharmaceuticalFormsModule } from './modules/pharmaceutical-forms/pharma
 import { ActivePrinciplesModule } from './modules/active-principles/active-principles.module';
 import { UnitsModule } from './modules/units/units.module';
 import { AdministrationRoutesModule } from './modules/administration-routes/administration-routes.module';
+import { WarehousesModule } from './modules/warehouses/warehouses.module';
+import { WarehouseZonesModule } from './modules/warehouse-zones/warehouse-zones.module';
+import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
+import { ColdChainModule } from './modules/cold-chain/cold-chain.module';
+import { InventoryPhysicalCountsModule } from './modules/inventory-physical-counts/inventory-physical-counts.module';
 
 @Module({
   imports: [
@@ -96,6 +101,11 @@ import { AdministrationRoutesModule } from './modules/administration-routes/admi
     ActivePrinciplesModule,
     UnitsModule,
     AdministrationRoutesModule,
+    WarehousesModule,
+    WarehouseZonesModule,
+    InventoryTransfersModule,
+    ColdChainModule,
+    InventoryPhysicalCountsModule,
   ],
   controllers: [AppController],
   providers: [

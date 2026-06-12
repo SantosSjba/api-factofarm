@@ -1,5 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsOptional, IsString, IsUrl, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUrl,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import {
+  InventoryLotAllocationMethod,
+  InventoryValuationMethod,
+} from '../../../generated/prisma/client';
 
 export class CreateEstablishmentDto {
   @ApiProperty({ example: 'Oficina Principal', maxLength: 200 })
@@ -107,4 +123,26 @@ export class CreateEstablishmentDto {
   @IsOptional()
   @IsBoolean()
   esHospital?: boolean;
+
+  @ApiPropertyOptional({ enum: InventoryValuationMethod, default: InventoryValuationMethod.PEPS })
+  @IsOptional()
+  @IsEnum(InventoryValuationMethod)
+  inventoryValuationMethod?: InventoryValuationMethod;
+
+  @ApiPropertyOptional({ enum: InventoryLotAllocationMethod, default: InventoryLotAllocationMethod.FEFO })
+  @IsOptional()
+  @IsEnum(InventoryLotAllocationMethod)
+  inventoryLotAllocationMethod?: InventoryLotAllocationMethod;
+
+  @ApiPropertyOptional({ default: true, description: 'Bloquear venta de lotes vencidos' })
+  @IsOptional()
+  @IsBoolean()
+  blockExpiredProductSales?: boolean;
+
+  @ApiPropertyOptional({ default: 50, description: 'Umbral de ajuste que requiere segunda autorización' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  adjustmentQtyThreshold?: number;
 }

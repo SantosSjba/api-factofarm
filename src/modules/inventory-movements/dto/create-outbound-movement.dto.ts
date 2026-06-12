@@ -41,4 +41,10 @@ export class CreateOutboundMovementDto {
   @IsNotEmpty()
   @MaxLength(500)
   comment?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MaxLength(120)
+  reference?: string;
 }

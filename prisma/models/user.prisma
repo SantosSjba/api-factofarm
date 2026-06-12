@@ -32,6 +32,12 @@ model User {
   refreshTokens RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   productPriceChanges ProductPriceHistory[] @relation("ProductPriceHistoryChangedBy")
+  inventoryMovements  InventoryInboundMovement[]
+  stockTransfers      InventoryStockTransfer[]
+  coldChainLogs       ColdChainTemperatureLog[]
+  physicalCounts      InventoryPhysicalCount[]
+  adjustmentsRequested InventoryPendingAdjustment[] @relation("AdjustmentRequestedBy")
+  adjustmentsApproved  InventoryPendingAdjustment[] @relation("AdjustmentApprovedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

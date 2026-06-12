@@ -2,16 +2,16 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
-export class InventoryMovementListQueryDto {
+export class InventoryLotListQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ enum: ['all', 'producto', 'marca', 'almacen'] })
+  @ApiPropertyOptional({ enum: ['all', 'producto', 'lote', 'almacen'] })
   @IsOptional()
-  @IsIn(['all', 'producto', 'marca', 'almacen'])
-  field?: 'all' | 'producto' | 'marca' | 'almacen';
+  @IsIn(['all', 'producto', 'lote', 'almacen'])
+  field?: 'all' | 'producto' | 'lote' | 'almacen';
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
@@ -27,6 +27,11 @@ export class InventoryMovementListQueryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @ApiPropertyOptional({ enum: ['all', 'expired', '30', '60', '90'] })
+  @IsOptional()
+  @IsIn(['all', 'expired', '30', '60', '90'])
+  expiryFilter?: 'all' | 'expired' | '30' | '60' | '90';
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
