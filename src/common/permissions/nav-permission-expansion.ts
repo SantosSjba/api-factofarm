@@ -33,6 +33,11 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.notas_venta': ['sales.read'],
   'nav.anulaciones': ['sales.read', 'sales.void'],
   'nav.cotizaciones': ['sales.read', 'sales.write'],
+  'nav.ordenes_compra': ['purchases.read', 'purchases.write'],
+  'nav.recepcion_mercaderia': ['purchases.read', 'purchases.receive'],
+  'nav.reporte_compras_sugerido': ['purchases.read'],
+  'nav.comparativo_precios': ['purchases.read'],
+  'nav.cuentas_pagar': ['purchases.read', 'purchases.write'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);

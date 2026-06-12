@@ -317,12 +317,31 @@ export class SuppliersService {
 
   async listPurchaseHistory(supplierId: string) {
     await this.findOne(supplierId);
+    const rows = await this.prisma.purchaseOrder.findMany({
+      where: { supplierId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        numero: true,
+        estado: true,
+        total: true,
+        fechaEmision: true,
+        warehouse: { select: { nombre: true } },
+      },
+    });
     return {
-      items: [] as never[],
-      total: 0,
+      items: rows.map((r) => ({
+        id: r.id,
+        numero: r.numero,
+        estado: r.estado,
+        total: r.total.toString(),
+        fechaEmision: r.fechaEmision.toISOString(),
+        warehouse: r.warehouse.nombre,
+      })),
+      total: rows.length,
       page: 1,
-      pageSize: 20,
-      message: 'El historial de compras estará disponible en la Fase 4 (Compras).',
+      pageSize: 50,
     };
   }
 

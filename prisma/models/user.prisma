@@ -43,6 +43,9 @@ model User {
   salesVoided          Sale[]                     @relation("SaleVoidedBy")
   saleReturns          SaleReturn[]
   quotations           Quotation[]
+  purchaseOrdersCreated PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersApproved PurchaseOrder[] @relation("PurchaseOrderApprovedBy")
+  goodsReceipts        GoodsReceipt[] @relation("GoodsReceiptReceivedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

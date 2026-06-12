@@ -46,6 +46,9 @@ const RBAC: RbacRow[] = [
   { code: 'sales.void', description: 'Anular ventas' },
   { code: 'cash.open', description: 'Apertura de caja y movimientos' },
   { code: 'cash.close', description: 'Cierre de caja y arqueo' },
+  { code: 'purchases.read', description: 'Consultar órdenes de compra, AP y reportes' },
+  { code: 'purchases.write', description: 'Crear OC, pagos y notas de crédito proveedor' },
+  { code: 'purchases.receive', description: 'Recepción de mercadería contra OC' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
@@ -97,7 +100,13 @@ export const MENU_GROUPS: MenuGroup[] = [
     code: 'nav.compras',
     label: 'Compras',
     sortOrder: 5,
-    children: [{ code: 'nav.proveedores', label: 'Proveedores', sortOrder: 1 }],
+    children: [
+      { code: 'nav.proveedores', label: 'Proveedores', sortOrder: 1 },
+      { code: 'nav.ordenes_compra', label: 'Órdenes de compra', sortOrder: 2 },
+      { code: 'nav.recepcion_mercaderia', label: 'Recepción mercadería', sortOrder: 3 },
+      { code: 'nav.reporte_compras_sugerido', label: 'Sugerido de compras', sortOrder: 4 },
+      { code: 'nav.comparativo_precios', label: 'Comparativo precios', sortOrder: 5 },
+    ],
   },
   {
     code: 'nav.pos',

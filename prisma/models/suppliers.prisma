@@ -25,6 +25,9 @@ model Supplier {
   district   District?   @relation("SupplierDistrict", fields: [districtId], references: [id], onDelete: Restrict)
 
   products SupplierProduct[]
+  purchaseOrders  PurchaseOrder[]
+  accountPayables AccountPayable[]
+  creditNotes     SupplierCreditNote[]
 
   @@unique([tipoDocumento, numeroDocumento])
   @@index([deletedAt])

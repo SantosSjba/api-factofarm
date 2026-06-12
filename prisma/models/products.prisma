@@ -80,6 +80,8 @@ model Warehouse {
   pendingAdjustments InventoryPendingAdjustment[]
   sales              Sale[]
   quotations         Quotation[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -223,6 +225,8 @@ model Product {
   customerProductPrices CustomerProductPrice[]
   saleItems          SaleItem[]
   quotationItems     QuotationItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  goodsReceiptItems  GoodsReceiptItem[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?

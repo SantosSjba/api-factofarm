@@ -39,6 +39,7 @@ import { InventoryPhysicalCountsModule } from './modules/inventory-physical-coun
 import { SalesModule } from './modules/sales/sales.module';
 import { CashRegistersModule } from './modules/cash-registers/cash-registers.module';
 import { QuotationsModule } from './modules/quotations/quotations.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { QuotationsModule } from './modules/quotations/quotations.module';
     SalesModule,
     CashRegistersModule,
     QuotationsModule,
+    PurchasesModule,
   ],
   controllers: [AppController],
   providers: [

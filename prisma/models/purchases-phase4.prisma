@@ -1,0 +1,199 @@
+enum PurchaseOrderStatus {
+  BORRADOR
+  APROBADA
+  ENVIADA
+  PARCIALMENTE_RECIBIDA
+  RECIBIDA
+  CERRADA
+  ANULADA
+}
+
+enum AccountPayableStatus {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  VENCIDA
+  ANULADA
+}
+
+enum SupplierCreditNoteStatus {
+  BORRADOR
+  APLICADA
+  ANULADA
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid())
+  establishmentId      String
+  supplierId           String
+  warehouseId          String
+  createdById          String
+  approvedById         String?
+  numero               String?             @db.VarChar(30)
+  estado               PurchaseOrderStatus @default(BORRADOR)
+  fechaEmision         DateTime            @default(now())
+  fechaEntregaEstimada DateTime?
+  subtotal             Decimal             @db.Decimal(18, 4)
+  igvTotal             Decimal             @default(0) @db.Decimal(18, 4)
+  total                Decimal             @db.Decimal(18, 4)
+  moneda               String              @default("PEN") @db.VarChar(3)
+  comentario           String?             @db.VarChar(500)
+  condicionesPago      String?             @db.VarChar(200)
+  deletedAt            DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy    User?         @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  items           PurchaseOrderItem[]
+  goodsReceipts   GoodsReceipt[]
+  accountPayables AccountPayable[]
+  creditNotes     SupplierCreditNote[]
+
+  @@index([establishmentId])
+  @@index([supplierId])
+  @@index([estado])
+  @@index([deletedAt])
+  @@unique([establishmentId, numero])
+}
+
+model PurchaseOrderItem {
+  id                String  @id @default(uuid())
+  purchaseOrderId   String
+  productId         String
+  cantidadPedida    Decimal @db.Decimal(18, 4)
+  cantidadRecibida  Decimal @default(0) @db.Decimal(18, 4)
+  precioUnitario    Decimal @db.Decimal(18, 4)
+  subtotalLinea     Decimal @db.Decimal(18, 4)
+  igvLinea          Decimal @default(0) @db.Decimal(18, 4)
+  totalLinea        Decimal @db.Decimal(18, 4)
+  codigoProveedor   String? @db.VarChar(60)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  receiptItems GoodsReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model GoodsReceipt {
+  id              String   @id @default(uuid())
+  purchaseOrderId String
+  establishmentId String
+  warehouseId     String
+  receivedById    String
+  numero          String?  @db.VarChar(30)
+  fechaRecepcion  DateTime @default(now())
+  referenciaDoc   String?  @db.VarChar(60)
+  comentario      String?  @db.VarChar(500)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedBy    User          @relation("GoodsReceiptReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+
+  items           GoodsReceiptItem[]
+  accountPayables AccountPayable[]
+
+  @@index([purchaseOrderId])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+model GoodsReceiptItem {
+  id                  String    @id @default(uuid())
+  goodsReceiptId      String
+  purchaseOrderItemId String
+  productId           String
+  cantidad            Decimal   @db.Decimal(18, 4)
+  codigoLote          String?   @db.VarChar(60)
+  fechaVencimiento      DateTime?
+  costoUnitario       Decimal?  @db.Decimal(18, 4)
+
+  goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([goodsReceiptId])
+  @@index([purchaseOrderItemId])
+}
+
+model AccountPayable {
+  id               String               @id @default(uuid())
+  establishmentId  String
+  supplierId       String
+  purchaseOrderId  String?
+  goodsReceiptId   String?
+  numeroDocumento  String?              @db.VarChar(40)
+  montoTotal       Decimal              @db.Decimal(18, 4)
+  montoPagado      Decimal              @default(0) @db.Decimal(18, 4)
+  saldo            Decimal              @db.Decimal(18, 4)
+  fechaEmision     DateTime             @default(now())
+  fechaVencimiento DateTime
+  estado           AccountPayableStatus @default(PENDIENTE)
+  comentario       String?              @db.VarChar(500)
+  deletedAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  goodsReceipt  GoodsReceipt?  @relation(fields: [goodsReceiptId], references: [id], onDelete: SetNull)
+
+  payments    AccountPayablePayment[]
+  creditNotes SupplierCreditNote[]
+
+  @@index([establishmentId])
+  @@index([supplierId])
+  @@index([estado])
+  @@index([fechaVencimiento])
+  @@index([deletedAt])
+}
+
+model AccountPayablePayment {
+  id               String   @id @default(uuid())
+  accountPayableId String
+  monto            Decimal  @db.Decimal(18, 4)
+  fechaPago        DateTime @default(now())
+  metodo           String?  @db.VarChar(40)
+  referencia       String?  @db.VarChar(60)
+  createdAt        DateTime @default(now())
+
+  accountPayable AccountPayable @relation(fields: [accountPayableId], references: [id], onDelete: Cascade)
+
+  @@index([accountPayableId])
+}
+
+model SupplierCreditNote {
+  id               String                 @id @default(uuid())
+  establishmentId  String
+  supplierId       String
+  accountPayableId String?
+  purchaseOrderId  String?
+  numero           String?                @db.VarChar(30)
+  monto            Decimal                @db.Decimal(18, 4)
+  motivo           String                 @db.VarChar(500)
+  estado           SupplierCreditNoteStatus @default(BORRADOR)
+  fechaEmision     DateTime               @default(now())
+  deletedAt        DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  establishment  Establishment  @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  supplier       Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  accountPayable AccountPayable? @relation(fields: [accountPayableId], references: [id], onDelete: SetNull)
+  purchaseOrder  PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+
+  @@index([establishmentId])
+  @@index([supplierId])
+  @@index([deletedAt])
+}

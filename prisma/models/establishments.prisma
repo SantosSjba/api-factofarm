@@ -57,6 +57,10 @@ model Establishment {
   promotions        Promotion[]
   sales             Sale[]
   quotations        Quotation[]
+  purchaseOrders    PurchaseOrder[]
+  goodsReceipts     GoodsReceipt[]
+  accountPayables   AccountPayable[]
+  supplierCreditNotes SupplierCreditNote[]
 
   @@index([departmentId])
   @@index([provinceId])
