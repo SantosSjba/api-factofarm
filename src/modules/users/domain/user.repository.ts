@@ -16,4 +16,5 @@ export interface IUserRepository {
   update(id: string, input: UpdateUserInput): Promise<UserSnapshot>;
   syncPermissions(userId: string, permissionCodes: string[]): Promise<UserSnapshot>;
   delete(id: string): Promise<void>;
+  establishmentBelongsToTenant(establishmentId: string, tenantId: string): Promise<boolean>;
 }

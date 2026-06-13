@@ -28,6 +28,7 @@ function mapUser(row: UserRow): UserSnapshot {
     nombre: row.nombre,
     email: row.email,
     role: row.role,
+    tenantId: row.tenantId,
     establecimientoId: row.establecimientoId,
     establecimientoNombre: row.establecimiento.nombre,
     permissionCodes: row.permissions.map((up) => up.permission.code),
@@ -70,6 +71,7 @@ export class PrismaUserRepository implements IUserRepository {
           email: input.email,
           passwordHash: input.passwordHash,
           role: input.role,
+          tenantId: input.tenantId,
           establecimientoId: input.establecimientoId,
           profile: input.profile
             ? { create: this.toProfileCreate(input.profile) }
@@ -99,6 +101,7 @@ export class PrismaUserRepository implements IUserRepository {
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(filters?.role ? { role: filters.role } : {}),
+      ...(filters?.tenantId ? { tenantId: filters.tenantId } : {}),
       ...(search
         ? {
             OR: [
@@ -187,6 +190,17 @@ export class PrismaUserRepository implements IUserRepository {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async establishmentBelongsToTenant(
+    establishmentId: string,
+    tenantId: string,
+  ): Promise<boolean> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, tenantId, deletedAt: null },
+      select: { id: true },
+    });
+    return !!row;
   }
 
   async syncPermissions(userId: string, permissionCodes: string[]): Promise<UserSnapshot> {

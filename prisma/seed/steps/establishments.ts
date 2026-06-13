@@ -1,11 +1,15 @@
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { establishmentsData } from '../data/establishments';
 
-export async function seedEstablishments(prisma: PrismaClient): Promise<void> {
+export async function seedEstablishments(
+  prisma: PrismaClient,
+  tenantId: string,
+): Promise<void> {
   for (const row of establishmentsData) {
     const establishment = await prisma.establishment.upsert({
       where: { codigo: row.codigo },
       update: {
+        tenantId,
         nombre: row.nombre,
         activo: row.activo,
         pais: row.pais ?? 'PERU',
@@ -13,6 +17,7 @@ export async function seedEstablishments(prisma: PrismaClient): Promise<void> {
         correoContacto: row.correoContacto,
       },
       create: {
+        tenantId,
         nombre: row.nombre,
         codigo: row.codigo,
         activo: row.activo,

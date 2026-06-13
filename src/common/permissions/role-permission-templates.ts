@@ -92,6 +92,12 @@ const FULL_ACCESS_ROLES: ReadonlySet<UserRole> = new Set([
   UserRole.ADMINISTRADOR,
 ]);
 
+const PLATFORM_ONLY_NAV = new Set([
+  'nav.platform_clientes',
+  'nav.platform_leads',
+  'nav.platform_reclamaciones',
+]);
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.SUPER_ADMIN]: 'Super administrador',
   [UserRole.ADMIN_CADENA]: 'Admin cadena',
@@ -107,8 +113,11 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 export function getDefaultNavCodesForRole(role: UserRole): string[] {
-  if (FULL_ACCESS_ROLES.has(role)) {
+  if (role === UserRole.SUPER_ADMIN) {
     return [...MENU_NAV_LEAF_CODES];
+  }
+  if (FULL_ACCESS_ROLES.has(role)) {
+    return MENU_NAV_LEAF_CODES.filter((code) => !PLATFORM_ONLY_NAV.has(code));
   }
   const template = ROLE_NAV_TEMPLATES[role];
   if (!template) {

@@ -51,6 +51,13 @@ export class LegalController {
   terms() {
     return this.legal.getTermsOfUse();
   }
+
+  @Public()
+  @Get('libro-reclamaciones')
+  @ApiOperation({ summary: 'Libro de reclamaciones virtual (Ley 29571)' })
+  complaintsBook() {
+    return this.legal.getComplaintsBook();
+  }
 }
 
 @ApiTags('compliance')

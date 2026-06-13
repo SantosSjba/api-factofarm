@@ -24,6 +24,11 @@ export class CreateEstablishmentDto {
   @MaxLength(200)
   nombre!: string;
 
+  @ApiPropertyOptional({ format: 'uuid', description: 'Cliente SaaS (obligatorio para plataforma)' })
+  @IsOptional()
+  @IsUUID()
+  tenantId?: string;
+
   @ApiPropertyOptional({ example: '0000', maxLength: 20 })
   @IsOptional()
   @IsString()

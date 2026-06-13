@@ -29,6 +29,9 @@ model User {
   email             String        @unique
   passwordHash      String
   role              UserRole
+  /// Null solo para SUPER_ADMIN de plataforma FactoFarm.
+  tenantId          String?
+  tenant            Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   establecimientoId String
   establecimiento   Establishment @relation(fields: [establecimientoId], references: [id])
 
@@ -81,6 +84,7 @@ model User {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
+  @@index([tenantId])
   @@index([establecimientoId])
   @@index([deletedAt])
   @@map("users")

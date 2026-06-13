@@ -36,6 +36,14 @@ export class CreateUserDto {
   @IsUUID()
   establecimientoId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Cliente SaaS (obligatorio para usuarios de plataforma al crear operadores).',
+  })
+  @IsOptional()
+  @IsUUID()
+  tenantId?: string;
+
   @ApiPropertyOptional({ type: () => UserProfileDto })
   @IsOptional()
   @ValidateNested()

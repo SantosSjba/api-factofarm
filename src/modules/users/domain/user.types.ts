@@ -22,6 +22,7 @@ export type UserSnapshot = {
   nombre: string;
   email: string;
   role: UserRole;
+  tenantId: string | null;
   establecimientoId: string;
   establecimientoNombre: string;
   /** Códigos `Permission.code` asignados (menú y RBAC). */
@@ -36,6 +37,7 @@ export type CreateUserInput = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  tenantId: string | null;
   establecimientoId: string;
   profile?: Partial<UserProfileSnapshot>;
   permissionCodes?: string[];
@@ -54,6 +56,7 @@ export type UpdateUserInput = {
 export type UserListFilters = {
   search?: string;
   role?: UserRole;
+  tenantId?: string;
   page?: number;
   pageSize?: number;
 };

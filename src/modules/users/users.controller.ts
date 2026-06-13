@@ -36,19 +36,23 @@ export class UsersController {
   @ApiOperation({ summary: 'Crear usuario (cuenta + perfil opcional)' })
   @ApiBody({ type: CreateUserDto })
   create(@Body() dto: CreateUserDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.usersService.create(dto, actor.sub);
+    return this.usersService.create(dto, actor);
   }
 
   @Get()
   @RequirePermissions('users.read')
   @ApiOperation({ summary: 'Listar usuarios (paginado)' })
-  findAll(@Query() query: UserListQueryDto) {
-    return this.usersService.findAll({
-      search: query.search,
-      role: query.role === 'all' ? undefined : query.role,
-      page: query.page,
-      pageSize: query.pageSize,
-    });
+  findAll(@Query() query: UserListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.usersService.findAll(
+      {
+        search: query.search,
+        role: query.role === 'all' ? undefined : query.role,
+        tenantId: query.tenantId,
+        page: query.page,
+        pageSize: query.pageSize,
+      },
+      actor,
+    );
   }
 
   @Get(':id')

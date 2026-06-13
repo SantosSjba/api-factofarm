@@ -4,6 +4,7 @@ export type AuthJwtPayload = {
   sub: string;
   email: string;
   role: UserRole;
+  tenantId: string | null;
   establecimientoId: string;
   permissionCodes: string[];
 };
@@ -15,6 +16,9 @@ export type AuthUserView = {
   nombre: string;
   email: string;
   role: UserRole;
+  tenantId: string | null;
+  tenantNombre?: string | null;
+  tenantStatus?: string | null;
   establecimientoId: string;
   permissionCodes: string[];
 };

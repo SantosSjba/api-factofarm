@@ -1,11 +1,14 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentSeriesType, Prisma } from '../../../generated/prisma/client';
 import {
   buildPaginatedResult,
   paginationArgs,
 } from '../../../common/dto/pagination.dto';
 import { CacheService } from '../../../common/cache/cache.service';
+import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { TenantsService } from '../../tenants/tenants.service';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { CreateEstablishmentSeriesDto } from '../dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from '../dto/create-establishment.dto';
 import { UpdateEstablishmentDto } from '../dto/update-establishment.dto';
@@ -65,6 +68,7 @@ const DEFAULT_SERIES: ReadonlyArray<{
 
 const selectEstablishment = {
   id: true,
+  tenantId: true,
   nombre: true,
   codigo: true,
   activo: true,
@@ -102,22 +106,30 @@ export class EstablishmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly tenants: TenantsService,
   ) {}
 
-  async findAll(filters?: {
-    search?: string;
-    hospital?: string;
-    page?: number;
-    pageSize?: number;
-  }) {
+  async findAll(
+    filters?: {
+      search?: string;
+      hospital?: string;
+      page?: number;
+      pageSize?: number;
+      tenantId?: string;
+    },
+    actor?: JwtRequestUser,
+  ) {
     const search = filters?.search?.trim();
     const hospital = filters?.hospital?.trim().toLowerCase();
     const hospitalFlag =
       hospital === 'hospital' ? true : hospital === 'no-hospital' ? false : undefined;
 
+    const tenantId = this.resolveTenantFilter(actor, filters?.tenantId);
+
     const where: Prisma.EstablishmentWhereInput = {
       deletedAt: null,
       activo: true,
+      ...(tenantId ? { tenantId } : {}),
       ...(hospitalFlag !== undefined ? { esHospital: hospitalFlag } : {}),
       ...(search
         ? {
@@ -160,10 +172,17 @@ export class EstablishmentsService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateEstablishmentDto) {
+  async create(dto: CreateEstablishmentDto, actor?: JwtRequestUser) {
+    const tenantId = this.resolveTenantIdForCreate(dto, actor);
+    const tenant = await this.tenants.findOne(tenantId);
+    await this.tenants.assertEstablishmentQuota(tenantId, tenant.maxEstablishments);
+
     try {
       const created = await this.prisma.establishment.create({
-        data: this.mapEstablishmentCreateInput(dto),
+        data: {
+          ...this.mapEstablishmentCreateInput(dto),
+          tenantId,
+        },
         select: selectEstablishment,
       });
       await this.ensureDefaultSeries(created.id);
@@ -320,9 +339,35 @@ export class EstablishmentsService {
     });
   }
 
+  private resolveTenantFilter(
+    actor?: JwtRequestUser,
+    requestedTenantId?: string,
+  ): string | undefined {
+    if (actor && !isPlatformAdmin(actor.role)) {
+      return actor.tenantId ?? undefined;
+    }
+    return requestedTenantId?.trim() || undefined;
+  }
+
+  private resolveTenantIdForCreate(
+    dto: CreateEstablishmentDto,
+    actor?: JwtRequestUser,
+  ): string {
+    if (actor && !isPlatformAdmin(actor.role)) {
+      if (!actor.tenantId) {
+        throw new ForbiddenException('Usuario sin tenant asignado');
+      }
+      return actor.tenantId;
+    }
+    if (!dto.tenantId) {
+      throw new ForbiddenException('Debe indicar tenantId del cliente');
+    }
+    return dto.tenantId;
+  }
+
   private mapEstablishmentCreateInput(
     dto: CreateEstablishmentDto,
-  ): Prisma.EstablishmentUncheckedCreateInput {
+  ): Omit<Prisma.EstablishmentUncheckedCreateInput, 'tenantId'> {
     return {
       nombre: dto.nombre.trim(),
       codigo: this.normNullable(dto.codigo) ?? null,

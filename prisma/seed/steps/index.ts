@@ -5,6 +5,7 @@ import { seedCategories } from './categories';
 import { seedCompoundProducts } from './compound-products';
 import { seedCustomers } from './customers';
 import { seedCustomerTypes } from './customer-types';
+import { seedTenants, backfillTenantAssignments } from './tenants';
 import { seedEstablishments } from './establishments';
 import { seedInventoryMovements } from './inventory-movements';
 import { seedProductCatalogs } from './product-catalogs';
@@ -33,7 +34,15 @@ async function runStep(name: string, fn: () => Promise<void>) {
 
 export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await runStep('Ubigeo', () => seedUbigeo(prisma));
-  await runStep('Establecimientos', () => seedEstablishments(prisma));
+  const { demoTenantId } = await (async () => {
+    let tenantId = '';
+    await runStep('Tenants', async () => {
+      const result = await seedTenants(prisma);
+      tenantId = result.demoTenantId;
+    });
+    return { demoTenantId: tenantId };
+  })();
+  await runStep('Establecimientos', () => seedEstablishments(prisma, demoTenantId));
   await runStep('Catálogos de productos', () => seedProductCatalogs(prisma));
   await runStep('Tipos de cliente', () => seedCustomerTypes(prisma));
   await runStep('Categorías', () => seedCategories(prisma));
@@ -45,6 +54,7 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await runStep('Inventario (lotes/series)', () => seedInventoryMovements(prisma));
   await runStep('Clientes', () => seedCustomers(prisma));
   await runStep('Permisos', () => seedPermissions(prisma));
+  await runStep('Backfill tenants', () => backfillTenantAssignments(prisma, demoTenantId));
   await runStep('Cajas POS', () => seedCashRegisters(prisma));
   await runStep('Interacciones farmacológicas', () => seedDrugInteractions(prisma));
   await runStep('Fase 6 pharma', () => seedPharmaPhase6(prisma));

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -10,7 +11,10 @@ import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
 import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
+import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
+import { TenantsService } from '../../tenants/tenants.service';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { USER_REPOSITORY } from '../domain/user.repository';
 import type { IUserRepository } from '../domain/user.repository';
 import type {
@@ -28,9 +32,10 @@ export class UsersService {
   constructor(
     @Inject(USER_REPOSITORY) private readonly users: IUserRepository,
     private readonly audit: AuditLogService,
+    private readonly tenants: TenantsService,
   ) {}
 
-  async create(dto: CreateUserDto, actorId?: string): Promise<UserSnapshot> {
+  async create(dto: CreateUserDto, actor?: JwtRequestUser): Promise<UserSnapshot> {
     const existing = await this.users.findByEmail(dto.email.toLowerCase().trim());
     if (existing) {
       throw new ConflictException('El correo ya está registrado');
@@ -45,6 +50,16 @@ export class UsersService {
       });
     }
 
+    if (dto.role === UserRole.SUPER_ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo plataforma puede crear super administradores');
+    }
+
+    const tenantId = await this.resolveTenantIdForCreate(dto, actor);
+    if (tenantId) {
+      const tenant = await this.tenants.findOne(tenantId);
+      await this.tenants.assertUserQuota(tenantId, tenant.maxUsers);
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     const input: CreateUserInput = {
@@ -52,6 +67,7 @@ export class UsersService {
       email: dto.email.toLowerCase().trim(),
       passwordHash,
       role: dto.role,
+      tenantId,
       establecimientoId: dto.establecimientoId,
       profile: dto.profile ? this.mapProfileDto(dto.profile) : undefined,
       permissionCodes: this.resolvePermissionCodes(dto.permissionCodes, dto.role),
@@ -59,7 +75,7 @@ export class UsersService {
 
     const created = await this.users.create(input);
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'CREATE',
       entity: 'User',
       entityId: created.id,
@@ -67,12 +83,16 @@ export class UsersService {
     return created;
   }
 
-  async findAll(rawFilters?: {
-    search?: string;
-    role?: string;
-    page?: number;
-    pageSize?: number;
-  }) {
+  async findAll(
+    rawFilters?: {
+      search?: string;
+      role?: string;
+      page?: number;
+      pageSize?: number;
+      tenantId?: string;
+    },
+    actor?: JwtRequestUser,
+  ) {
     const search = rawFilters?.search?.trim();
     const roleRaw = rawFilters?.role?.trim().toUpperCase();
     const role =
@@ -83,6 +103,9 @@ export class UsersService {
     return this.users.findAll({
       ...(search ? { search } : {}),
       ...(role ? { role } : {}),
+      ...(this.resolveTenantFilter(actor, rawFilters?.tenantId)
+        ? { tenantId: this.resolveTenantFilter(actor, rawFilters?.tenantId)! }
+        : {}),
       page: rawFilters?.page,
       pageSize: rawFilters?.pageSize,
     });
@@ -193,6 +216,49 @@ export class UsersService {
     const trimmed = codes.map((c) => c.trim()).filter(Boolean);
     if (trimmed.length === 0) return [];
     return expandUserPermissionCodes(trimmed, role);
+  }
+
+  private resolveTenantFilter(
+    actor?: JwtRequestUser,
+    requestedTenantId?: string,
+  ): string | undefined {
+    if (actor && !isPlatformAdmin(actor.role)) {
+      return actor.tenantId ?? undefined;
+    }
+    return requestedTenantId?.trim() || undefined;
+  }
+
+  private async resolveTenantIdForCreate(
+    dto: CreateUserDto,
+    actor?: JwtRequestUser,
+  ): Promise<string | null> {
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      return null;
+    }
+
+    if (actor && !isPlatformAdmin(actor.role)) {
+      if (!actor.tenantId) {
+        throw new ForbiddenException('Usuario sin tenant asignado');
+      }
+      await this.assertEstablishmentBelongsToTenant(dto.establecimientoId, actor.tenantId);
+      return actor.tenantId;
+    }
+
+    if (!dto.tenantId) {
+      throw new BadRequestException('Debe indicar tenantId del cliente');
+    }
+    await this.assertEstablishmentBelongsToTenant(dto.establecimientoId, dto.tenantId);
+    return dto.tenantId;
+  }
+
+  private async assertEstablishmentBelongsToTenant(
+    establishmentId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const ok = await this.users.establishmentBelongsToTenant(establishmentId, tenantId);
+    if (!ok) {
+      throw new BadRequestException('El establecimiento no pertenece al cliente indicado');
+    }
   }
 
   private mapProfileDto(

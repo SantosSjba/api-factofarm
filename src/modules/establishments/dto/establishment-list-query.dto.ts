@@ -12,4 +12,9 @@ export class EstablishmentListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(['all', 'hospital', 'no-hospital'])
   hospital?: 'all' | 'hospital' | 'no-hospital';
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
 }

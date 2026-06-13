@@ -1,0 +1,37 @@
+enum ComplaintKind {
+  RECLAMO
+  QUEJA
+}
+
+enum ComplaintStatus {
+  PENDING
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+/// Registro del libro de reclamaciones virtual (Ley 29571).
+model Complaint {
+  id                 String          @id @default(uuid())
+  numeroRegistro     String          @unique @db.VarChar(32)
+  tipo               ComplaintKind
+  status             ComplaintStatus @default(PENDING)
+  nombresApellidos   String
+  domicilio          String
+  documentoIdentidad String          @db.VarChar(20)
+  telefono           String          @db.VarChar(30)
+  email              String?
+  bienContratado     String
+  montoReclamado     String?         @db.VarChar(40)
+  detalle            String
+  pedido             String
+  internalNotes      String?
+  responseNotes      String?
+  resolvedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("complaints")
+}

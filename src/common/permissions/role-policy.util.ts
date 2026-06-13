@@ -31,6 +31,10 @@ export function hasChainScope(role: UserRole): boolean {
   return CHAIN_SCOPE_ROLES.has(role);
 }
 
+export function isPlatformAdmin(role: UserRole): boolean {
+  return role === UserRole.SUPER_ADMIN;
+}
+
 export function canVoidSaleDirectly(role: UserRole): boolean {
   return DIRECT_SALE_VOID_ROLES.has(role);
 }

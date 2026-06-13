@@ -80,6 +80,9 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.balance': ['finance.read'],
   'nav.conciliacion_bancaria': ['finance.read', 'finance.write'],
   'nav.ingresos_egresos_medio_pago': ['finance.read'],
+  'nav.platform_clientes': ['tenants.read', 'tenants.write'],
+  'nav.platform_leads': ['tenants.read'],
+  'nav.platform_reclamaciones': ['complaints.read', 'complaints.write'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);

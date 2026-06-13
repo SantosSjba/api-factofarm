@@ -1,10 +1,11 @@
 import { ForbiddenException } from '@nestjs/common';
 import { UserRole } from '../../generated/prisma/client';
-import { hasChainScope } from '../permissions/role-policy.util';
+import { hasChainScope, isPlatformAdmin } from '../permissions/role-policy.util';
 
 export type ScopeActor = {
   establecimientoId: string;
   role: UserRole;
+  tenantId?: string | null;
 };
 
 /** Resuelve el establishmentId efectivo para queries multi-sucursal. */
@@ -31,7 +32,13 @@ export function establishmentWhere(actor: ScopeActor, field = 'establishmentId')
 export function assertEstablishmentAccess(
   actor: ScopeActor,
   resourceEstablishmentId: string,
+  resourceTenantId?: string | null,
 ): void {
+  if (resourceTenantId && !isPlatformAdmin(actor.role)) {
+    if (!actor.tenantId || resourceTenantId !== actor.tenantId) {
+      throw new ForbiddenException('No puede acceder a datos de otro cliente');
+    }
+  }
   if (hasChainScope(actor.role)) {
     return;
   }

@@ -58,13 +58,17 @@ export class EstablishmentsController {
   @ApiOperation({
     summary: 'Listar establecimientos activos (paginado si se envía page)',
   })
-  findAll(@Query() query: EstablishmentListQueryDto) {
-    return this.establishmentsService.findAll({
-      search: query.search,
-      hospital: query.hospital === 'all' ? undefined : query.hospital,
-      page: query.page,
-      pageSize: query.pageSize,
-    });
+  findAll(@Query() query: EstablishmentListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.findAll(
+      {
+        search: query.search,
+        hospital: query.hospital === 'all' ? undefined : query.hospital,
+        tenantId: query.tenantId,
+        page: query.page,
+        pageSize: query.pageSize,
+      },
+      actor,
+    );
   }
 
   @Get('pos-payment-settings')
@@ -78,8 +82,8 @@ export class EstablishmentsController {
   @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Crear establecimiento' })
   @ApiBody({ type: CreateEstablishmentDto })
-  create(@Body() dto: CreateEstablishmentDto) {
-    return this.establishmentsService.create(dto);
+  create(@Body() dto: CreateEstablishmentDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.create(dto, actor);
   }
 
   @Patch(':id')

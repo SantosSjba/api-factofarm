@@ -17,6 +17,8 @@ enum DocumentSeriesType {
 /// Establecimiento / sucursal asignada al usuario
 model Establishment {
   id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   nombre          String
   codigo          String?  @unique
   activo          Boolean  @default(true)
@@ -104,6 +106,7 @@ model Establishment {
   @@index([departmentId])
   @@index([provinceId])
   @@index([districtId])
+  @@index([tenantId])
   @@index([deletedAt])
 }
 

@@ -41,6 +41,13 @@ export const envValidationSchema = Joi.object({
   SMTP_USER: Joi.string().optional().allow(''),
   SMTP_PASS: Joi.string().optional().allow(''),
   SMTP_FROM: Joi.string().optional().allow(''),
+  /** Correo que recibe solicitudes de la landing (habilitar cuenta). */
+  SALES_CONTACT_EMAIL: Joi.string().email().optional().allow(''),
+  /** Correo para libro de reclamaciones (Ley 29571). Si vacío, usa SALES_CONTACT_EMAIL. */
+  COMPLAINTS_EMAIL: Joi.string().email().optional().allow(''),
+  COMPANY_LEGAL_NAME: Joi.string().optional().allow(''),
+  COMPANY_RUC: Joi.string().optional().allow(''),
+  COMPANY_ADDRESS: Joi.string().optional().allow(''),
   SENTRY_DSN: Joi.string().uri().optional().allow(''),
   PG_POOL_MAX: Joi.number().integer().min(1).max(100).default(20),
   PG_POOL_IDLE_MS: Joi.number().integer().min(1000).default(30_000),

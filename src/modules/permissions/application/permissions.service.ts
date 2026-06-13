@@ -5,6 +5,7 @@ import { PERMISSIONS_REPOSITORY } from '../domain/permissions.repository';
 import type { IPermissionsRepository } from '../domain/permissions.repository';
 
 const MENU_ROOT_CODES = [
+  'nav.platform',
   'nav.dashboard',
   'nav.usuarios_series',
   'nav.clientes',

@@ -79,9 +79,23 @@ const RBAC: RbacRow[] = [
   { code: 'compliance.write', description: 'Gestionar consentimientos, ARCO y catálogos regulatorios' },
   { code: 'shipping.read', description: 'Consultar transportistas, conductores, vehículos y direcciones' },
   { code: 'shipping.write', description: 'Gestionar maestros logísticos de guías de remisión' },
+  { code: 'tenants.read', description: 'Consultar clientes SaaS y leads comerciales' },
+  { code: 'tenants.write', description: 'Gestionar clientes SaaS, activación y aprovisionamiento' },
+  { code: 'complaints.read', description: 'Consultar libro de reclamaciones' },
+  { code: 'complaints.write', description: 'Gestionar estados y respuestas del libro de reclamaciones' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
+  {
+    code: 'nav.platform',
+    label: 'Plataforma FactoFarm',
+    sortOrder: 0,
+    children: [
+      { code: 'nav.platform_clientes', label: 'Clientes SaaS', sortOrder: 1 },
+      { code: 'nav.platform_leads', label: 'Leads comerciales', sortOrder: 2 },
+      { code: 'nav.platform_reclamaciones', label: 'Libro de reclamaciones', sortOrder: 3 },
+    ],
+  },
   {
     code: 'nav.dashboard',
     label: 'Dashboard',

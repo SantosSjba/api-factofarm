@@ -1,0 +1,74 @@
+enum TenantPlan {
+  BOTICA
+  FARMACIA_PRO
+  CADENA
+  CUSTOM
+}
+
+enum TenantStatus {
+  PENDING
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum TenantLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  REJECTED
+}
+
+/// Cliente SaaS (farmacia, botica o cadena) — unidad de aislamiento multi-tenant.
+model Tenant {
+  id                String       @id @default(uuid())
+  nombre            String
+  ruc               String?      @unique @db.VarChar(11)
+  slug              String       @unique @db.VarChar(60)
+  plan              TenantPlan   @default(BOTICA)
+  status            TenantStatus @default(PENDING)
+  maxEstablishments Int          @default(1)
+  maxUsers          Int          @default(3)
+  contactName       String?
+  contactEmail      String?
+  contactPhone      String?
+  notes             String?
+  /// Módulos `nav.*` habilitados para el cliente. Null = preset del plan.
+  enabledModules    Json?
+  activatedAt       DateTime?
+  suspendedAt       DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  establishments Establishment[]
+  users          User[]
+  leads          TenantLead[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("tenants")
+}
+
+/// Solicitud comercial desde landing u otros canales.
+model TenantLead {
+  id           String           @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  nombre       String
+  farmacia     String
+  telefono     String
+  email        String
+  mensaje      String?
+  status       TenantLeadStatus @default(NEW)
+  planInterest TenantPlan?
+  source       String           @default("landing") @db.VarChar(40)
+  convertedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@map("tenant_leads")
+}

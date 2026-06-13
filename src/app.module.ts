@@ -56,6 +56,8 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { ShippingGuidesModule } from './modules/shipping-guides/shipping-guides.module';
+import { PublicModule } from './modules/public/public.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
   imports: [
@@ -146,6 +148,8 @@ import { ShippingGuidesModule } from './modules/shipping-guides/shipping-guides.
     HospitalModule,
     StaffModule,
     ShippingGuidesModule,
+    TenantsModule,
+    PublicModule,
   ],
   controllers: [AppController],
   providers: [

@@ -7,17 +7,33 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
-import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
+import { resolveUserPermissionCodes } from '../../../common/tenants/tenant-permissions.util';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EmailService } from '../../../common/services/email.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { UserRole } from '../../../generated/prisma/client';
+import { UserRole, TenantStatus, TenantPlan } from '../../../generated/prisma/client';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import { LoginAttemptService } from './login-attempt.service';
 import type { AuthTokensView, AuthUserView, AuthJwtPayload } from '../domain/auth.types';
 import type { UpdateMeDto } from './dto/update-me.dto';
 
 const BCRYPT_ROUNDS = 10;
+
+const authTenantSelect = {
+  id: true,
+  nombre: true,
+  status: true,
+  plan: true,
+  enabledModules: true,
+} as const;
+
+type AuthTenantSnapshot = {
+  id: string;
+  nombre: string;
+  status: string;
+  plan: TenantPlan;
+  enabledModules: unknown;
+};
 
 @Injectable()
 export class AuthService {
@@ -42,6 +58,7 @@ export class AuthService {
       where: { email: { equals: normalized, mode: 'insensitive' }, deletedAt: null },
       include: {
         permissions: { include: { permission: true } },
+        tenant: { select: authTenantSelect },
       },
     });
 
@@ -76,6 +93,8 @@ export class AuthService {
       });
     }
 
+    await this.assertTenantAccessAllowed(user);
+
     await this.loginAttempts.recordAttempt(normalized, true, ipAddress);
     await this.audit.log({
       userId: user.id,
@@ -93,7 +112,10 @@ export class AuthService {
       where: { tokenHash },
       include: {
         user: {
-          include: { permissions: { include: { permission: true } } },
+          include: {
+            permissions: { include: { permission: true } },
+            tenant: { select: authTenantSelect },
+          },
         },
       },
     });
@@ -115,7 +137,34 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
+    await this.assertTenantAccessAllowed(stored.user);
+
     return this.issueTokens(stored.user);
+  }
+
+  private async assertTenantAccessAllowed(user: {
+    role: UserRole;
+    tenantId: string | null;
+  }): Promise<void> {
+    if (user.role === UserRole.SUPER_ADMIN || !user.tenantId) {
+      return;
+    }
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId, deletedAt: null },
+      select: { status: true },
+    });
+    if (!tenant) {
+      throw new UnauthorizedException({
+        code: 'TENANT_NOT_FOUND',
+        message: 'Cliente no encontrado o inactivo',
+      });
+    }
+    if (tenant.status === TenantStatus.SUSPENDED) {
+      throw new UnauthorizedException({
+        code: 'TENANT_SUSPENDED',
+        message: 'La cuenta de su farmacia está suspendida. Contacte a FactoFarm.',
+      });
+    }
   }
 
   async logout(refreshToken: string): Promise<{ ok: true }> {
@@ -130,7 +179,10 @@ export class AuthService {
   async me(userId: string): Promise<AuthUserView> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
-      include: { permissions: { include: { permission: true } } },
+      include: {
+        permissions: { include: { permission: true } },
+        tenant: { select: authTenantSelect },
+      },
     });
     if (!user) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
@@ -298,7 +350,9 @@ export class AuthService {
       nombre: string;
       email: string;
       role: AuthUserView['role'];
+      tenantId: string | null;
       establecimientoId: string;
+      tenant?: AuthTenantSnapshot | null;
       permissions: { permission: { code: string } }[];
     },
   ): Promise<AuthTokensView> {
@@ -307,6 +361,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      tenantId: user.tenantId,
       establecimientoId: user.establecimientoId,
       permissionCodes,
     };
@@ -332,14 +387,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: refreshPlain,
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        email: user.email,
-        role: user.role,
-        establecimientoId: user.establecimientoId,
-        permissionCodes,
-      },
+      user: this.toAuthUserView(user),
     };
   }
 
@@ -348,7 +396,9 @@ export class AuthService {
     nombre: string;
     email: string;
     role: AuthUserView['role'];
+    tenantId: string | null;
     establecimientoId: string;
+    tenant?: AuthTenantSnapshot | null;
     permissions: { permission: { code: string } }[];
   }): AuthUserView {
     return {
@@ -356,6 +406,9 @@ export class AuthService {
       nombre: user.nombre,
       email: user.email,
       role: user.role,
+      tenantId: user.tenantId,
+      tenantNombre: user.tenant?.nombre ?? null,
+      tenantStatus: user.tenant?.status ?? null,
       establecimientoId: user.establecimientoId,
       permissionCodes: this.resolvePermissionCodes(user),
     };
@@ -364,9 +417,14 @@ export class AuthService {
   private resolvePermissionCodes(user: {
     role: UserRole;
     permissions: { permission: { code: string } }[];
+    tenant?: AuthTenantSnapshot | null;
   }): string[] {
     const raw = user.permissions.map((p) => p.permission.code);
-    return expandUserPermissionCodes(raw, user.role);
+    return resolveUserPermissionCodes({
+      role: user.role,
+      permissionCodes: raw,
+      tenant: user.tenant ?? null,
+    });
   }
 
   private hashToken(token: string): string {
