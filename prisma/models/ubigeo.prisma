@@ -6,6 +6,7 @@ model Department {
   establishments Establishment[] @relation("EstablishmentDepartment")
   customerAddresses CustomerAddress[] @relation("CustomerAddressDepartment")
   suppliers         Supplier[]        @relation("SupplierDepartment")
+  departureAddresses DepartureAddress[] @relation("DepartureAddressDepartment")
 
   @@map("departments")
 }
@@ -20,6 +21,7 @@ model Province {
   establishments Establishment[] @relation("EstablishmentProvince")
   customerAddresses CustomerAddress[] @relation("CustomerAddressProvince")
   suppliers         Supplier[]        @relation("SupplierProvince")
+  departureAddresses DepartureAddress[] @relation("DepartureAddressProvince")
 
   @@index([departmentId])
   @@map("provinces")
@@ -34,6 +36,7 @@ model District {
   establishments Establishment[] @relation("EstablishmentDistrict")
   customerAddresses CustomerAddress[] @relation("CustomerAddressDistrict")
   suppliers         Supplier[]        @relation("SupplierDistrict")
+  departureAddresses DepartureAddress[] @relation("DepartureAddressDistrict")
 
   @@index([provinceId])
   @@map("districts")

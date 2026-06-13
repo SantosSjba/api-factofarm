@@ -10,7 +10,9 @@ import {
   CreateBankAccountDto,
   CreateBankMovementDto,
   FinancePeriodQueryDto,
+  GeneralLedgerQueryDto,
   PurchaseBudgetReportQueryDto,
+  RecentPaymentsQueryDto,
   UpsertPurchaseBudgetDto,
 } from './dto/finance.dto';
 import { FinanceService } from './finance.service';
@@ -22,19 +24,23 @@ export class FinanceController {
   constructor(private readonly service: FinanceService) {}
 
   @Get('cash-flow')
-  @RequirePermissions('finance.read', 'nav.finanzas_movimientos')
+  @RequirePermissions('finance.read', 'nav.finanzas_movimientos', 'nav.contabilidad_reporte_resumido')
   cashFlow(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.getCashFlow(actor.establecimientoId, query);
   }
 
   @Get('margin-report')
-  @RequirePermissions('finance.read', 'nav.balance')
+  @RequirePermissions('finance.read', 'nav.balance', 'nav.contabilidad_resumen_venta')
   margin(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.getMarginReport(actor.establecimientoId, query);
   }
 
   @Get('accounting-export')
-  @RequirePermissions('finance.read', 'nav.contabilidad_exportar_formatos')
+  @RequirePermissions(
+    'finance.read',
+    'nav.contabilidad_exportar_formatos',
+    'nav.contabilidad_exportar_reporte',
+  )
   accountingExport(
     @Query() query: AccountingExportQueryDto,
     @CurrentUser() actor: JwtRequestUser,
@@ -55,7 +61,7 @@ export class FinanceController {
   }
 
   @Get('bank-movements')
-  @RequirePermissions('finance.read', 'nav.balance')
+  @RequirePermissions('finance.read', 'nav.balance', 'nav.transacciones', 'nav.conciliacion_bancaria')
   bankMovements(@Query() query: BankMovementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.listBankMovements(actor.establecimientoId, query);
   }
@@ -82,5 +88,23 @@ export class FinanceController {
   @RequirePermissions('finance.read', 'nav.finanzas_ingresos')
   budgetVsActual(@Query() query: PurchaseBudgetReportQueryDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.getPurchaseBudgetVsActual(actor.establecimientoId, query);
+  }
+
+  @Get('payments-by-method')
+  @RequirePermissions('finance.read', 'nav.ingresos_egresos_medio_pago')
+  paymentsByMethod(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.getPaymentsByMethod(actor.establecimientoId, query);
+  }
+
+  @Get('recent-payments')
+  @RequirePermissions('finance.read', 'nav.pagos')
+  recentPayments(@Query() query: RecentPaymentsQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.getRecentPayments(actor.establecimientoId, query);
+  }
+
+  @Get('general-ledger')
+  @RequirePermissions('finance.read', 'nav.libro_mayor')
+  generalLedger(@Query() query: GeneralLedgerQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.getGeneralLedger(actor.establecimientoId, query);
   }
 }

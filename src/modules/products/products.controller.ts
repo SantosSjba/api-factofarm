@@ -169,6 +169,20 @@ export class ProductsController {
     return this.productsService.listPriceHistory(id, query);
   }
 
+  @Get(':id/history/sales')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Últimas ventas del producto' })
+  historySales(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
+    return this.productsService.historySales(id, query);
+  }
+
+  @Get(':id/history/purchases')
+  @RequirePermissions('products.read')
+  @ApiOperation({ summary: 'Últimas compras del producto' })
+  historyPurchases(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
+    return this.productsService.historyPurchases(id, query);
+  }
+
   @Get(':id/stock')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Stock de producto y lista de precios creados' })

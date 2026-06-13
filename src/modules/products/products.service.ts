@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductPriceChangeSource } from '../../generated/prisma/client';
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
+import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
@@ -1925,6 +1926,120 @@ export class ProductsService {
 
   listPriceHistory(id: string, query: ProductPriceHistoryQueryDto) {
     return this.priceHistory.list(id, query);
+  }
+
+  async historySales(id: string, query: ProductPriceHistoryQueryDto) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    const { page, pageSize, skip, take } = paginationArgs(query);
+    const where: Prisma.SaleItemWhereInput = {
+      productId: id,
+      sale: { deletedAt: null, estado: 'COMPLETADA' },
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.saleItem.count({ where }),
+      this.prisma.saleItem.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { sale: { createdAt: 'desc' } },
+        select: {
+          id: true,
+          cantidad: true,
+          precioUnitario: true,
+          totalLinea: true,
+          sale: {
+            select: {
+              id: true,
+              createdAt: true,
+              serie: true,
+              numero: true,
+              documentType: true,
+              customer: { select: { nombre: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return buildPaginatedResult(
+      rows.map((r) => ({
+        id: r.id,
+        saleId: r.sale.id,
+        fecha: r.sale.createdAt.toISOString(),
+        documento: `${r.sale.documentType} ${r.sale.serie ?? ''}-${r.sale.numero ?? ''}`.trim(),
+        cliente: r.sale.customer?.nombre ?? null,
+        cantidad: r.cantidad.toString(),
+        precioUnitario: r.precioUnitario.toString(),
+        totalLinea: r.totalLinea.toString(),
+      })),
+      total,
+      page,
+      pageSize,
+    );
+  }
+
+  async historyPurchases(id: string, query: ProductPriceHistoryQueryDto) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    const { page, pageSize, skip, take } = paginationArgs(query);
+    const where: Prisma.PurchaseOrderItemWhereInput = {
+      productId: id,
+      purchaseOrder: { deletedAt: null },
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.purchaseOrderItem.count({ where }),
+      this.prisma.purchaseOrderItem.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { purchaseOrder: { createdAt: 'desc' } },
+        select: {
+          id: true,
+          cantidadPedida: true,
+          cantidadRecibida: true,
+          precioUnitario: true,
+          totalLinea: true,
+          purchaseOrder: {
+            select: {
+              id: true,
+              numero: true,
+              estado: true,
+              createdAt: true,
+              supplier: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return buildPaginatedResult(
+      rows.map((r) => ({
+        id: r.id,
+        purchaseOrderId: r.purchaseOrder.id,
+        fecha: r.purchaseOrder.createdAt.toISOString(),
+        numero: r.purchaseOrder.numero,
+        estado: r.purchaseOrder.estado,
+        proveedor: r.purchaseOrder.supplier.razonSocial,
+        cantidadPedida: r.cantidadPedida.toString(),
+        cantidadRecibida: r.cantidadRecibida.toString(),
+        precioUnitario: r.precioUnitario.toString(),
+        totalLinea: r.totalLinea.toString(),
+      })),
+      total,
+      page,
+      pageSize,
+    );
   }
 
   async historyStock(id: string) {

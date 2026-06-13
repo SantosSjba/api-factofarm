@@ -138,3 +138,31 @@ export class BulkReconcileMovementsDto {
   @IsString({ each: true })
   movementIds!: string[];
 }
+
+export class RecentPaymentsQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ example: '2026-01-01' })
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-31' })
+  @IsOptional()
+  @IsString()
+  to?: string;
+}
+
+export class GeneralLedgerQueryDto extends FinancePeriodQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number;
+}

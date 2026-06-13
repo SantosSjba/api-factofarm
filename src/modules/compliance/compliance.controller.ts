@@ -195,7 +195,13 @@ export class ComplianceController {
   }
 
   @Get('ple/:book')
-  @RequirePermissions('compliance.read', 'billing.read', 'nav.contabilidad_exportar_formatos')
+  @RequirePermissions(
+    'compliance.read',
+    'billing.read',
+    'nav.contabilidad_exportar_formatos',
+    'nav.sire_ventas',
+    'nav.sire_compras',
+  )
   @ApiOperation({ summary: 'Exportar libro PLE TXT (14.1 ventas, 8.1 compras, 13.1 inventario)' })
   async pleExport(
     @Param('book') book: '14.1' | '8.1' | '13.1',
@@ -206,7 +212,13 @@ export class ComplianceController {
   }
 
   @Get('accountant-summary')
-  @RequirePermissions('compliance.read', 'billing.read', 'nav.contabilidad_exportar_reporte')
+  @RequirePermissions(
+    'compliance.read',
+    'billing.read',
+    'nav.contabilidad_exportar_reporte',
+    'nav.sire_ventas',
+    'nav.sire_compras',
+  )
   @ApiOperation({ summary: 'Resumen para contador externo' })
   accountantSummary(@Query('period') period: string, @CurrentUser() actor: JwtRequestUser) {
     return this.ple.accountantSummary(actor.establecimientoId, period);

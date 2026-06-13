@@ -95,6 +95,10 @@ model Establishment {
   purchaseBudgets     PurchaseBudget[]
   saleVoidRequests    SaleVoidRequest[]
   userAttendances     UserAttendance[]
+  shippingCarriers    ShippingCarrier[]
+  shippingDrivers     ShippingDriver[]
+  shippingVehicles    ShippingVehicle[]
+  departureAddresses  DepartureAddress[]
 
   @@index([titularPharmacistLicenseId])
   @@index([departmentId])

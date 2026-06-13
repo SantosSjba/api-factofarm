@@ -1,0 +1,95 @@
+/// Empresa de transporte (guías de remisión)
+model ShippingCarrier {
+  id              String    @id @default(uuid())
+  establishmentId String
+  ruc             String    @db.VarChar(11)
+  razonSocial     String    @db.VarChar(200)
+  nombreComercial String?   @db.VarChar(200)
+  telefono        String?   @db.VarChar(40)
+  correo          String?   @db.VarChar(120)
+  activo          Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  establishment Establishment    @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  drivers       ShippingDriver[]
+  vehicles      ShippingVehicle[]
+
+  @@unique([establishmentId, ruc])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+/// Conductor vinculado a transportista
+model ShippingDriver {
+  id              String               @id @default(uuid())
+  establishmentId String
+  carrierId       String?
+  tipoDocumento   CustomerDocumentType @default(DNI)
+  numeroDocumento String               @db.VarChar(20)
+  nombres         String               @db.VarChar(120)
+  apellidos       String               @db.VarChar(120)
+  licencia        String?              @db.VarChar(40)
+  telefono        String?              @db.VarChar(40)
+  activo          Boolean              @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  establishment Establishment   @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  carrier       ShippingCarrier? @relation(fields: [carrierId], references: [id], onDelete: SetNull)
+
+  @@unique([establishmentId, numeroDocumento])
+  @@index([establishmentId])
+  @@index([carrierId])
+  @@index([deletedAt])
+}
+
+/// Vehículo de transporte
+model ShippingVehicle {
+  id              String    @id @default(uuid())
+  establishmentId String
+  carrierId       String?
+  placa           String    @db.VarChar(20)
+  marca           String?   @db.VarChar(80)
+  modelo          String?   @db.VarChar(80)
+  capacidadKg     Decimal?  @db.Decimal(10, 2)
+  activo          Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  establishment Establishment    @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  carrier       ShippingCarrier? @relation(fields: [carrierId], references: [id], onDelete: SetNull)
+
+  @@unique([establishmentId, placa])
+  @@index([establishmentId])
+  @@index([carrierId])
+  @@index([deletedAt])
+}
+
+/// Punto de partida para guías de remisión
+model DepartureAddress {
+  id              String    @id @default(uuid())
+  establishmentId String
+  codigo          String    @db.VarChar(40)
+  nombre          String    @db.VarChar(200)
+  direccion       String    @db.VarChar(500)
+  departmentId    String?
+  provinceId      String?
+  districtId      String?
+  activo          Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  department    Department?   @relation("DepartureAddressDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  province      Province?     @relation("DepartureAddressProvince", fields: [provinceId], references: [id], onDelete: SetNull)
+  district      District?     @relation("DepartureAddressDistrict", fields: [districtId], references: [id], onDelete: SetNull)
+
+  @@unique([establishmentId, codigo])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}

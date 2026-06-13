@@ -77,6 +77,8 @@ const RBAC: RbacRow[] = [
   { code: 'pharmaceutical.write', description: 'Registrar eventos adversos y movimientos pharma' },
   { code: 'compliance.read', description: 'Consultar LPDP, PLE, precios regulados y farmacéuticos' },
   { code: 'compliance.write', description: 'Gestionar consentimientos, ARCO y catálogos regulatorios' },
+  { code: 'shipping.read', description: 'Consultar transportistas, conductores, vehículos y direcciones' },
+  { code: 'shipping.write', description: 'Gestionar maestros logísticos de guías de remisión' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
