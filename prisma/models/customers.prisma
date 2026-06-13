@@ -49,6 +49,8 @@ model Customer {
   customerType        CustomerType?        @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
   zoneId              String?
   zone                CustomerZone?        @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  agreementId         String?
+  agreement           Agreement?           @relation(fields: [agreementId], references: [id], onDelete: SetNull)
   deletedAt           DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -63,8 +65,10 @@ model Customer {
   deliveryOrders       DeliveryOrder[]
   loyaltyTransactions  CustomerLoyaltyTransaction[]
   promotionRedemptions PromotionRedemption[]
+  accountReceivables   AccountReceivable[]
 
   @@index([deletedAt])
+  @@index([agreementId])
   @@index([customerTypeId])
   @@index([zoneId])
   @@index([vendedorAsignadoId])

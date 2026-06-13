@@ -197,6 +197,9 @@ model Sale {
   voidedById            String?
   voidedAt              DateTime?
   comentario            String?          @db.VarChar(500)
+  agreementId           String?
+  coberturaConvenio     Decimal          @default(0) @db.Decimal(18, 4)
+  copagoPaciente        Decimal          @default(0) @db.Decimal(18, 4)
   deletedAt             DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
@@ -221,8 +224,12 @@ model Sale {
   deliveryOrder       DeliveryOrder?
   loyaltyTransactions CustomerLoyaltyTransaction[]
   promotionRedemption PromotionRedemption?
+  agreement           Agreement? @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  accountReceivable   AccountReceivable?
+  billingStatementLines AgreementBillingStatementLine[]
 
   @@index([establishmentId])
+  @@index([agreementId])
   @@index([warehouseId])
   @@index([customerId])
   @@index([sellerId])

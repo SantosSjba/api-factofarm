@@ -50,6 +50,10 @@ import { HealthModule } from './modules/health/health.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { DeliveryOrdersModule } from './modules/delivery-orders/delivery-orders.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
+import { AgreementsModule } from './modules/agreements/agreements.module';
+import { AccountsReceivableModule } from './modules/accounts-receivable/accounts-receivable.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { HospitalModule } from './modules/hospital/hospital.module';
 
 @Module({
   imports: [
@@ -134,6 +138,10 @@ import { MarketingModule } from './modules/marketing/marketing.module';
     RealtimeModule,
     DeliveryOrdersModule,
     MarketingModule,
+    AgreementsModule,
+    AccountsReceivableModule,
+    FinanceModule,
+    HospitalModule,
   ],
   controllers: [AppController],
   providers: [

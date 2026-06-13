@@ -57,6 +57,10 @@ model User {
   deliveriesCreated     DeliveryOrder[] @relation("DeliveryCreatedBy")
   deliveriesAssigned    DeliveryOrder[] @relation("DeliveryAssignedTo")
   loyaltyTransactionsCreated CustomerLoyaltyTransaction[] @relation("LoyaltyCreatedBy")
+  arPaymentsCreated        AccountReceivablePayment[] @relation("ArPaymentCreatedBy")
+  hospitalConsumptionsRequested HospitalInternalConsumption[] @relation("HospitalConsumptionRequestedBy")
+  hospitalConsumptionsDispensed HospitalInternalConsumption[] @relation("HospitalConsumptionDispensedBy")
+  bankMovementsCreated       BankMovement[] @relation("BankMovementCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

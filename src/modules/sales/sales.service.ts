@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AccountReceivableStatus,
   CashMovementType,
   DocumentSeriesType,
   PaymentMethod,
@@ -193,7 +194,17 @@ export class SalesService {
       if (!session) throw new BadRequestException('Sesión de caja no abierta');
     }
 
-    const pricedItems = await this.buildPricedItems(dto, actor.establecimientoId);
+    const resolvedAgreement = await this.resolveSaleAgreement(
+      actor.establecimientoId,
+      dto.customerId,
+      dto.agreementId,
+    );
+
+    const pricedItems = await this.buildPricedItems(
+      dto,
+      actor.establecimientoId,
+      resolvedAgreement?.id,
+    );
     await this.regulatedPrices.checkSalePrices(
       actor.establecimientoId,
       pricedItems.map((item) => ({
@@ -265,7 +276,21 @@ export class SalesService {
       }
     }
 
-    validateSalePayments(dto.payments, total);
+    let coberturaConvenio = new Prisma.Decimal(0);
+    let copagoPaciente = total;
+    if (resolvedAgreement) {
+      coberturaConvenio = total
+        .times(resolvedAgreement.coberturaPorcentaje)
+        .div(100);
+      copagoPaciente = total.minus(coberturaConvenio);
+    }
+
+    const amountToCollect = coberturaConvenio.greaterThan(0) ? copagoPaciente : total;
+    if (amountToCollect.greaterThan(0)) {
+      validateSalePayments(dto.payments, amountToCollect);
+    } else if (!dto.payments.length) {
+      dto.payments = [{ metodo: PaymentMethod.EFECTIVO, monto: 0 }];
+    }
 
     const { serie, numero } = await this.resolveDocumentNumber(
       actor.establecimientoId,
@@ -325,6 +350,9 @@ export class SalesService {
           controlledPharmacistLicenseId: controlledLicense?.id ?? null,
           controlledDigitalSignature: dto.controlledDigitalSignature?.trim() || null,
           comentario: dto.comentario?.trim() || null,
+          agreementId: resolvedAgreement?.id ?? null,
+          coberturaConvenio,
+          copagoPaciente,
           items: {
             create: pricedItems.map((item) => ({
               productId: item.productId,
@@ -396,6 +424,56 @@ export class SalesService {
         await tx.quotation.update({
           where: { id: dto.quotationId },
           data: { estado: QuotationStatus.CONVERTIDA },
+        });
+      }
+
+      if (dto.customerId && coberturaConvenio.greaterThan(0) && resolvedAgreement) {
+        const vencimiento = new Date();
+        vencimiento.setDate(vencimiento.getDate() + resolvedAgreement.diasCredito);
+        await tx.accountReceivable.create({
+          data: {
+            establishmentId: actor.establecimientoId,
+            customerId: dto.customerId,
+            saleId: sale.id,
+            agreementId: resolvedAgreement.id,
+            documentoRef: `${serie}-${numero}`,
+            montoTotal: coberturaConvenio,
+            montoPagado: new Prisma.Decimal(0),
+            saldo: coberturaConvenio,
+            fechaVencimiento: vencimiento,
+            estado: AccountReceivableStatus.PENDIENTE,
+            comentario: `Cobertura convenio ${resolvedAgreement.codigo}`,
+          },
+        });
+      }
+
+      const creditPayment = dto.payments.find((p) => p.metodo === PaymentMethod.CREDITO);
+      if (
+        dto.customerId &&
+        !resolvedAgreement &&
+        creditPayment &&
+        new Prisma.Decimal(creditPayment.monto).greaterThan(0)
+      ) {
+        const customer = await tx.customer.findFirst({
+          where: { id: dto.customerId },
+          select: { diasCredito: true },
+        });
+        const creditAmount = new Prisma.Decimal(creditPayment.monto);
+        const vencimiento = new Date();
+        vencimiento.setDate(vencimiento.getDate() + (customer?.diasCredito ?? 0));
+        await tx.accountReceivable.create({
+          data: {
+            establishmentId: actor.establecimientoId,
+            customerId: dto.customerId,
+            saleId: sale.id,
+            documentoRef: `${serie}-${numero}`,
+            montoTotal: creditAmount,
+            montoPagado: new Prisma.Decimal(0),
+            saldo: creditAmount,
+            fechaVencimiento: vencimiento,
+            estado: AccountReceivableStatus.PENDIENTE,
+            comentario: 'Venta a crédito',
+          },
         });
       }
 
@@ -871,7 +949,11 @@ export class SalesService {
     );
   }
 
-  private async buildPricedItems(dto: CreateSaleDto, establishmentId: string) {
+  private async buildPricedItems(
+    dto: CreateSaleDto,
+    establishmentId: string,
+    agreementId?: string,
+  ) {
     const items: Array<{
       productId: string;
       cantidad: Prisma.Decimal;
@@ -902,7 +984,12 @@ export class SalesService {
 
       const unitPrice = line.unitPrice
         ? new Prisma.Decimal(line.unitPrice)
-        : await this.resolveUnitPrice(line.productId, dto.warehouseId, dto.customerId);
+        : await this.resolveUnitPrice(
+            line.productId,
+            dto.warehouseId,
+            dto.customerId,
+            agreementId,
+          );
 
       const qty = new Prisma.Decimal(line.quantity);
       const totals = computeSaleLineTotals({
@@ -932,7 +1019,19 @@ export class SalesService {
     return items;
   }
 
-  private async resolveUnitPrice(productId: string, warehouseId: string, customerId?: string) {
+  private async resolveUnitPrice(
+    productId: string,
+    warehouseId: string,
+    customerId?: string,
+    agreementId?: string,
+  ) {
+    if (agreementId) {
+      const agreementPrice = await this.prisma.agreementProductPrice.findUnique({
+        where: { agreementId_productId: { agreementId, productId } },
+        select: { precio: true },
+      });
+      if (agreementPrice) return agreementPrice.precio;
+    }
     if (customerId) {
       const custom = await this.prisma.customerProductPrice.findUnique({
         where: { customerId_productId: { customerId, productId } },
@@ -950,6 +1049,38 @@ export class SalesService {
       select: { precioUnitarioVenta: true },
     });
     return product!.precioUnitarioVenta;
+  }
+
+  private async resolveSaleAgreement(
+    establishmentId: string,
+    customerId?: string,
+    agreementIdInput?: string,
+  ) {
+    let agreementId = agreementIdInput ?? null;
+    if (!agreementId && customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: customerId, deletedAt: null },
+        select: { agreementId: true },
+      });
+      agreementId = customer?.agreementId ?? null;
+    }
+    if (!agreementId) return null;
+
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        establishmentId,
+        activo: true,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        codigo: true,
+        coberturaPorcentaje: true,
+        diasCredito: true,
+      },
+    });
+    return agreement ?? null;
   }
 
   private async resolveDocumentNumber(

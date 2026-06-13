@@ -87,6 +87,12 @@ model Establishment {
   titularPharmacist PharmacistLicense? @relation("EstablishmentTitularPharmacist", fields: [titularPharmacistLicenseId], references: [id], onDelete: SetNull)
   deliveryOrders    DeliveryOrder[]
   loyaltyTransactions CustomerLoyaltyTransaction[]
+  agreements          Agreement[]
+  accountReceivables  AccountReceivable[]
+  hospitalAreas       HospitalArea[]
+  hospitalConsumptions HospitalInternalConsumption[]
+  bankAccounts        BankAccount[]
+  purchaseBudgets     PurchaseBudget[]
 
   @@index([titularPharmacistLicenseId])
   @@index([departmentId])

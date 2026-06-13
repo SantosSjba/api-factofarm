@@ -83,6 +83,7 @@ model Warehouse {
   purchaseOrders     PurchaseOrder[]
   goodsReceipts      GoodsReceipt[]
   deliveryOrders       DeliveryOrder[]
+  hospitalConsumptions HospitalInternalConsumption[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -237,6 +238,8 @@ model Product {
   substitutionsAsOriginal SaleSubstitution[] @relation("SubstitutionOriginal")
   substitutionsAsSubstitute SaleSubstitution[] @relation("SubstitutionSubstitute")
   deliveryOrderItems        DeliveryOrderItem[]
+  agreementProductPrices    AgreementProductPrice[]
+  hospitalConsumptionItems  HospitalInternalConsumptionItem[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?

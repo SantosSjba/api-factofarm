@@ -61,6 +61,12 @@ const RBAC: RbacRow[] = [
   { code: 'delivery.write', description: 'Gestionar pedidos delivery' },
   { code: 'promotions.read', description: 'Consultar promociones y cupones' },
   { code: 'promotions.write', description: 'Crear y editar promociones' },
+  { code: 'agreements.read', description: 'Consultar convenios y liquidaciones' },
+  { code: 'agreements.write', description: 'Gestionar convenios y precios' },
+  { code: 'finance.read', description: 'Consultar finanzas, CxC y reportes' },
+  { code: 'finance.write', description: 'Registrar pagos, bancos y presupuestos' },
+  { code: 'hospital.read', description: 'Consultar áreas y consumo hospitalario' },
+  { code: 'hospital.write', description: 'Dispensar consumo interno hospitalario' },
   { code: 'medicos.read', description: 'Consultar médicos prescriptores' },
   { code: 'medicos.write', description: 'Registrar y editar médicos' },
   { code: 'prescriptions.read', description: 'Consultar recetas médicas' },
@@ -152,6 +158,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.anulaciones', label: 'Anulaciones', sortOrder: 4 },
       { code: 'nav.cotizaciones', label: 'Cotizaciones', sortOrder: 5 },
       { code: 'nav.promociones', label: 'Promociones y cupones', sortOrder: 6 },
+      { code: 'nav.convenios', label: 'Convenios y seguros', sortOrder: 7 },
     ],
   },
   {
@@ -226,6 +233,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.pagos', label: 'Pagos', sortOrder: 6 },
       { code: 'nav.balance', label: 'Balance', sortOrder: 7 },
       { code: 'nav.ingresos_egresos_medio_pago', label: 'Ingresos y Egresos M. pago', sortOrder: 8 },
+      { code: 'nav.conciliacion_bancaria', label: 'Conciliación bancaria', sortOrder: 9 },
     ],
   },
   {
@@ -247,6 +255,7 @@ export const MENU_GROUPS: MenuGroup[] = [
         label: 'Recepción productos farmacéuticos',
         sortOrder: 6,
       },
+      { code: 'nav.hospital_dispensacion', label: 'Dispensación hospitalaria', sortOrder: 7 },
     ],
   },
 ];

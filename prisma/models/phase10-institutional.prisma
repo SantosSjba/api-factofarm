@@ -1,0 +1,292 @@
+enum AgreementType {
+  EPS
+  CLINICA
+  EMPRESA
+  HOSPITAL
+  SEGURO
+}
+
+enum AgreementInstitutionType {
+  SIS
+  ESSALUD
+  EPS
+  PRIVADO
+  OTRO
+}
+
+enum AgreementBillingStatus {
+  BORRADOR
+  EMITIDA
+  PAGADA
+}
+
+enum AccountReceivableStatus {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  VENCIDA
+  ANULADA
+}
+
+enum HospitalAreaType {
+  PABELLON
+  SERVICIO
+  CARRO_PARO
+  BOTIQUIN
+}
+
+enum HospitalConsumptionStatus {
+  SOLICITADO
+  DISPENSADO
+  CANCELADO
+}
+
+enum BankAccountType {
+  CAJA
+  BANCO
+}
+
+enum BankMovementType {
+  INGRESO
+  EGRESO
+}
+
+model Agreement {
+  id                  String                   @id @default(uuid())
+  establishmentId     String
+  codigo              String                   @db.VarChar(40)
+  nombre              String                   @db.VarChar(200)
+  tipo                AgreementType
+  institucionTipo     AgreementInstitutionType?
+  coberturaPorcentaje Decimal                  @default(100) @db.Decimal(5, 2)
+  diasCredito         Int                      @default(30)
+  activo              Boolean                  @default(true)
+  contactoNombre      String?                  @db.VarChar(120)
+  contactoEmail       String?                  @db.VarChar(120)
+  contactoTelefono    String?                  @db.VarChar(30)
+  notas               String?                  @db.VarChar(500)
+  deletedAt           DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  productPrices AgreementProductPrice[]
+  customers     Customer[]
+  sales             Sale[]
+  accountReceivables AccountReceivable[]
+  billingStatements AgreementBillingStatement[]
+
+  @@unique([establishmentId, codigo])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+model AgreementProductPrice {
+  id          String  @id @default(uuid())
+  agreementId String
+  productId   String
+  precio      Decimal @db.Decimal(18, 4)
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([agreementId, productId])
+  @@index([productId])
+}
+
+model AgreementBillingStatement {
+  id            String                 @id @default(uuid())
+  agreementId   String
+  periodo       String                 @db.VarChar(7)
+  totalVentas   Decimal                @db.Decimal(18, 4)
+  totalCobertura Decimal               @db.Decimal(18, 4)
+  totalCopago   Decimal                @db.Decimal(18, 4)
+  estado        AgreementBillingStatus @default(BORRADOR)
+  emittedAt     DateTime?
+  createdAt     DateTime               @default(now())
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  lines     AgreementBillingStatementLine[]
+
+  @@unique([agreementId, periodo])
+  @@index([agreementId])
+}
+
+model AgreementBillingStatementLine {
+  id                    String  @id @default(uuid())
+  billingStatementId    String
+  saleId                String
+  totalVenta            Decimal @db.Decimal(18, 4)
+  cobertura             Decimal @db.Decimal(18, 4)
+  copago                Decimal @db.Decimal(18, 4)
+
+  billingStatement AgreementBillingStatement @relation(fields: [billingStatementId], references: [id], onDelete: Cascade)
+  sale             Sale                      @relation(fields: [saleId], references: [id], onDelete: Restrict)
+
+  @@index([billingStatementId])
+  @@index([saleId])
+}
+
+model AccountReceivable {
+  id               String                  @id @default(uuid())
+  establishmentId  String
+  customerId       String
+  saleId           String?                 @unique
+  agreementId      String?
+  documentoRef     String?                 @db.VarChar(60)
+  montoTotal       Decimal                 @db.Decimal(18, 4)
+  montoPagado      Decimal                 @default(0) @db.Decimal(18, 4)
+  saldo            Decimal                 @db.Decimal(18, 4)
+  fechaEmision     DateTime                @default(now())
+  fechaVencimiento DateTime?
+  estado           AccountReceivableStatus @default(PENDIENTE)
+  comentario       String?                 @db.VarChar(500)
+  deletedAt        DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  sale          Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  agreement     Agreement?    @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  payments      AccountReceivablePayment[]
+
+  @@index([establishmentId])
+  @@index([customerId])
+  @@index([estado])
+  @@index([fechaVencimiento])
+  @@index([deletedAt])
+}
+
+model AccountReceivablePayment {
+  id                  String   @id @default(uuid())
+  accountReceivableId String
+  monto               Decimal  @db.Decimal(18, 4)
+  metodoPago          String?  @db.VarChar(40)
+  referencia          String?  @db.VarChar(120)
+  pagadoAt            DateTime @default(now())
+  createdById         String?
+
+  accountReceivable AccountReceivable @relation(fields: [accountReceivableId], references: [id], onDelete: Cascade)
+  createdBy         User?             @relation("ArPaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([accountReceivableId])
+}
+
+model HospitalArea {
+  id              String           @id @default(uuid())
+  establishmentId String
+  codigo          String           @db.VarChar(40)
+  nombre          String           @db.VarChar(200)
+  tipo            HospitalAreaType
+  activo          Boolean          @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  consumptions  HospitalInternalConsumption[]
+
+  @@unique([establishmentId, codigo])
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+model HospitalInternalConsumption {
+  id              String                    @id @default(uuid())
+  establishmentId String
+  warehouseId     String
+  hospitalAreaId  String
+  solicitadoPorId String
+  dispensadoPorId String?
+  estado          HospitalConsumptionStatus @default(SOLICITADO)
+  motivo          String?                   @db.VarChar(500)
+  comentario      String?                   @db.VarChar(500)
+  dispensadoAt    DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  establishment  Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  warehouse      Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  hospitalArea   HospitalArea  @relation(fields: [hospitalAreaId], references: [id], onDelete: Restrict)
+  solicitadoPor  User          @relation("HospitalConsumptionRequestedBy", fields: [solicitadoPorId], references: [id], onDelete: Restrict)
+  dispensadoPor  User?         @relation("HospitalConsumptionDispensedBy", fields: [dispensadoPorId], references: [id], onDelete: SetNull)
+  items          HospitalInternalConsumptionItem[]
+
+  @@index([establishmentId])
+  @@index([hospitalAreaId])
+  @@index([estado])
+  @@index([deletedAt])
+}
+
+model HospitalInternalConsumptionItem {
+  id            String  @id @default(uuid())
+  consumptionId String
+  productId     String
+  cantidad      Decimal @db.Decimal(18, 4)
+  notas         String? @db.VarChar(200)
+
+  consumption HospitalInternalConsumption @relation(fields: [consumptionId], references: [id], onDelete: Cascade)
+  product     Product                     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([consumptionId])
+  @@index([productId])
+}
+
+model BankAccount {
+  id              String          @id @default(uuid())
+  establishmentId String
+  nombre          String          @db.VarChar(120)
+  tipo            BankAccountType @default(BANCO)
+  banco           String?         @db.VarChar(120)
+  numeroCuenta    String?         @db.VarChar(40)
+  moneda          String          @default("PEN") @db.VarChar(3)
+  saldoLibro      Decimal         @default(0) @db.Decimal(18, 4)
+  activo          Boolean         @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  movements     BankMovement[]
+
+  @@index([establishmentId])
+  @@index([deletedAt])
+}
+
+model BankMovement {
+  id            String           @id @default(uuid())
+  bankAccountId String
+  tipo          BankMovementType
+  monto         Decimal          @db.Decimal(18, 4)
+  referencia    String?          @db.VarChar(120)
+  descripcion   String?          @db.VarChar(500)
+  conciliado    Boolean          @default(false)
+  conciliadoAt  DateTime?
+  movimientoAt  DateTime         @default(now())
+  createdById   String?
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  createdBy   User?       @relation("BankMovementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([bankAccountId])
+  @@index([conciliado])
+  @@index([movimientoAt])
+}
+
+model PurchaseBudget {
+  id                String  @id @default(uuid())
+  establishmentId   String
+  anio              Int
+  mes               Int
+  montoPresupuestado Decimal @db.Decimal(18, 4)
+  notas             String? @db.VarChar(500)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+
+  @@unique([establishmentId, anio, mes])
+  @@index([establishmentId])
+}

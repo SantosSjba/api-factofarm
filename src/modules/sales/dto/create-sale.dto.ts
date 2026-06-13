@@ -171,6 +171,11 @@ export class CreateSaleDto {
   @MaxLength(128)
   controlledDigitalSignature?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  agreementId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
