@@ -61,7 +61,7 @@ describe('InventoryLotAllocationService', () => {
   it('falla si no hay stock suficiente en lotes elegibles', () => {
     const lots = [lot('L-1', 2, new Date('2026-12-01'), new Date('2026-01-01'))];
     expect(() => service.planAutoAllocation(lots, new Prisma.Decimal(5))).toThrow(
-      BadRequestException,
+      /Stock vendible por lotes: 2/,
     );
   });
 });

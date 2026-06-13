@@ -26,6 +26,7 @@ import {
 } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
+import { InventoryLotAllocationService } from '../inventory-movements/inventory-lot-allocation.service';
 import { BillingService } from '../billing/billing.service';
 import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { PharmaceuticalService } from '../pharmaceutical/pharmaceutical.service';
@@ -57,6 +58,7 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly inventory: InventoryMovementsService,
+    private readonly lotAllocation: InventoryLotAllocationService,
     private readonly billing: BillingService,
     private readonly prescriptions: PrescriptionsService,
     private readonly pharmaceutical: PharmaceuticalService,
@@ -981,7 +983,7 @@ export class SalesService {
           : {}),
         warehouseStocks: { some: { warehouseId, cantidad: { gt: 0 } } },
       },
-      take: 20,
+      take: 50,
       orderBy: { nombre: 'asc' },
       select: {
         id: true,
@@ -1001,17 +1003,34 @@ export class SalesService {
       },
     });
 
-    return products.map((p) => ({
-      id: p.id,
-      nombre: p.nombre,
-      codigoInterno: p.codigoInterno,
-      codigoBarra: p.codigoBarra,
-      precio: p.precioUnitarioVenta.toString(),
-      stock: p.warehouseStocks[0]?.cantidad.toString() ?? '0',
-      necesitaRecetaMedica: p.necesitaRecetaMedica,
-      manejaLotes: p.manejaLotes,
-      esControlado: p.esControlado,
-    }));
+    const lotProductIds = products.filter((p) => p.manejaLotes).map((p) => p.id);
+    const eligibleByProduct = await this.lotAllocation.batchSumEligibleStock(
+      lotProductIds,
+      warehouseId,
+    );
+
+    return products
+      .map((p) => {
+        const warehouseStock = p.warehouseStocks[0]?.cantidad ?? new Prisma.Decimal(0);
+        const sellable = p.manejaLotes
+          ? (eligibleByProduct.get(p.id) ?? new Prisma.Decimal(0))
+          : warehouseStock;
+        if (sellable.lte(0)) return null;
+
+        return {
+          id: p.id,
+          nombre: p.nombre,
+          codigoInterno: p.codigoInterno,
+          codigoBarra: p.codigoBarra,
+          precio: p.precioUnitarioVenta.toString(),
+          stock: sellable.toString(),
+          warehouseStock: warehouseStock.toString(),
+          necesitaRecetaMedica: p.necesitaRecetaMedica,
+          manejaLotes: p.manejaLotes,
+          esControlado: p.esControlado,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
   }
 
   async suggestGenericSubstitutes(

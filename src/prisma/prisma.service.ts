@@ -17,6 +17,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       max: config.get<number>('PG_POOL_MAX', 20),
       idleTimeoutMillis: config.get<number>('PG_POOL_IDLE_MS', 30_000),
       connectionTimeoutMillis: config.get<number>('PG_POOL_CONNECT_MS', 10_000),
+      keepAlive: true,
+    });
+    pool.on('error', (err) => {
+      this.logger.warn(`Pool PostgreSQL: ${err.message}`);
     });
     const adapter = new PrismaPg(pool);
     super({ adapter });

@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -45,9 +46,10 @@ const DETRACCION_MIN_TOTAL = 700;
 const DETRACCION_CUENTA_BN = '00000000000';
 
 @Injectable()
-export class BillingService implements OnModuleInit {
+export class BillingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BillingService.name);
   private processing = false;
+  private jobPoller: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -63,9 +65,16 @@ export class BillingService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    setInterval(() => {
+    this.jobPoller = setInterval(() => {
       void this.processPendingJobs();
     }, 5000);
+  }
+
+  onModuleDestroy() {
+    if (this.jobPoller) {
+      clearInterval(this.jobPoller);
+      this.jobPoller = null;
+    }
   }
 
   private encryptionKey(): string {
@@ -666,6 +675,9 @@ export class BillingService implements OnModuleInit {
       }
 
       await this.retryRejectedAutomatically();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Cola de facturación: error de base de datos (${message}). Se reintentará.`);
     } finally {
       this.processing = false;
     }

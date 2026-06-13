@@ -102,10 +102,58 @@ export class InventoryLotAllocationService {
     }
 
     if (remaining.gt(0)) {
-      throw new BadRequestException('Stock insuficiente en lotes elegibles para la cantidad solicitada');
+      const disponible = this.sumEligibleStock(lots);
+      throw new BadRequestException(
+        disponible.lte(0)
+          ? 'No hay lotes elegibles para venta. Revise vencimientos o registre lotes con stock.'
+          : `Stock vendible por lotes: ${disponible.toString()}. Cantidad solicitada: ${quantity.toString()}.`,
+      );
     }
 
     return lines;
+  }
+
+  sumEligibleStock(lots: EligibleLotRow[]): Prisma.Decimal {
+    return lots.reduce((acc, lot) => acc.plus(lot.stock), new Prisma.Decimal(0));
+  }
+
+  /** Suma stock en lotes no vencidos (o todos si no bloquea vencidos) por producto. */
+  async batchSumEligibleStock(
+    productIds: string[],
+    warehouseId: string,
+  ): Promise<Map<string, Prisma.Decimal>> {
+    const totals = new Map<string, Prisma.Decimal>();
+    if (!productIds.length) return totals;
+
+    const policy = await this.getPolicyFromWarehouse(warehouseId);
+    const now = new Date();
+    const rows = await this.prisma.productLotStock.findMany({
+      where: {
+        productId: { in: productIds },
+        warehouseId,
+        deletedAt: null,
+        stock: { gt: 0 },
+      },
+      select: {
+        productId: true,
+        stock: true,
+        fechaVencimiento: true,
+      },
+    });
+
+    for (const productId of productIds) {
+      totals.set(productId, new Prisma.Decimal(0));
+    }
+
+    for (const row of rows) {
+      if (policy.blockExpiredProductSales && this.isExpired(row.fechaVencimiento, now)) {
+        continue;
+      }
+      const current = totals.get(row.productId) ?? new Prisma.Decimal(0);
+      totals.set(row.productId, current.plus(row.stock));
+    }
+
+    return totals;
   }
 
   planManualAllocation(
