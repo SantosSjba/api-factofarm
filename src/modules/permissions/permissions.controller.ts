@@ -22,4 +22,10 @@ export class PermissionsController {
   menuTrees() {
     return this.permissionsService.menuTrees();
   }
+
+  @Get('role-templates')
+  @ApiOperation({ summary: 'Plantillas de permisos por rol' })
+  roleTemplates() {
+    return this.permissionsService.roleTemplates();
+  }
 }

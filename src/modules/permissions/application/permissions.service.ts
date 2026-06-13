@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CacheService } from '../../../common/cache/cache.service';
+import { listRoleTemplates } from '../../../common/permissions/role-permission-templates';
 import { PERMISSIONS_REPOSITORY } from '../domain/permissions.repository';
 import type { IPermissionsRepository } from '../domain/permissions.repository';
 
@@ -37,5 +38,9 @@ export class PermissionsService {
     return this.cache.getOrSet('permissions:menu:roots', () =>
       this.permissions.findMenuTreeRoots([...MENU_ROOT_CODES]),
     );
+  }
+
+  roleTemplates() {
+    return listRoleTemplates();
   }
 }

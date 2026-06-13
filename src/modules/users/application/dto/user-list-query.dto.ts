@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { PaginationQueryDto } from '../../../../common/dto/pagination.dto';
 
 export class UserListQueryDto extends PaginationQueryDto {
@@ -9,8 +9,8 @@ export class UserListQueryDto extends PaginationQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ enum: ['ADMINISTRADOR', 'VENDEDOR', 'all'] })
+  @ApiPropertyOptional({ description: 'Código de rol o "all"' })
   @IsOptional()
-  @IsIn(['ADMINISTRADOR', 'VENDEDOR', 'all'])
-  role?: 'ADMINISTRADOR' | 'VENDEDOR' | 'all';
+  @IsString()
+  role?: string;
 }

@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { UserRole } from '../../generated/prisma/client';
+import { hasChainScope } from '../permissions/role-policy.util';
 
 export type ScopeActor = {
   establecimientoId: string;
@@ -15,7 +16,7 @@ export function resolveEstablishmentScope(
   if (!requested || requested === actor.establecimientoId) {
     return actor.establecimientoId;
   }
-  if (actor.role === UserRole.ADMINISTRADOR) {
+  if (hasChainScope(actor.role)) {
     return requested;
   }
   throw new ForbiddenException('No puede consultar datos de otra sucursal');
@@ -26,12 +27,12 @@ export function establishmentWhere(actor: ScopeActor, field = 'establishmentId')
   return { [field]: actor.establecimientoId } as Record<string, string>;
 }
 
-/** Valida que un recurso pertenece a la sucursal del actor (admin omitido). */
+/** Valida que un recurso pertenece a la sucursal del actor (admin cadena omitido). */
 export function assertEstablishmentAccess(
   actor: ScopeActor,
   resourceEstablishmentId: string,
 ): void {
-  if (actor.role === UserRole.ADMINISTRADOR) {
+  if (hasChainScope(actor.role)) {
     return;
   }
   if (resourceEstablishmentId !== actor.establecimientoId) {

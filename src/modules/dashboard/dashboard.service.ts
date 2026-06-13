@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type DashboardInventoryAlerts = {
@@ -157,5 +158,118 @@ export class DashboardService {
     );
 
     return { periodDays: 30, establishments: rows };
+  }
+
+  async getManagerDashboard(establishmentId: string) {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+
+    const [salesToday, salesWeek, pendingVoids, openSessions, staffPresent] = await Promise.all([
+      this.prisma.sale.aggregate({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: 'COMPLETADA',
+          createdAt: { gte: startOfDay },
+        },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.sale.aggregate({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: 'COMPLETADA',
+          createdAt: { gte: startOfWeek },
+        },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.saleVoidRequest.count({
+        where: { establishmentId, status: 'PENDIENTE' },
+      }),
+      this.prisma.cashSession.count({
+        where: { estado: 'ABIERTA', cashRegister: { establishmentId } },
+      }),
+      this.prisma.userAttendance.count({
+        where: { establishmentId, checkOutAt: null, checkInAt: { gte: startOfDay } },
+      }),
+    ]);
+
+    return {
+      ventasHoy: (salesToday._sum.total ?? new Prisma.Decimal(0)).toString(),
+      ventasHoyCount: salesToday._count,
+      ventasSemana: (salesWeek._sum.total ?? new Prisma.Decimal(0)).toString(),
+      ventasSemanaCount: salesWeek._count,
+      anulacionesPendientes: pendingVoids,
+      cajasAbiertas: openSessions,
+      personalPresente: staffPresent,
+    };
+  }
+
+  async getPharmacistDashboard(establishmentId: string) {
+    const [pendingPrescriptions, pendingVoids, controlledProducts] = await Promise.all([
+      this.prisma.prescription.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: ['ACTIVA', 'PARCIALMENTE_DISPENSADA'] },
+        },
+      }),
+      this.prisma.saleVoidRequest.count({
+        where: { establishmentId, status: 'PENDIENTE' },
+      }),
+      this.prisma.product.count({
+        where: { esControlado: true, deletedAt: null, habilitado: true },
+      }),
+    ]);
+
+    return {
+      recetasPendientes: pendingPrescriptions,
+      anulacionesPendientes: pendingVoids,
+      productosControladosActivos: controlledProducts,
+    };
+  }
+
+  async getCashierDashboard(establishmentId: string, userId: string) {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [mySales, openSession] = await Promise.all([
+      this.prisma.sale.aggregate({
+        where: {
+          establishmentId,
+          sellerId: userId,
+          deletedAt: null,
+          estado: 'COMPLETADA',
+          createdAt: { gte: startOfDay },
+        },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.cashSession.findFirst({
+        where: {
+          estado: 'ABIERTA',
+          userId,
+          cashRegister: { establishmentId },
+        },
+        select: { id: true, openedAt: true, montoApertura: true },
+      }),
+    ]);
+
+    return {
+      ventasHoy: (mySales._sum.total ?? new Prisma.Decimal(0)).toString(),
+      ventasHoyCount: mySales._count,
+      cajaAbierta: !!openSession,
+      sesionCaja: openSession
+        ? {
+            id: openSession.id,
+            openedAt: openSession.openedAt.toISOString(),
+            montoApertura: openSession.montoApertura.toString(),
+          }
+        : null,
+    };
   }
 }

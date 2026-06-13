@@ -227,6 +227,7 @@ model Sale {
   agreement           Agreement? @relation(fields: [agreementId], references: [id], onDelete: SetNull)
   accountReceivable   AccountReceivable?
   billingStatementLines AgreementBillingStatementLine[]
+  voidRequest           SaleVoidRequest?
 
   @@index([establishmentId])
   @@index([agreementId])

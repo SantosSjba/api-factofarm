@@ -1,4 +1,5 @@
 import { UserRole } from '../../generated/prisma/client';
+import { hasChainScope } from './role-policy.util';
 import { MENU_NAV_LEAF_CODES } from '../../../prisma/seed/steps/permissions';
 
 /**
@@ -52,6 +53,7 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<Record<string, readonly string[]>> 
   'nav.reporte_psicotropicos': ['pharmaceutical.read'],
   'nav.reporte_digemid': ['pharmaceutical.read'],
   'nav.recepcion_productos_farmaceuticos': ['pharmaceutical.read', 'pharmaceutical.write'],
+  'nav.gestion_personal': ['staff.read', 'staff.write'],
 };
 
 const MENU_NAV_CODES = new Set(MENU_NAV_LEAF_CODES);
@@ -80,7 +82,7 @@ export function expandUserPermissionCodes(codes: string[], role: UserRole): stri
   }
 
   set.add('users.read');
-  if (role === UserRole.ADMINISTRADOR) {
+  if (hasChainScope(role)) {
     set.add('users.write');
   }
 

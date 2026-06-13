@@ -14,6 +14,7 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateSaleDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
+import { SaleVoidRequestStatus } from '../../generated/prisma/client';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalesService } from './sales.service';
@@ -60,6 +61,16 @@ export class SalesController {
     return this.service.checkInteractions(dto.productIds);
   }
 
+  @Get('void-requests')
+  @RequirePermissions('sales.void', 'sales.write', 'nav.anulaciones')
+  @ApiOperation({ summary: 'Solicitudes de anulación de venta' })
+  listVoidRequests(
+    @Query('status') status: SaleVoidRequestStatus | undefined,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.listVoidRequests(actor.establecimientoId, status);
+  }
+
   @Get(':id')
   @RequirePermissions('sales.read')
   @ApiOperation({ summary: 'Detalle de venta' })
@@ -86,6 +97,36 @@ export class SalesController {
   @ApiOperation({ summary: 'Sincronizar ventas registradas offline (idempotente por offlineLocalId)' })
   syncOffline(@Body() dto: SyncSalesDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.syncOfflineBatch(dto, actor);
+  }
+
+  @Post('void-requests/:requestId/approve')
+  @RequirePermissions('sales.void', 'nav.anulaciones')
+  approveVoidRequest(
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.approveVoidRequest(requestId, actor);
+  }
+
+  @Post('void-requests/:requestId/reject')
+  @RequirePermissions('sales.void', 'nav.anulaciones')
+  rejectVoidRequest(
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body('rejectedReason') rejectedReason: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.rejectVoidRequest(requestId, rejectedReason ?? '', actor);
+  }
+
+  @Post(':id/void-request')
+  @RequirePermissions('sales.write', 'nav.punto_venta', 'nav.anulaciones')
+  @ApiOperation({ summary: 'Solicitar anulación (cajero) o anular directo (gerente/farmacéutico)' })
+  requestVoid(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VoidSaleDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.requestVoidSale(id, dto, actor);
   }
 
   @Post(':id/void')

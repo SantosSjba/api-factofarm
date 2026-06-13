@@ -1,17 +1,17 @@
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { IdentityDocumentType, UserRole } from '../../../src/generated/prisma/client';
 import * as bcrypt from 'bcrypt';
+import { expandUserPermissionCodes } from '../../../src/common/permissions/nav-permission-expansion';
+import { getDefaultNavCodesForRole } from '../../../src/common/permissions/role-permission-templates';
 import { adminDemoCredentials } from '../data/admin-demo';
 import { demoCajeroCredentials } from '../data/demo-cajero';
 
 const SALT_ROUNDS = 10;
 
-const CAJERO_PERMISSION_CODES = [
-  'inventory.read',
-  'sales.read',
-  'nav.punto_venta',
-  'nav.inventario_movimientos',
-] as const;
+const CAJERO_PERMISSION_CODES = expandUserPermissionCodes(
+  getDefaultNavCodesForRole(UserRole.CAJERO),
+  UserRole.CAJERO,
+);
 
 export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
   const { email, passwordPlain } = adminDemoCredentials;
@@ -81,7 +81,7 @@ async function seedDemoCajero(prisma: PrismaClient): Promise<void> {
         nombre: 'Cajero Demo',
         email,
         passwordHash: hash,
-        role: UserRole.VENDEDOR,
+        role: UserRole.CAJERO,
         establecimientoId: estSucursal.id,
         profile: {
           create: {
@@ -100,7 +100,7 @@ async function seedDemoCajero(prisma: PrismaClient): Promise<void> {
   } else {
     await prisma.user.update({
       where: { id: existing.id },
-      data: { establecimientoId: estSucursal.id, role: UserRole.VENDEDOR },
+      data: { establecimientoId: estSucursal.id, role: UserRole.CAJERO },
     });
     await syncPermissionCodesToUser(prisma, existing.id, CAJERO_PERMISSION_CODES);
     console.info('Seed: cajero demo sincronizado.');
@@ -112,10 +112,10 @@ async function seedDemoCajero(prisma: PrismaClient): Promise<void> {
 async function syncPermissionCodesToUser(
   prisma: PrismaClient,
   userId: string,
-  codes: readonly string[],
+  codes: string[],
 ): Promise<void> {
   const permissions = await prisma.permission.findMany({
-    where: { code: { in: [...codes] } },
+    where: { code: { in: codes } },
     select: { id: true },
   });
   await prisma.userPermission.deleteMany({ where: { userId } });

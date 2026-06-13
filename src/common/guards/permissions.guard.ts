@@ -5,8 +5,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserRole } from '../../generated/prisma/client';
 import { PERMISSIONS_KEY } from '../constants/metadata.constants';
+import { hasChainScope } from '../permissions/role-policy.util';
 import type { JwtRequestUser } from '../../modules/auth/domain/auth.types';
 
 @Injectable()
@@ -32,7 +32,7 @@ export class PermissionsGuard implements CanActivate {
       });
     }
 
-    if (user.role === UserRole.ADMINISTRADOR) {
+    if (hasChainScope(user.role)) {
       return true;
     }
 

@@ -54,6 +54,7 @@ import { AgreementsModule } from './modules/agreements/agreements.module';
 import { AccountsReceivableModule } from './modules/accounts-receivable/accounts-receivable.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
+import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
   imports: [
@@ -142,6 +143,7 @@ import { HospitalModule } from './modules/hospital/hospital.module';
     AccountsReceivableModule,
     FinanceModule,
     HospitalModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [

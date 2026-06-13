@@ -13,10 +13,13 @@ import {
   PromotionType,
   QuotationStatus,
   SaleDocumentType,
+  SaleVoidRequestStatus,
   SaleStatus,
+  UserRole,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { canVoidSaleDirectly } from '../../common/permissions/role-policy.util';
 import {
   applySaleLevelDiscount,
   computeSaleLineTotals,
@@ -571,7 +574,16 @@ export class SalesService {
     };
   }
 
-  async voidSale(id: string, dto: VoidSaleDto, actor: { sub: string; establecimientoId: string }) {
+  async voidSale(
+    id: string,
+    dto: VoidSaleDto,
+    actor: { sub: string; establecimientoId: string; role: UserRole },
+  ) {
+    if (!canVoidSaleDirectly(actor.role)) {
+      throw new ForbiddenException(
+        'Su rol debe solicitar autorización para anular ventas. Use la solicitud de anulación.',
+      );
+    }
     const sale = await this.prisma.sale.findFirst({
       where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
       include: { items: { include: { lotLines: true } } },
@@ -645,6 +657,154 @@ export class SalesService {
       .catch(() => undefined);
 
     return { ok: true, message: 'Venta anulada y stock revertido' };
+  }
+
+  async listVoidRequests(establishmentId: string, status?: SaleVoidRequestStatus) {
+    const rows = await this.prisma.saleVoidRequest.findMany({
+      where: {
+        establishmentId,
+        ...(status ? { status } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        sale: { select: { id: true, serie: true, numero: true, total: true, sellerId: true } },
+        requestedBy: { select: { id: true, nombre: true } },
+        approvedBy: { select: { id: true, nombre: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      saleId: r.saleId,
+      reason: r.reason,
+      status: r.status,
+      rejectedReason: r.rejectedReason,
+      createdAt: r.createdAt.toISOString(),
+      resolvedAt: r.resolvedAt?.toISOString() ?? null,
+      sale: {
+        ...r.sale,
+        total: r.sale.total.toString(),
+      },
+      requestedBy: r.requestedBy,
+      approvedBy: r.approvedBy,
+    }));
+  }
+
+  async requestVoidSale(
+    id: string,
+    dto: VoidSaleDto,
+    actor: { sub: string; establecimientoId: string; role: UserRole },
+  ) {
+    if (canVoidSaleDirectly(actor.role)) {
+      return this.voidSale(id, dto, actor);
+    }
+
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
+      select: { id: true, estado: true },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.estado !== SaleStatus.COMPLETADA) {
+      throw new BadRequestException('Solo se pueden solicitar anulaciones de ventas completadas');
+    }
+
+    const existing = await this.prisma.saleVoidRequest.findUnique({ where: { saleId: id } });
+    if (existing?.status === SaleVoidRequestStatus.PENDIENTE) {
+      throw new BadRequestException('Ya existe una solicitud pendiente para esta venta');
+    }
+    if (existing?.status === SaleVoidRequestStatus.APROBADA) {
+      throw new BadRequestException('La venta ya fue anulada');
+    }
+
+    const row = await this.prisma.saleVoidRequest.upsert({
+      where: { saleId: id },
+      create: {
+        establishmentId: actor.establecimientoId,
+        saleId: id,
+        requestedById: actor.sub,
+        reason: dto.reason.trim(),
+        status: SaleVoidRequestStatus.PENDIENTE,
+      },
+      update: {
+        requestedById: actor.sub,
+        reason: dto.reason.trim(),
+        status: SaleVoidRequestStatus.PENDIENTE,
+        rejectedReason: null,
+        resolvedAt: null,
+        approvedById: null,
+      },
+    });
+
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'REQUEST_VOID',
+      entity: 'SaleVoidRequest',
+      entityId: row.id,
+    });
+
+    return { ok: true, requestId: row.id, status: row.status };
+  }
+
+  async approveVoidRequest(
+    requestId: string,
+    actor: { sub: string; establecimientoId: string; role: UserRole },
+  ) {
+    if (!canVoidSaleDirectly(actor.role)) {
+      throw new ForbiddenException('No autorizado para aprobar anulaciones');
+    }
+
+    const request = await this.prisma.saleVoidRequest.findFirst({
+      where: { id: requestId, establishmentId: actor.establecimientoId },
+      include: { sale: { select: { sellerId: true } } },
+    });
+    if (!request) throw new NotFoundException('Solicitud no encontrada');
+    if (request.status !== SaleVoidRequestStatus.PENDIENTE) {
+      throw new BadRequestException('La solicitud ya fue procesada');
+    }
+    if (request.sale.sellerId === actor.sub) {
+      throw new ForbiddenException('Otro usuario debe autorizar la anulación');
+    }
+
+    await this.prisma.saleVoidRequest.update({
+      where: { id: requestId },
+      data: {
+        status: SaleVoidRequestStatus.APROBADA,
+        approvedById: actor.sub,
+        resolvedAt: new Date(),
+      },
+    });
+
+    return this.voidSale(request.saleId, { reason: request.reason }, actor);
+  }
+
+  async rejectVoidRequest(
+    requestId: string,
+    rejectedReason: string,
+    actor: { sub: string; establecimientoId: string; role: UserRole },
+  ) {
+    if (!canVoidSaleDirectly(actor.role)) {
+      throw new ForbiddenException('No autorizado para rechazar anulaciones');
+    }
+
+    const request = await this.prisma.saleVoidRequest.findFirst({
+      where: { id: requestId, establishmentId: actor.establecimientoId },
+    });
+    if (!request) throw new NotFoundException('Solicitud no encontrada');
+    if (request.status !== SaleVoidRequestStatus.PENDIENTE) {
+      throw new BadRequestException('La solicitud ya fue procesada');
+    }
+
+    await this.prisma.saleVoidRequest.update({
+      where: { id: requestId },
+      data: {
+        status: SaleVoidRequestStatus.RECHAZADA,
+        approvedById: actor.sub,
+        rejectedReason: rejectedReason.trim(),
+        resolvedAt: new Date(),
+      },
+    });
+
+    return { ok: true };
   }
 
   async createReturn(

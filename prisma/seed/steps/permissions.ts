@@ -67,6 +67,8 @@ const RBAC: RbacRow[] = [
   { code: 'finance.write', description: 'Registrar pagos, bancos y presupuestos' },
   { code: 'hospital.read', description: 'Consultar áreas y consumo hospitalario' },
   { code: 'hospital.write', description: 'Dispensar consumo interno hospitalario' },
+  { code: 'staff.read', description: 'Consultar turnos, asistencia y comisiones' },
+  { code: 'staff.write', description: 'Gestionar personal y horarios' },
   { code: 'medicos.read', description: 'Consultar médicos prescriptores' },
   { code: 'medicos.write', description: 'Registrar y editar médicos' },
   { code: 'prescriptions.read', description: 'Consultar recetas médicas' },
@@ -94,6 +96,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.auditoria', label: 'Auditoría', sortOrder: 3 },
       { code: 'nav.lpdp', label: 'LPDP / ARCO', sortOrder: 4 },
       { code: 'nav.farmaceutico_titular', label: 'Farmacéutico titular', sortOrder: 5 },
+      { code: 'nav.gestion_personal', label: 'Gestión de personal', sortOrder: 6 },
     ],
   },
   {

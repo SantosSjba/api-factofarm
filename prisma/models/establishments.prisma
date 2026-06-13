@@ -93,6 +93,8 @@ model Establishment {
   hospitalConsumptions HospitalInternalConsumption[]
   bankAccounts        BankAccount[]
   purchaseBudgets     PurchaseBudget[]
+  saleVoidRequests    SaleVoidRequest[]
+  userAttendances     UserAttendance[]
 
   @@index([titularPharmacistLicenseId])
   @@index([departmentId])

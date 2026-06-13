@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
+import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import { USER_REPOSITORY } from '../domain/user.repository';
 import type { IUserRepository } from '../domain/user.repository';
@@ -53,7 +54,7 @@ export class UsersService {
       role: dto.role,
       establecimientoId: dto.establecimientoId,
       profile: dto.profile ? this.mapProfileDto(dto.profile) : undefined,
-      permissionCodes: this.normalizePermissionCodes(dto.permissionCodes, dto.role),
+      permissionCodes: this.resolvePermissionCodes(dto.permissionCodes, dto.role),
     };
 
     const created = await this.users.create(input);
@@ -75,8 +76,8 @@ export class UsersService {
     const search = rawFilters?.search?.trim();
     const roleRaw = rawFilters?.role?.trim().toUpperCase();
     const role =
-      roleRaw === UserRole.ADMINISTRADOR || roleRaw === UserRole.VENDEDOR
-        ? roleRaw
+      roleRaw && roleRaw !== 'ALL' && Object.values(UserRole).includes(roleRaw as UserRole)
+        ? (roleRaw as UserRole)
         : undefined;
 
     return this.users.findAll({
@@ -125,6 +126,8 @@ export class UsersService {
     if (dto.profile !== undefined) patch.profile = this.mapProfileDto(dto.profile);
     if (dto.permissionCodes !== undefined) {
       patch.permissionCodes = this.normalizePermissionCodes(dto.permissionCodes, role);
+    } else if (dto.role !== undefined && dto.role !== current.role) {
+      patch.permissionCodes = this.resolvePermissionCodes(undefined, role);
     }
 
     const updated = await this.users.update(id, patch);
@@ -171,6 +174,15 @@ export class UsersService {
       entity: 'User',
       entityId: id,
     });
+  }
+
+  private resolvePermissionCodes(
+    codes: string[] | undefined,
+    role: UserRole,
+  ): string[] {
+    const navCodes =
+      codes && codes.length > 0 ? codes : getDefaultNavCodesForRole(role);
+    return expandUserPermissionCodes(navCodes, role);
   }
 
   private normalizePermissionCodes(

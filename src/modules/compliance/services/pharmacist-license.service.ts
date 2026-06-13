@@ -6,6 +6,7 @@ import {
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { canApproveControlledDispense } from '../../../common/permissions/role-policy.util';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
 @Injectable()
@@ -124,10 +125,15 @@ export class PharmacistLicenseService {
         establecimientoId: establishmentId,
         deletedAt: null,
       },
-      select: { id: true, pharmacistLicense: true },
+      select: { id: true, role: true, pharmacistLicense: true },
     });
     if (!approver) {
       throw new BadRequestException('Farmacéutico autorizador no válido');
+    }
+    if (!canApproveControlledDispense(approver.role)) {
+      throw new BadRequestException(
+        'Solo un farmacéutico o gerente autorizado puede aprobar dispensación de controlados',
+      );
     }
 
     const establishment = await this.prisma.establishment.findFirst({
