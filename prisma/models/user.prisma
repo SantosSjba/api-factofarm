@@ -51,6 +51,12 @@ model User {
   adverseEventsRegistered AdverseEvent[] @relation("AdverseEventRegisteredBy")
   controlledLedgerEntries ControlledSubstanceLedgerEntry[]
   saleSubstitutions    SaleSubstitution[]
+  pharmacistLicense    PharmacistLicense?
+  consentsRecorded     DataProcessingConsent[] @relation("ConsentRecordedBy")
+  arcoRequestsProcessed ArcoRequest[] @relation("ArcoProcessedBy")
+  deliveriesCreated     DeliveryOrder[] @relation("DeliveryCreatedBy")
+  deliveriesAssigned    DeliveryOrder[] @relation("DeliveryAssignedTo")
+  loyaltyTransactionsCreated CustomerLoyaltyTransaction[] @relation("LoyaltyCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

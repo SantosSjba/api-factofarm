@@ -27,6 +27,7 @@ const selectProductList = {
   modelo: true,
   lineaProducto: true,
   registroSanitario: true,
+  registroSanitarioVigencia: true,
   codigoMedicamentoDigemid: true,
   saleTaxAffectationId: true,
   purchaseTaxAffectationId: true,
@@ -164,6 +165,7 @@ export class ProductsService {
       modelo: row.modelo,
       lineaProducto: row.lineaProducto,
       registroSanitario: row.registroSanitario,
+      registroSanitarioVigencia: row.registroSanitarioVigencia?.toISOString() ?? null,
       codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
       saleTaxAffectationId: row.saleTaxAffectationId,
       purchaseTaxAffectationId: row.purchaseTaxAffectationId,
@@ -251,6 +253,7 @@ export class ProductsService {
       modelo: row.modelo,
       lineaProducto: row.lineaProducto,
       registroSanitario: row.registroSanitario,
+      registroSanitarioVigencia: row.registroSanitarioVigencia?.toISOString() ?? null,
       codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
       saleTaxAffectationId: row.saleTaxAffectationId,
       purchaseTaxAffectationId: row.purchaseTaxAffectationId,
@@ -534,6 +537,9 @@ export class ProductsService {
           principioActivo: dto.principioActivo?.trim() || null,
           concentracion: dto.concentracion?.trim() || null,
           registroSanitario: dto.registroSanitario?.trim() || null,
+          registroSanitarioVigencia: dto.registroSanitarioVigencia
+            ? new Date(dto.registroSanitarioVigencia)
+            : null,
           formaFarmaceutica: dto.formaFarmaceutica?.trim() || null,
           codigoBusqueda: dto.codigoBusqueda?.trim() || null,
           codigoInterno: dto.codigoInterno?.trim() || null,
@@ -804,6 +810,9 @@ export class ProductsService {
           principioActivo: dto.principioActivo?.trim() || null,
           concentracion: dto.concentracion?.trim() || null,
           registroSanitario: dto.registroSanitario?.trim() || null,
+          registroSanitarioVigencia: dto.registroSanitarioVigencia
+            ? new Date(dto.registroSanitarioVigencia)
+            : null,
           formaFarmaceutica: dto.formaFarmaceutica?.trim() || null,
           codigoBusqueda: dto.codigoBusqueda?.trim() || null,
           codigoInterno: dto.codigoInterno?.trim() || null,

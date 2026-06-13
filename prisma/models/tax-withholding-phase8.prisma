@@ -1,0 +1,65 @@
+enum TaxWithholdingKind {
+  RETENCION
+  PERCEPCION
+  DETRACCION
+}
+
+enum TaxPartyType {
+  CLIENTE
+  PROVEEDOR
+}
+
+/// Catálogo de tasas SUNAT (retención, percepción, detracción)
+model SunatWithholdingRate {
+  id        String             @id @default(uuid())
+  codigo    String             @unique @db.VarChar(10)
+  nombre    String             @db.VarChar(200)
+  kind      TaxWithholdingKind
+  tasa      Decimal            @db.Decimal(9, 4)
+  activo    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  records TaxWithholdingRecord[]
+
+  @@index([kind, activo])
+}
+
+/// Registro de retención, percepción o detracción
+model TaxWithholdingRecord {
+  id                         String             @id @default(uuid())
+  establishmentId            String
+  kind                       TaxWithholdingKind
+  partyType                  TaxPartyType
+  partyId                    String?
+  partyNombre                String             @db.VarChar(200)
+  partyDocType               String             @db.VarChar(20)
+  partyDocNumber             String             @db.VarChar(20)
+  regimenCodigo              String?            @db.VarChar(10)
+  saleId                     String?
+  purchaseOrderId            String?
+  electronicDocumentId       String?            @unique
+  fechaOperacion             DateTime
+  comprobanteModificadoTipo  String?            @db.VarChar(10)
+  comprobanteModificadoSerie String?            @db.VarChar(10)
+  comprobanteModificadoNumero String?           @db.VarChar(20)
+  baseImponible              Decimal            @db.Decimal(18, 4)
+  tasa                       Decimal            @db.Decimal(9, 4)
+  monto                      Decimal            @db.Decimal(18, 4)
+  moneda                     String             @default("PEN") @db.VarChar(3)
+  observaciones              String?            @db.VarChar(500)
+  deletedAt                  DateTime?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+
+  establishment      Establishment       @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  sale               Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  purchaseOrder      PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  electronicDocument ElectronicDocument? @relation(fields: [electronicDocumentId], references: [id], onDelete: SetNull)
+  regimen            SunatWithholdingRate? @relation(fields: [regimenCodigo], references: [codigo], onDelete: SetNull)
+
+  @@index([establishmentId, kind])
+  @@index([fechaOperacion])
+  @@index([partyDocNumber])
+  @@index([deletedAt])
+}

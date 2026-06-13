@@ -89,7 +89,7 @@ class CreateSaleSubstitutionDto {
   motivo?: string;
 }
 
-class CreatePaymentDto {
+export class CreatePaymentDto {
   @ApiProperty({ enum: PaymentMethod })
   @IsEnum(PaymentMethod)
   metodo!: PaymentMethod;
@@ -165,6 +165,12 @@ export class CreateSaleDto {
   @IsUUID()
   controlledApprovedById?: string;
 
+  @ApiPropertyOptional({ description: 'Firma digital dispensación controlados (hash)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  controlledDigitalSignature?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -223,4 +229,24 @@ export class CreateSaleReturnDto {
   @IsArray()
   @ArrayMinSize(1)
   items!: { saleItemId: string; quantity: number; lotCode?: string }[];
+}
+
+export class OfflineSaleDto {
+  @ApiProperty({ format: 'uuid', description: 'Id local generado en POS offline' })
+  @IsUUID()
+  offlineLocalId!: string;
+
+  @ApiProperty({ type: CreateSaleDto })
+  @ValidateNested()
+  @Type(() => CreateSaleDto)
+  sale!: CreateSaleDto;
+}
+
+export class SyncSalesDto {
+  @ApiProperty({ type: [OfflineSaleDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => OfflineSaleDto)
+  sales!: OfflineSaleDto[];
 }

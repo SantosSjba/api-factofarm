@@ -1,0 +1,97 @@
+enum LpdpConsentPurpose {
+  CUSTOMER_REGISTER
+  PRESCRIPTION
+  MARKETING
+}
+
+enum ArcoRequestType {
+  ACCESO
+  RECTIFICACION
+  CANCELACION
+  OPOSICION
+}
+
+enum ArcoRequestStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADA
+  RECHAZADA
+}
+
+/// Consentimiento informado LPDP (Ley 29733)
+model DataProcessingConsent {
+  id             String             @id @default(uuid())
+  subjectType    String             @db.VarChar(40)
+  subjectId      String             @db.VarChar(40)
+  purpose        LpdpConsentPurpose
+  consentVersion String             @db.VarChar(20)
+  grantedAt      DateTime           @default(now())
+  revokedAt      DateTime?
+  ipAddress      String?            @db.VarChar(64)
+  userAgent      String?            @db.VarChar(300)
+  recordedById   String?
+  recordedBy     User?              @relation("ConsentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([subjectType, subjectId])
+  @@index([purpose])
+  @@index([grantedAt])
+}
+
+/// Solicitudes ARCO (acceso, rectificación, cancelación, oposición)
+model ArcoRequest {
+  id            String            @id @default(uuid())
+  customerId    String
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  requestType   ArcoRequestType
+  status        ArcoRequestStatus @default(PENDIENTE)
+  details       String?           @db.VarChar(500)
+  responseNotes String?           @db.VarChar(500)
+  processedById String?
+  processedBy   User?             @relation("ArcoProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+  processedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([requestType])
+}
+
+/// Colegiatura / licencia del farmacéutico titular (CQP)
+model PharmacistLicense {
+  id              String    @id @default(uuid())
+  userId          String?   @unique
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  colegiaturaCqp  String    @db.VarChar(20)
+  fullName        String    @db.VarChar(200)
+  vigenciaHasta   DateTime?
+  activo          Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  titularEstablishments Establishment[] @relation("EstablishmentTitularPharmacist")
+  controlledSales       Sale[]          @relation("SaleControlledPharmacistLicense")
+
+  @@index([colegiaturaCqp])
+  @@index([deletedAt])
+}
+
+/// Catálogo precios máximos regulados DIGEMED
+model RegulatedDrugPrice {
+  id            String    @id @default(uuid())
+  codigoDigemid String?   @db.VarChar(40)
+  nombre        String    @db.VarChar(300)
+  precioMaximo  Decimal   @db.Decimal(18, 4)
+  vigenteDesde  DateTime?
+  vigenteHasta  DateTime?
+  fuente        String    @default("DIGEMED") @db.VarChar(40)
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([codigoDigemid])
+  @@index([activo])
+  @@index([deletedAt])
+}

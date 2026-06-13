@@ -2,6 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 
 const DEFAULT_CONSULTA_URL = 'https://api.factiliza.com/v1';
 
+export type FactilizaDniInfo = {
+  numero: string;
+  nombre_completo: string;
+  nombres?: string;
+  apellido_paterno?: string;
+  apellido_materno?: string;
+};
+
 export type FactilizaRucInfo = {
   numero: string;
   nombre_o_razon_social: string;
@@ -34,6 +42,23 @@ export class FactilizaConsultaClient {
     };
     if (!res.ok || !payload.success || !payload.data) {
       throw new Error(payload.message ?? `RUC no válido (${res.status})`);
+    }
+    return payload.data;
+  }
+
+  async validateDni(apiUrl: string | null, token: string, dni: string): Promise<FactilizaDniInfo> {
+    const base = (apiUrl?.trim() || DEFAULT_CONSULTA_URL).replace(/\/$/, '');
+    const url = `${base}/dni/info/${dni.trim()}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = (await res.json()) as {
+      success?: boolean;
+      message?: string;
+      data?: FactilizaDniInfo;
+    };
+    if (!res.ok || !payload.success || !payload.data) {
+      throw new Error(payload.message ?? `DNI no válido (${res.status})`);
     }
     return payload.data;
   }

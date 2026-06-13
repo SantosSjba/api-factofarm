@@ -13,7 +13,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
-import { CreateSaleDto, CreateSaleReturnDto, VoidSaleDto } from './dto/create-sale.dto';
+import { CreateSaleDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalesService } from './sales.service';
@@ -79,6 +79,13 @@ export class SalesController {
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     return this.service.create(dto, actor, idempotencyKey);
+  }
+
+  @Post('sync')
+  @RequirePermissions('sales.write', 'nav.punto_venta')
+  @ApiOperation({ summary: 'Sincronizar ventas registradas offline (idempotente por offlineLocalId)' })
+  syncOffline(@Body() dto: SyncSalesDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.syncOfflineBatch(dto, actor);
   }
 
   @Post(':id/void')

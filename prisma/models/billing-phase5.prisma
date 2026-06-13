@@ -109,6 +109,7 @@ model ElectronicDocument {
   taxLines        ElectronicDocumentTax[]
   responses       SunatResponse[]
   jobs            BillingJob[]
+  taxWithholdingRecord TaxWithholdingRecord?
 
   @@unique([establishmentId, documentType, serie, numero])
   @@index([establishmentId])

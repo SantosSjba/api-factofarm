@@ -149,6 +149,20 @@ export class CreateCustomerDto {
   @IsUUID()
   vendedorAsignadoId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Consentimiento LPDP obligatorio para registro de datos personales',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  lpdpConsentAccepted?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-06-11' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  lpdpConsentVersion?: string;
+
   @ApiPropertyOptional({ type: () => [CustomerAddressDto] })
   @IsOptional()
   @IsArray()

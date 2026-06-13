@@ -40,6 +40,11 @@ enum CashMovementType {
   CIERRE
 }
 
+enum PosPrinterPaperWidth {
+  MM_58
+  MM_80
+}
+
 enum QuotationStatus {
   BORRADOR
   ENVIADA
@@ -63,6 +68,12 @@ model CashRegister {
   establishmentId String
   nombre          String   @db.VarChar(120)
   activo          Boolean  @default(true)
+  printerPaperWidth     PosPrinterPaperWidth @default(MM_80)
+  printerAutoPrint      Boolean              @default(true)
+  openCashDrawerOnPrint Boolean              @default(true)
+  barcodeWedgeEnabled   Boolean              @default(true)
+  customerDisplayEnabled Boolean             @default(false)
+  escposPrinterName     String?              @db.VarChar(120)
   deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -137,6 +148,8 @@ model Promotion {
   @@unique([establishmentId, codigo])
   @@index([establishmentId])
   @@index([deletedAt])
+
+  redemptions PromotionRedemption[]
 }
 
 /// Precio convenio por cliente y producto
@@ -178,6 +191,8 @@ model Sale {
   prescriptionId        String?
   controlledApprovedById String?
   controlledApprovedAt  DateTime?
+  controlledPharmacistLicenseId String?
+  controlledDigitalSignature String? @db.VarChar(128)
   voidReason            String?          @db.VarChar(500)
   voidedById            String?
   voidedAt              DateTime?
@@ -195,12 +210,17 @@ model Sale {
   quotation     Quotation?    @relation(fields: [quotationId], references: [id], onDelete: SetNull)
   prescription  Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
   controlledApprovedBy User?  @relation("SaleControlledApprovedBy", fields: [controlledApprovedById], references: [id], onDelete: SetNull)
+  controlledPharmacistLicense PharmacistLicense? @relation("SaleControlledPharmacistLicense", fields: [controlledPharmacistLicenseId], references: [id], onDelete: SetNull)
   items         SaleItem[]
   payments      Payment[]
   cashMovements CashMovement[]
   returns       SaleReturn[]
   substitutions SaleSubstitution[]
   electronicDocument ElectronicDocument?
+  taxWithholdingRecords TaxWithholdingRecord[]
+  deliveryOrder       DeliveryOrder?
+  loyaltyTransactions CustomerLoyaltyTransaction[]
+  promotionRedemption PromotionRedemption?
 
   @@index([establishmentId])
   @@index([warehouseId])

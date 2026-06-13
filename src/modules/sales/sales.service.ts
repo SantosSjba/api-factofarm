@@ -25,10 +25,17 @@ import { InventoryMovementsService } from '../inventory-movements/inventory-move
 import { BillingService } from '../billing/billing.service';
 import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { PharmaceuticalService } from '../pharmaceutical/pharmaceutical.service';
+import { PharmacistLicenseService } from '../compliance/services/pharmacist-license.service';
+import { RegulatedPriceService } from '../compliance/services/regulated-price.service';
+import { RealtimeService } from '../realtime/realtime.service';
+import { LoyaltyService } from '../marketing/loyalty.service';
+import { PromotionsService } from '../marketing/promotions.service';
+import { validateSalePayments } from './utils/payment-validation.util';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
   CreateSaleDto,
   CreateSaleReturnDto,
+  SyncSalesDto,
   VoidSaleDto,
 } from './dto/create-sale.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
@@ -49,6 +56,11 @@ export class SalesService {
     private readonly billing: BillingService,
     private readonly prescriptions: PrescriptionsService,
     private readonly pharmaceutical: PharmaceuticalService,
+    private readonly pharmacistLicenses: PharmacistLicenseService,
+    private readonly regulatedPrices: RegulatedPriceService,
+    private readonly realtime: RealtimeService,
+    private readonly loyalty: LoyaltyService,
+    private readonly promotions: PromotionsService,
   ) {}
 
   async findAll(establishmentId: string, query: SaleListQueryDto) {
@@ -65,6 +77,23 @@ export class SalesService {
             createdAt: {
               ...(query.from ? { gte: new Date(query.from) } : {}),
               ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+      ...(query.paymentMetodo || query.paymentReferencia?.trim()
+        ? {
+            payments: {
+              some: {
+                ...(query.paymentMetodo ? { metodo: query.paymentMetodo } : {}),
+                ...(query.paymentReferencia?.trim()
+                  ? {
+                      referencia: {
+                        contains: query.paymentReferencia.trim(),
+                        mode: 'insensitive' as const,
+                      },
+                    }
+                  : {}),
+              },
             },
           }
         : {}),
@@ -165,11 +194,19 @@ export class SalesService {
     }
 
     const pricedItems = await this.buildPricedItems(dto, actor.establecimientoId);
+    await this.regulatedPrices.checkSalePrices(
+      actor.establecimientoId,
+      pricedItems.map((item) => ({
+        productId: item.productId,
+        precioUnitario: item.precioUnitario,
+      })),
+    );
     await this.validateSubstitutions(dto.substitutions);
-    await this.validateControlledApproval(
+    const controlledLicense = await this.validateControlledApproval(
       actor,
       pricedItems.map((item) => item.productId),
       dto.controlledApprovedById,
+      dto.controlledDigitalSignature,
     );
 
     const requiresRx = pricedItems.some((item) => item.necesitaRecetaMedica);
@@ -228,13 +265,7 @@ export class SalesService {
       }
     }
 
-    const paymentsTotal = dto.payments.reduce(
-      (acc, p) => acc.plus(new Prisma.Decimal(p.monto)),
-      new Prisma.Decimal(0),
-    );
-    if (!paymentsTotal.equals(total)) {
-      throw new BadRequestException('Los pagos no coinciden con el total de la venta');
-    }
+    validateSalePayments(dto.payments, total);
 
     const { serie, numero } = await this.resolveDocumentNumber(
       actor.establecimientoId,
@@ -291,6 +322,8 @@ export class SalesService {
           prescriptionId: dto.prescriptionId ?? null,
           controlledApprovedById: dto.controlledApprovedById ?? null,
           controlledApprovedAt: dto.controlledApprovedById ? new Date() : null,
+          controlledPharmacistLicenseId: controlledLicense?.id ?? null,
+          controlledDigitalSignature: dto.controlledDigitalSignature?.trim() || null,
           comentario: dto.comentario?.trim() || null,
           items: {
             create: pricedItems.map((item) => ({
@@ -397,7 +430,67 @@ export class SalesService {
       )
       .catch(() => undefined);
 
-    return this.findOne(saleId, actor.establecimientoId);
+    const saleDetail = await this.findOne(saleId, actor.establecimientoId);
+    this.realtime.emitSaleCompleted(actor.establecimientoId, {
+      saleId: saleDetail.id,
+      total: saleDetail.total,
+      documentType: saleDetail.documentType,
+      serie: saleDetail.serie,
+      numero: saleDetail.numero,
+    });
+    this.realtime.emitStockUpdated(actor.establecimientoId, dto.warehouseId);
+
+    if (dto.customerId) {
+      void this.loyalty
+        .awardForSale(
+          actor.establecimientoId,
+          dto.customerId,
+          new Prisma.Decimal(saleDetail.total),
+          saleDetail.id,
+          actor.sub,
+        )
+        .catch(() => undefined);
+    }
+    if (dto.promotionCode?.trim()) {
+      void this.promotions
+        .recordRedemption(
+          actor.establecimientoId,
+          dto.promotionCode.trim(),
+          saleDetail.id,
+          dto.customerId,
+        )
+        .catch(() => undefined);
+    }
+
+    return saleDetail;
+  }
+
+  async syncOfflineBatch(
+    dto: SyncSalesDto,
+    actor: { sub: string; establecimientoId: string },
+  ) {
+    const results: Array<{
+      offlineLocalId: string;
+      ok: boolean;
+      saleId?: string;
+      error?: string;
+    }> = [];
+
+    for (const row of dto.sales) {
+      try {
+        const sale = await this.create(row.sale, actor, row.offlineLocalId);
+        results.push({ offlineLocalId: row.offlineLocalId, ok: true, saleId: sale.id });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error al sincronizar venta';
+        results.push({ offlineLocalId: row.offlineLocalId, ok: false, error: message });
+      }
+    }
+
+    return {
+      synced: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+      results,
+    };
   }
 
   async voidSale(id: string, dto: VoidSaleDto, actor: { sub: string; establecimientoId: string }) {
@@ -755,11 +848,12 @@ export class SalesService {
     actor: { sub: string; establecimientoId: string },
     productIds: string[],
     controlledApprovedById?: string,
+    controlledDigitalSignature?: string,
   ) {
     const controlledCount = await this.prisma.product.count({
       where: { id: { in: productIds }, esControlado: true, deletedAt: null },
     });
-    if (controlledCount === 0) return;
+    if (controlledCount === 0) return null;
 
     if (!controlledApprovedById) {
       throw new BadRequestException(
@@ -770,17 +864,11 @@ export class SalesService {
       throw new ForbiddenException('Un segundo usuario debe autorizar la dispensación de controlados');
     }
 
-    const approver = await this.prisma.user.findFirst({
-      where: {
-        id: controlledApprovedById,
-        establecimientoId: actor.establecimientoId,
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    if (!approver) {
-      throw new BadRequestException('Farmacéutico autorizador no válido');
-    }
+    return this.pharmacistLicenses.validateApproverForControlled(
+      controlledApprovedById,
+      actor.establecimientoId,
+      controlledDigitalSignature,
+    );
   }
 
   private async buildPricedItems(dto: CreateSaleDto, establishmentId: string) {

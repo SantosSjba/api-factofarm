@@ -57,12 +57,18 @@ const RBAC: RbacRow[] = [
   { code: 'billing.read', description: 'Consultar comprobantes electrónicos y configuración OSE' },
   { code: 'billing.write', description: 'Emitir y configurar facturación electrónica' },
   { code: 'billing.void', description: 'Anular comprobantes y comunicaciones de baja SUNAT' },
+  { code: 'delivery.read', description: 'Consultar pedidos delivery' },
+  { code: 'delivery.write', description: 'Gestionar pedidos delivery' },
+  { code: 'promotions.read', description: 'Consultar promociones y cupones' },
+  { code: 'promotions.write', description: 'Crear y editar promociones' },
   { code: 'medicos.read', description: 'Consultar médicos prescriptores' },
   { code: 'medicos.write', description: 'Registrar y editar médicos' },
   { code: 'prescriptions.read', description: 'Consultar recetas médicas' },
   { code: 'prescriptions.write', description: 'Registrar recetas y dispensación' },
   { code: 'pharmaceutical.read', description: 'Consultar controlados, farmacovigilancia y reportes pharma' },
   { code: 'pharmaceutical.write', description: 'Registrar eventos adversos y movimientos pharma' },
+  { code: 'compliance.read', description: 'Consultar LPDP, PLE, precios regulados y farmacéuticos' },
+  { code: 'compliance.write', description: 'Gestionar consentimientos, ARCO y catálogos regulatorios' },
 ];
 
 export const MENU_GROUPS: MenuGroup[] = [
@@ -80,6 +86,8 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.usuarios', label: 'Usuarios', sortOrder: 1 },
       { code: 'nav.establecimientos', label: 'Establecimientos', sortOrder: 2 },
       { code: 'nav.auditoria', label: 'Auditoría', sortOrder: 3 },
+      { code: 'nav.lpdp', label: 'LPDP / ARCO', sortOrder: 4 },
+      { code: 'nav.farmaceutico_titular', label: 'Farmacéutico titular', sortOrder: 5 },
     ],
   },
   {
@@ -97,7 +105,8 @@ export const MENU_GROUPS: MenuGroup[] = [
     sortOrder: 4,
     children: [
       { code: 'nav.productos', label: 'Productos', sortOrder: 1 },
-      { code: 'nav.conjuntos_packs', label: 'Conjuntos/Packs/Promociones', sortOrder: 2 },
+      { code: 'nav.precios_regulados', label: 'Precios regulados DIGEMED', sortOrder: 2 },
+      { code: 'nav.conjuntos_packs', label: 'Conjuntos/Packs/Promociones', sortOrder: 3 },
       { code: 'nav.servicios', label: 'Servicios', sortOrder: 3 },
       { code: 'nav.categorias', label: 'Categorías', sortOrder: 4 },
       { code: 'nav.marcas', label: 'Marcas', sortOrder: 5 },
@@ -142,6 +151,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { code: 'nav.resumenes', label: 'Resúmenes', sortOrder: 3 },
       { code: 'nav.anulaciones', label: 'Anulaciones', sortOrder: 4 },
       { code: 'nav.cotizaciones', label: 'Cotizaciones', sortOrder: 5 },
+      { code: 'nav.promociones', label: 'Promociones y cupones', sortOrder: 6 },
     ],
   },
   {

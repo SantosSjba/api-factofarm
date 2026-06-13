@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -9,6 +9,7 @@ import {
   IsString,
   IsUrl,
   IsUUID,
+  Matches,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -145,4 +146,44 @@ export class CreateEstablishmentDto {
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   adjustmentQtyThreshold?: number;
+
+  @ApiPropertyOptional({ maxLength: 40, description: 'Número registro DIGEMID del local' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  numeroRegistroDigemid?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Farmacéutico titular' })
+  @IsOptional()
+  @IsUUID()
+  titularPharmacistLicenseId?: string;
+
+  @ApiPropertyOptional({ default: false, description: 'Bloquear ventas sobre precio regulado DIGEMED' })
+  @IsOptional()
+  @IsBoolean()
+  blockSalesAboveRegulatedPrice?: boolean;
+
+  @ApiPropertyOptional({
+    maxLength: 20,
+    description: 'Número Yape del local (9 dígitos, solo informativo en POS)',
+    example: '987654321',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
+  @IsString()
+  @MaxLength(20)
+  @Matches(/^[0-9]{9,15}$/, { message: 'Número Yape inválido (use solo dígitos, 9 a 15)' })
+  posYapeNumero?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 20,
+    description: 'Número Plin del local (9 dígitos, solo informativo en POS)',
+    example: '912345678',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
+  @IsString()
+  @MaxLength(20)
+  @Matches(/^[0-9]{9,15}$/, { message: 'Número Plin inválido (use solo dígitos, 9 a 15)' })
+  posPlinNumero?: string;
 }

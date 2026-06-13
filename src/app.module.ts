@@ -44,8 +44,12 @@ import { BillingModule } from './modules/billing/billing.module';
 import { MedicosModule } from './modules/medicos/medicos.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
 import { PharmaceuticalModule } from './modules/pharmaceutical/pharmaceutical.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { DeliveryOrdersModule } from './modules/delivery-orders/delivery-orders.module';
+import { MarketingModule } from './modules/marketing/marketing.module';
 
 @Module({
   imports: [
@@ -124,8 +128,12 @@ import { HealthModule } from './modules/health/health.module';
     MedicosModule,
     PrescriptionsModule,
     PharmaceuticalModule,
+    ComplianceModule,
     AuditModule,
     HealthModule,
+    RealtimeModule,
+    DeliveryOrdersModule,
+    MarketingModule,
   ],
   controllers: [AppController],
   providers: [

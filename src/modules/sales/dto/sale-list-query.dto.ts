@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
-import { SaleDocumentType, SaleStatus } from '../../../generated/prisma/client';
+import { PaymentMethod, SaleDocumentType, SaleStatus } from '../../../generated/prisma/client';
 
 export class SaleListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -31,4 +31,15 @@ export class SaleListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   to?: string;
+
+  @ApiPropertyOptional({ enum: PaymentMethod })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMetodo?: PaymentMethod;
+
+  @ApiPropertyOptional({ description: 'Buscar por código / N° operación del pago' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  paymentReferencia?: string;
 }

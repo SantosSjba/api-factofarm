@@ -3,6 +3,7 @@ import { PrescriptionStatus, Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SensitiveHealthCryptoService } from '../compliance/services/sensitive-health-crypto.service';
 import {
   CreatePrescriptionDto,
   DispensePrescriptionDto,
@@ -14,6 +15,7 @@ export class PrescriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly crypto: SensitiveHealthCryptoService,
   ) {}
 
   async findAll(establishmentId: string, query: PrescriptionListQueryDto) {
@@ -133,6 +135,10 @@ export class PrescriptionsService {
 
     const numero = await this.resolveNumero(establishmentId);
 
+    const diagnosticoPlain = dto.diagnostico?.trim() || null;
+    const notasPlain = dto.notas?.trim() || null;
+    const encryptHealth = this.crypto.isEnabled();
+
     const created = await this.prisma.prescription.create({
       data: {
         establishmentId,
@@ -143,8 +149,10 @@ export class PrescriptionsService {
         medicoId: dto.medicoId ?? null,
         medicoNombre,
         medicoCmp,
-        diagnostico: dto.diagnostico?.trim() || null,
-        notas: dto.notas?.trim() || null,
+        diagnostico: encryptHealth ? null : diagnosticoPlain,
+        notas: encryptHealth ? null : notasPlain,
+        diagnosticoCipher: encryptHealth ? this.crypto.encrypt(diagnosticoPlain) : null,
+        notasCipher: encryptHealth ? this.crypto.encrypt(notasPlain) : null,
         imagenArchivoId: dto.imagenArchivoId ?? null,
         registeredById: actorId ?? null,
         items: {

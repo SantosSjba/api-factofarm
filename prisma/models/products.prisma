@@ -82,6 +82,7 @@ model Warehouse {
   quotations         Quotation[]
   purchaseOrders     PurchaseOrder[]
   goodsReceipts      GoodsReceipt[]
+  deliveryOrders       DeliveryOrder[]
 
   @@unique([establishmentId, nombre])
   @@index([establishmentId])
@@ -143,6 +144,7 @@ model Product {
   principioActivo       String?
   concentracion         String?
   registroSanitario     String?
+  registroSanitarioVigencia DateTime?
   formaFarmaceutica     String?
   codigoBusqueda        String?
   codigoInterno         String?
@@ -234,6 +236,7 @@ model Product {
   adverseEvents      AdverseEvent[]
   substitutionsAsOriginal SaleSubstitution[] @relation("SubstitutionOriginal")
   substitutionsAsSubstitute SaleSubstitution[] @relation("SubstitutionSubstitute")
+  deliveryOrderItems        DeliveryOrderItem[]
 
   habilitado Boolean   @default(true)
   deletedAt  DateTime?
@@ -486,6 +489,7 @@ model Service {
   principioActivo          String?
   concentracion            String?
   registroSanitario        String?
+  registroSanitarioVigencia DateTime?
   formaFarmaceutica        String?
   codigoBusqueda           String?
   codigoInterno            String?

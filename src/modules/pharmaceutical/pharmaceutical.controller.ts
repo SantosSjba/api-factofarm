@@ -280,4 +280,44 @@ export class PharmaceuticalController {
       },
     });
   }
+
+  @Get('reports/sanitary-registry-alerts')
+  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'products.read')
+  sanitaryAlerts(@CurrentUser() actor: JwtRequestUser, @Query('daysAhead') daysAhead?: string) {
+    return this.service.sanitaryRegistryAlerts(
+      actor.establecimientoId,
+      daysAhead ? Number(daysAhead) : 90,
+    );
+  }
+
+  @Get('reports/lot-traceability')
+  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
+  lotTraceability(@CurrentUser() actor: JwtRequestUser, @Query('codigoLote') codigoLote: string) {
+    return this.service.lotTraceabilityReport(actor.establecimientoId, codigoLote);
+  }
+
+  @Get('reports/bpa-storage')
+  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
+  bpaStorage(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.bpaStorageReport(actor.establecimientoId);
+  }
+
+  @Get('reports/inspection-export')
+  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
+  @ApiOperation({ summary: 'Exportación inspección DIGEMID (Excel)' })
+  async inspectionExport(@CurrentUser() actor: JwtRequestUser, @Res() res: Response) {
+    const buffer = await this.service.buildInspectionExportBuffer(actor.establecimientoId);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent('inspeccion-digemid.xlsx')}`,
+    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  }
+
+  @Get('reports/anonymized-sales-stats')
+  @RequirePermissions('pharmaceutical.read', 'nav.reportes_panel')
+  anonymizedStats(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.anonymizedSalesStats(actor.establecimientoId);
+  }
 }

@@ -131,6 +131,11 @@ export class CreateProductDto {
   @MaxLength(120)
   registroSanitario?: string;
 
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @IsString()
+  registroSanitarioVigencia?: string;
+
   @ApiPropertyOptional({ maxLength: 120 })
   @IsOptional()
   @IsString()

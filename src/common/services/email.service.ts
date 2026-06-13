@@ -41,4 +41,28 @@ export class EmailService {
 
     await transporter.sendMail({ from, to, subject, text });
   }
+
+  async sendTransactional(to: string, subject: string, text: string): Promise<void> {
+    const host = this.config.get<string>('SMTP_HOST')?.trim();
+    if (!host) {
+      this.logger.warn(`[DEV] Sin SMTP_HOST — correo a ${to}: ${subject}`);
+      this.logger.warn(text);
+      return;
+    }
+
+    const port = Number(this.config.get<string>('SMTP_PORT', '587'));
+    const user = this.config.get<string>('SMTP_USER');
+    const pass = this.config.get<string>('SMTP_PASS');
+    const from =
+      this.config.get<string>('SMTP_FROM')?.trim() ?? 'FactoFarm <noreply@factofarm.local>';
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+
+    await transporter.sendMail({ from, to, subject, text });
+  }
 }

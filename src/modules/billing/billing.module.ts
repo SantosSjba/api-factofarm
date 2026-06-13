@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../../common/common.module';
 import { FilesModule } from '../files/files.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { MockBillingProvider } from './providers/mock-billing.provider';
@@ -12,7 +13,7 @@ import { UblBuilderService } from './services/ubl-builder.service';
 import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
 
 @Module({
-  imports: [CommonModule, FilesModule],
+  imports: [CommonModule, FilesModule, RealtimeModule],
   controllers: [BillingController],
   providers: [
     BillingService,

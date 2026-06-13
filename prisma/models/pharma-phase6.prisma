@@ -49,6 +49,8 @@ model Prescription {
   estado           PrescriptionStatus @default(ACTIVA)
   validUntil       DateTime?
   notas            String?            @db.VarChar(500)
+  diagnosticoCipher String?           @db.Text
+  notasCipher       String?           @db.Text
   registeredById   String?
   deletedAt        DateTime?
   createdAt        DateTime           @default(now())

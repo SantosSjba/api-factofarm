@@ -28,6 +28,7 @@ import { FactilizaBillingProvider } from './providers/factiliza-billing.provider
 import { BillingArtifactService } from './services/billing-artifact.service';
 import { UblBuilderService } from './services/ubl-builder.service';
 import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
+import { RealtimeService } from '../realtime/realtime.service';
 import {
   BillingDocumentListQueryDto,
   DailySummaryDto,
@@ -58,6 +59,7 @@ export class BillingService implements OnModuleInit {
     private readonly nubefactProvider: NubefactBillingProvider,
     private readonly factilizaProvider: FactilizaBillingProvider,
     private readonly factilizaConsulta: FactilizaConsultaClient,
+    private readonly realtime: RealtimeService,
   ) {}
 
   onModuleInit() {
@@ -655,6 +657,11 @@ export class BillingService implements OnModuleInit {
               nextRetryAt: new Date(Date.now() + 15 * 60_000),
             },
           });
+          await this.notifyBillingRealtime(job.electronicDocumentId, {
+            sunatStatus: SunatDocumentStatus.RECHAZADO,
+            sunatCodigo: '0',
+            sunatDescripcion: message.slice(0, 500),
+          });
         }
       }
 
@@ -852,6 +859,13 @@ export class BillingService implements OnModuleInit {
         descripcion: result.sunatDescripcion,
         payload: result.cdrContent.toString('utf8').slice(0, 4000),
       },
+    });
+
+    const sunatStatus = doc.esContingencia ? SunatDocumentStatus.CONTINGENCIA : result.sunatStatus;
+    await this.notifyBillingRealtime(doc.id, {
+      sunatStatus,
+      sunatCodigo: result.sunatCodigo,
+      sunatDescripcion: result.sunatDescripcion,
     });
   }
 
@@ -1112,6 +1126,34 @@ export class BillingService implements OnModuleInit {
     };
   }
 
+  async validateDni(establishmentId: string, dni: string) {
+    const normalized = dni.trim();
+    if (!/^\d{8}$/.test(normalized)) {
+      throw new BadRequestException('DNI debe tener 8 dígitos');
+    }
+    const config = await this.prisma.establishmentBillingConfig.findUnique({
+      where: { establishmentId },
+    });
+    const token = config?.apiTokenEncrypted
+      ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())
+      : null;
+    if (!token) {
+      throw new BadRequestException('Configure token Factiliza en comprobante electrónico para consultar DNI');
+    }
+    const info = await this.factilizaConsulta.validateDni(
+      config?.consultaApiUrl ?? null,
+      token,
+      normalized,
+    );
+    const nombre =
+      info.nombre_completo?.trim() ||
+      [info.nombres, info.apellido_paterno, info.apellido_materno].filter(Boolean).join(' ');
+    return {
+      dni: info.numero,
+      nombre,
+    };
+  }
+
   async refreshDocumentStatus(id: string, establishmentId: string, actorId?: string) {
     const doc = await this.ensureDocument(id, establishmentId);
     const config = await this.prisma.establishmentBillingConfig.findUnique({
@@ -1180,7 +1222,25 @@ export class BillingService implements OnModuleInit {
       },
     });
     await this.audit.log({ userId: actorId, action: 'QUERY_STATUS', entity: 'ElectronicDocument', entityId: id });
+    await this.notifyBillingRealtime(id, result);
     return { ok: true, ...result };
+  }
+
+  private async notifyBillingRealtime(
+    docId: string,
+    result: { sunatStatus: SunatDocumentStatus; sunatCodigo: string; sunatDescripcion: string },
+  ) {
+    const doc = await this.prisma.electronicDocument.findUnique({
+      where: { id: docId },
+      select: { establishmentId: true, saleId: true },
+    });
+    if (!doc?.saleId) return;
+    this.realtime.emitBillingStatus(doc.establishmentId, doc.saleId, {
+      saleId: doc.saleId,
+      sunatStatus: result.sunatStatus,
+      sunatCodigo: result.sunatCodigo,
+      sunatDescripcion: result.sunatDescripcion,
+    });
   }
 
   async scheduleEmitFromTransfer(transferId: string): Promise<string | null> {

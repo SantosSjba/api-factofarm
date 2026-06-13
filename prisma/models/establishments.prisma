@@ -41,6 +41,23 @@ model Establishment {
   blockExpiredProductSales Boolean @default(true)
   /// Cantidad absoluta a partir de la cual un ajuste requiere segunda autorización
   adjustmentQtyThreshold Decimal @default(50) @db.Decimal(18, 4)
+  /// Número de registro sanitario DIGEMID del establecimiento
+  numeroRegistroDigemid String? @db.VarChar(40)
+  titularPharmacistLicenseId String?
+  blockSalesAboveRegulatedPrice Boolean @default(false)
+  /// Número celular Yape del local (solo referencia para cajero / cliente)
+  posYapeNumero   String? @db.VarChar(20)
+  /// Número celular Plin del local (solo referencia para cajero / cliente)
+  posPlinNumero   String? @db.VarChar(20)
+  /// WhatsApp del local para avisos delivery (wa.me)
+  deliveryWhatsappNumero String? @db.VarChar(20)
+  /// Slug público para portal de pedidos web (/public/delivery/{slug})
+  deliveryPublicSlug   String? @unique @db.VarChar(60)
+  deliveryPortalEnabled Boolean @default(false)
+  deliveryNotifyEmailEnabled Boolean @default(true)
+  deliveryNotifySmsEnabled   Boolean @default(false)
+  /// Puntos por cada S/ 1 de compra (fidelización)
+  loyaltyPointsPerSol      Int     @default(1)
   deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -66,7 +83,12 @@ model Establishment {
   prescriptions     Prescription[]
   controlledLedger  ControlledSubstanceLedgerEntry[]
   adverseEvents     AdverseEvent[]
+  taxWithholdingRecords TaxWithholdingRecord[]
+  titularPharmacist PharmacistLicense? @relation("EstablishmentTitularPharmacist", fields: [titularPharmacistLicenseId], references: [id], onDelete: SetNull)
+  deliveryOrders    DeliveryOrder[]
+  loyaltyTransactions CustomerLoyaltyTransaction[]
 
+  @@index([titularPharmacistLicenseId])
   @@index([departmentId])
   @@index([provinceId])
   @@index([districtId])

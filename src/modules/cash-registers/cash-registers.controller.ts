@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -8,6 +8,7 @@ import {
   CreateCashMovementDto,
   CreateCashRegisterDto,
   OpenCashSessionDto,
+  UpdateCashRegisterHardwareDto,
 } from './dto/cash-register.dto';
 import { CashRegistersService } from './cash-registers.service';
 
@@ -29,6 +30,17 @@ export class CashRegistersController {
   @ApiOperation({ summary: 'Crear caja POS' })
   create(@Body() dto: CreateCashRegisterDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.createRegister(actor.establecimientoId, dto, actor.sub);
+  }
+
+  @Patch(':id/hardware')
+  @RequirePermissions('cash.open', 'nav.caja_chica_pos')
+  @ApiOperation({ summary: 'Configurar hardware POS de la caja (impresora, escáner, pantalla)' })
+  updateHardware(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCashRegisterHardwareDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.updateHardware(id, actor.establecimientoId, dto, actor.sub);
   }
 
   @Get('sessions/active')

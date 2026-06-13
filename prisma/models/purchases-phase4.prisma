@@ -53,6 +53,7 @@ model PurchaseOrder {
   goodsReceipts   GoodsReceipt[]
   accountPayables AccountPayable[]
   creditNotes     SupplierCreditNote[]
+  taxWithholdingRecords TaxWithholdingRecord[]
 
   @@index([establishmentId])
   @@index([supplierId])

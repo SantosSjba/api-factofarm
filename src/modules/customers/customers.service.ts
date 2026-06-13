@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { CustomerDocumentType, Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LpdpService } from '../compliance/services/lpdp.service';
 import { CreateCustomerZoneDto } from './dto/create-customer-zone.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerListQueryDto } from './dto/customer-list-query.dto';
@@ -75,6 +76,7 @@ export class CustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly lpdp: LpdpService,
   ) {}
 
   async list(query: CustomerListQueryDto) {
@@ -148,6 +150,7 @@ export class CustomersService {
       if (dto.addresses?.length) {
         await this.replaceAddresses(created.id, dto.addresses);
       }
+      await this.lpdp.ensureCustomerConsentOnCreate(dto, created.id, actorId);
       await this.audit.log({
         userId: actorId,
         action: 'CREATE',

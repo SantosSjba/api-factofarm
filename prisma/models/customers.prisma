@@ -41,6 +41,8 @@ model Customer {
   activo              Boolean              @default(true)
   habilitado          Boolean              @default(true)
   etiquetas           String[]             @default([])
+  lpdpConsentVersion  String?              @db.VarChar(20)
+  lpdpConsentAt       DateTime?
   vendedorAsignadoId  String?
   vendedorAsignado    User?                @relation("CustomerAssignedSeller", fields: [vendedorAsignadoId], references: [id], onDelete: SetNull)
   customerTypeId      String?
@@ -57,6 +59,10 @@ model Customer {
   quotations           Quotation[]
   prescriptions        Prescription[]
   adverseEvents        AdverseEvent[]
+  arcoRequests         ArcoRequest[]
+  deliveryOrders       DeliveryOrder[]
+  loyaltyTransactions  CustomerLoyaltyTransaction[]
+  promotionRedemptions PromotionRedemption[]
 
   @@index([deletedAt])
   @@index([customerTypeId])

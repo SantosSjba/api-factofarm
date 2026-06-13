@@ -106,6 +106,13 @@ export class BillingController {
     return this.service.validateRuc(actor.establecimientoId, ruc);
   }
 
+  @Get('validate-dni/:dni')
+  @RequirePermissions('billing.read', 'customers.read', 'customers.write')
+  @ApiOperation({ summary: 'Consultar DNI vía RENIEC (Factiliza)' })
+  validateDni(@Param('dni') dni: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.validateDni(actor.establecimientoId, dni);
+  }
+
   @Post('documents/:id/refresh-status')
   @RequirePermissions('billing.read', 'nav.comprobante_electronico')
   @ApiOperation({ summary: 'Consultar estado CPE en SUNAT/OSE' })

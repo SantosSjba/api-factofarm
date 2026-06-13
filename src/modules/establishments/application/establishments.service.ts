@@ -88,6 +88,11 @@ const selectEstablishment = {
   inventoryLotAllocationMethod: true,
   blockExpiredProductSales: true,
   adjustmentQtyThreshold: true,
+  numeroRegistroDigemid: true,
+  titularPharmacistLicenseId: true,
+  blockSalesAboveRegulatedPrice: true,
+  posYapeNumero: true,
+  posPlinNumero: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.EstablishmentSelect;
@@ -345,6 +350,11 @@ export class EstablishmentsService {
         dto.adjustmentQtyThreshold !== undefined
           ? new Prisma.Decimal(dto.adjustmentQtyThreshold)
           : undefined,
+      numeroRegistroDigemid: this.normNullable(dto.numeroRegistroDigemid) ?? null,
+      titularPharmacistLicenseId: this.normNullable(dto.titularPharmacistLicenseId) ?? null,
+      blockSalesAboveRegulatedPrice: dto.blockSalesAboveRegulatedPrice ?? false,
+      posYapeNumero: this.normPaymentPhone(dto.posYapeNumero),
+      posPlinNumero: this.normPaymentPhone(dto.posPlinNumero),
     };
   }
 
@@ -384,8 +394,43 @@ export class EstablishmentsService {
     if (dto.adjustmentQtyThreshold !== undefined) {
       data.adjustmentQtyThreshold = new Prisma.Decimal(dto.adjustmentQtyThreshold);
     }
+    if (dto.numeroRegistroDigemid !== undefined) {
+      data.numeroRegistroDigemid = this.normNullable(dto.numeroRegistroDigemid);
+    }
+    if (dto.titularPharmacistLicenseId !== undefined) {
+      data.titularPharmacistLicenseId = this.normNullable(dto.titularPharmacistLicenseId);
+    }
+    if (dto.blockSalesAboveRegulatedPrice !== undefined) {
+      data.blockSalesAboveRegulatedPrice = dto.blockSalesAboveRegulatedPrice;
+    }
+    if (dto.posYapeNumero !== undefined) {
+      data.posYapeNumero = this.normPaymentPhone(dto.posYapeNumero);
+    }
+    if (dto.posPlinNumero !== undefined) {
+      data.posPlinNumero = this.normPaymentPhone(dto.posPlinNumero);
+    }
 
     return data;
+  }
+
+  async getPosPaymentSettings(establishmentId: string) {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: {
+        id: true,
+        nombre: true,
+        posYapeNumero: true,
+        posPlinNumero: true,
+      },
+    });
+    if (!row) throw new NotFoundException('Establecimiento no encontrado');
+    return row;
+  }
+
+  private normPaymentPhone(value: string | undefined): string | null | undefined {
+    if (value === undefined) return undefined;
+    const digits = value.replace(/\D/g, '');
+    return digits ? digits : null;
   }
 
   private normNullable(value: string | undefined): string | null | undefined {

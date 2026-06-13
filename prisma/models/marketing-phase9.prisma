@@ -1,0 +1,46 @@
+enum LoyaltyTransactionType {
+  VENTA
+  DELIVERY
+  AJUSTE
+  CANJE
+}
+
+model CustomerLoyaltyTransaction {
+  id              String                 @id @default(uuid())
+  customerId      String
+  establishmentId String
+  tipo            LoyaltyTransactionType
+  puntos          Int
+  saldoAfter      Int
+  referencia      String?                @db.VarChar(120)
+  saleId          String?
+  deliveryOrderId String?
+  createdById     String?
+  createdAt       DateTime               @default(now())
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  establishment Establishment  @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  sale          Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  deliveryOrder DeliveryOrder? @relation(fields: [deliveryOrderId], references: [id], onDelete: SetNull)
+  createdBy     User?          @relation("LoyaltyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([establishmentId])
+  @@index([saleId])
+  @@index([deliveryOrderId])
+}
+
+model PromotionRedemption {
+  id          String   @id @default(uuid())
+  promotionId String
+  customerId  String?
+  saleId      String?  @unique
+  redeemedAt  DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sale      Sale?     @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@index([promotionId])
+  @@index([customerId])
+}

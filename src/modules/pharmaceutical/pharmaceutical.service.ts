@@ -541,6 +541,171 @@ export class PharmaceuticalService {
     return this.toXlsxBuffer(rows, 'farmacovigilancia');
   }
 
+  async sanitaryRegistryAlerts(establishmentId: string, daysAhead = 90) {
+    const limit = new Date();
+    limit.setDate(limit.getDate() + daysAhead);
+    const products = await this.prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        registroSanitario: { not: null },
+        registroSanitarioVigencia: { not: null, lte: limit },
+      },
+      select: {
+        id: true,
+        nombre: true,
+        registroSanitario: true,
+        registroSanitarioVigencia: true,
+        codigoMedicamentoDigemid: true,
+      },
+      orderBy: { registroSanitarioVigencia: 'asc' },
+      take: 200,
+    });
+    const now = new Date();
+    return products.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      registroSanitario: p.registroSanitario,
+      codigoMedicamentoDigemid: p.codigoMedicamentoDigemid,
+      registroSanitarioVigencia: p.registroSanitarioVigencia?.toISOString() ?? null,
+      estado:
+        p.registroSanitarioVigencia && p.registroSanitarioVigencia < now
+          ? 'VENCIDO'
+          : 'POR_VENCER',
+    }));
+  }
+
+  async lotTraceabilityReport(establishmentId: string, codigoLote: string) {
+    const lote = codigoLote.trim();
+    const inbound = await this.prisma.inventoryInboundMovement.findMany({
+      where: {
+        codigoLote: lote,
+        deletedAt: null,
+        warehouse: { establishmentId, deletedAt: null },
+      },
+      include: {
+        product: { select: { nombre: true, codigoInterno: true } },
+        warehouse: { select: { nombre: true } },
+      },
+      orderBy: { fechaRegistro: 'asc' },
+    });
+
+    const outbound = await this.prisma.saleItemLot.findMany({
+      where: { codigoLote: lote },
+      include: {
+        saleItem: {
+          include: {
+            sale: {
+              select: {
+                id: true,
+                serie: true,
+                numero: true,
+                createdAt: true,
+                establishmentId: true,
+                customer: { select: { nombre: true, numeroDocumento: true } },
+              },
+            },
+            product: { select: { nombre: true, codigoInterno: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      codigoLote: lote,
+      entradas: inbound.map((e) => ({
+        fecha: e.fechaRegistro.toISOString(),
+        producto: e.product.nombre,
+        codigo: e.product.codigoInterno ?? '',
+        almacen: e.warehouse.nombre,
+        cantidad: e.cantidad.toString(),
+        referencia: e.referencia ?? '',
+      })),
+      ventas: outbound
+        .filter((o) => o.saleItem.sale.establishmentId === establishmentId)
+        .map((o) => ({
+          saleId: o.saleItem.sale.id,
+          documento: `${o.saleItem.sale.serie ?? ''}-${o.saleItem.sale.numero ?? ''}`,
+          fecha: o.saleItem.sale.createdAt.toISOString(),
+          producto: o.saleItem.product.nombre,
+          cantidad: o.cantidad.toString(),
+          cliente: o.saleItem.sale.customer?.nombre ?? 'SIN CLIENTE',
+          documentoCliente: o.saleItem.sale.customer?.numeroDocumento ?? '',
+        })),
+    };
+  }
+
+  async bpaStorageReport(establishmentId: string) {
+    const zones = await this.prisma.warehouseZone.findMany({
+      where: { warehouse: { establishmentId, deletedAt: null }, deletedAt: null },
+      include: {
+        warehouse: { select: { nombre: true } },
+        temperatureLogs: {
+          take: 30,
+          orderBy: { fecha: 'desc' },
+          select: { fecha: true, temperaturaCelsius: true, observacion: true },
+        },
+      },
+    });
+    return zones.map((z) => ({
+      almacen: z.warehouse.nombre,
+      zona: z.nombre,
+      tipo: z.tipo,
+      registrosTemperatura: z.temperatureLogs.map((l) => ({
+        fecha: l.fecha.toISOString(),
+        temperaturaCelsius: l.temperaturaCelsius.toString(),
+        observacion: l.observacion,
+      })),
+    }));
+  }
+
+  async buildInspectionExportBuffer(establishmentId: string) {
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId },
+      select: { nombre: true, codigo: true, numeroRegistroDigemid: true },
+    });
+    const alerts = await this.sanitaryRegistryAlerts(establishmentId, 180);
+    const bpa = await this.bpaStorageReport(establishmentId);
+
+    const rows: Record<string, string>[] = [
+      {
+        SECCION: 'ESTABLECIMIENTO',
+        CAMPO: 'Nombre',
+        VALOR: establishment?.nombre ?? '',
+      },
+      {
+        SECCION: 'ESTABLECIMIENTO',
+        CAMPO: 'Codigo',
+        VALOR: establishment?.codigo ?? '',
+      },
+      {
+        SECCION: 'ESTABLECIMIENTO',
+        CAMPO: 'Registro DIGEMID',
+        VALOR: establishment?.numeroRegistroDigemid ?? '',
+      },
+      ...alerts.map((a) => ({
+        SECCION: 'REGISTRO_SANITARIO',
+        CAMPO: a.nombre,
+        VALOR: `${a.registroSanitario ?? ''} | ${a.registroSanitarioVigencia ?? ''} | ${a.estado}`,
+      })),
+      ...bpa.map((zone) => ({
+        SECCION: 'BPA',
+        CAMPO: `${zone.almacen} - ${zone.zona}`,
+        VALOR: zone.tipo,
+      })),
+    ];
+
+    return this.toXlsxBuffer(rows, 'inspeccion-digemid');
+  }
+
+  async anonymizedSalesStats(establishmentId: string, limit = 20) {
+    const rows = await this.topProducts(establishmentId, limit);
+    return rows.map((row) => ({
+      product: row.product,
+      cantidad: row.cantidad,
+      total: row.total,
+    }));
+  }
+
   private async resolveWarehouseIds(establishmentId: string, warehouseId?: string) {
     if (warehouseId) return [warehouseId];
     const rows = await this.prisma.warehouse.findMany({

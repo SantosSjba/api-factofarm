@@ -1,0 +1,101 @@
+enum DeliveryOrderStatus {
+  RECIBIDO
+  PREPARANDO
+  EN_CAMINO
+  ENTREGADO
+  CANCELADO
+}
+
+enum DeliveryChannel {
+  TELEFONO
+  WHATSAPP
+  WEB
+  PRESENCIAL
+}
+
+enum DeliveryNotificationChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+model DeliveryOrder {
+  id                  String              @id @default(uuid())
+  establishmentId     String
+  warehouseId         String
+  customerId          String?
+  createdById         String
+  assignedToId        String?
+  saleId              String?             @unique
+  numero              String              @db.VarChar(20)
+  estado              DeliveryOrderStatus @default(RECIBIDO)
+  canal               DeliveryChannel     @default(TELEFONO)
+  clienteNombre       String              @db.VarChar(200)
+  clienteTelefono     String              @db.VarChar(30)
+  clienteEmail        String?             @db.VarChar(120)
+  direccionEntrega    String              @db.VarChar(500)
+  referenciaDireccion String?             @db.VarChar(200)
+  distritoEntrega     String?             @db.VarChar(120)
+  costoDelivery       Decimal             @default(0) @db.Decimal(18, 4)
+  subtotal            Decimal             @db.Decimal(18, 4)
+  igvTotal            Decimal             @default(0) @db.Decimal(18, 4)
+  total               Decimal             @db.Decimal(18, 4)
+  notasCliente        String?             @db.VarChar(500)
+  notasInternas       String?             @db.VarChar(500)
+  programadoPara      DateTime?
+  entregadoAt         DateTime?
+  cancelReason        String?             @db.VarChar(500)
+  deletedAt           DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy     User          @relation("DeliveryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo    User?         @relation("DeliveryAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  sale          Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  items         DeliveryOrderItem[]
+  notifications DeliveryNotificationLog[]
+  loyaltyTransactions CustomerLoyaltyTransaction[]
+
+  @@unique([establishmentId, numero])
+  @@index([establishmentId])
+  @@index([estado])
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+model DeliveryOrderItem {
+  id              String  @id @default(uuid())
+  deliveryOrderId String
+  productId       String
+  cantidad        Decimal @db.Decimal(18, 4)
+  precioUnitario  Decimal @db.Decimal(18, 4)
+  subtotalLinea   Decimal @db.Decimal(18, 4)
+  igvLinea        Decimal @default(0) @db.Decimal(18, 4)
+  totalLinea      Decimal @db.Decimal(18, 4)
+  notas           String? @db.VarChar(200)
+
+  deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([deliveryOrderId])
+  @@index([productId])
+}
+
+model DeliveryNotificationLog {
+  id              String                      @id @default(uuid())
+  deliveryOrderId String
+  channel         DeliveryNotificationChannel
+  templateKey     String                      @db.VarChar(60)
+  destino         String                      @db.VarChar(120)
+  mensaje         String                      @db.VarChar(1000)
+  enviadoOk       Boolean                     @default(true)
+  errorMessage    String?                     @db.VarChar(500)
+  createdAt       DateTime                    @default(now())
+
+  deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryOrderId])
+}

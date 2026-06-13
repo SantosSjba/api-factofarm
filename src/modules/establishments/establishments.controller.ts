@@ -10,7 +10,9 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from './dto/create-establishment.dto';
 import { EstablishmentListQueryDto } from './dto/establishment-list-query.dto';
@@ -63,6 +65,13 @@ export class EstablishmentsController {
       page: query.page,
       pageSize: query.pageSize,
     });
+  }
+
+  @Get('pos-payment-settings')
+  @RequirePermissions('sales.read', 'nav.punto_venta')
+  @ApiOperation({ summary: 'Números Yape/Plin del establecimiento activo (referencia POS)' })
+  posPaymentSettings(@CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.getPosPaymentSettings(actor.establecimientoId);
   }
 
   @Post()
