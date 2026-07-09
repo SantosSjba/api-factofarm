@@ -11,12 +11,14 @@ import { AppModule } from './app.module';
 import { AppService } from './app.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { parseCorsOrigins } from './config/env.validation';
+import { initSentryIfConfigured } from './common/monitoring/sentry.util';
 
 function localBrowserBase(port: number): string {
   return `http://localhost:${port}`;
 }
 
 async function bootstrap() {
+  initSentryIfConfigured();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });

@@ -14,7 +14,7 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
-import { CreateSaleDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
+import { CreateSaleDto, CreateSaleDebitNoteDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
@@ -158,5 +158,16 @@ export class SalesController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.createReturn(id, dto, actor);
+  }
+
+  @Post(':id/debit-notes')
+  @RequirePermissions('sales.write', 'nav.notas_venta', 'billing.write')
+  @ApiOperation({ summary: 'Emitir nota de débito (cargo adicional) sobre venta facturada' })
+  createDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateSaleDebitNoteDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createDebitNote(id, dto, actor);
   }
 }

@@ -40,6 +40,7 @@ export type EmitDocumentInput = {
     numero: string;
   };
   creditNoteReasonCode?: string;
+  debitNoteReasonCode?: string;
   voidReasonText?: string;
   detraccion?: {
     codigoBien: string;

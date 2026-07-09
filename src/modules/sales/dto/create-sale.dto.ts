@@ -236,6 +236,25 @@ export class CreateSaleReturnDto {
   items!: { saleItemId: string; quantity: number; lotCode?: string }[];
 }
 
+export class CreateSaleDebitNoteDto {
+  @ApiProperty({ description: 'Motivo SUNAT / observación interna' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  motivo!: string;
+
+  @ApiProperty({ description: 'Descripción del cargo adicional en la ND' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  descripcion!: string;
+
+  @ApiProperty({ description: 'Monto total del cargo (incluye IGV)' })
+  @IsNumber()
+  @Min(0.01)
+  total!: number;
+}
+
 export class OfflineSaleDto {
   @ApiProperty({ format: 'uuid', description: 'Id local generado en POS offline' })
   @IsUUID()

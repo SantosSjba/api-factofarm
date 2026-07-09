@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { captureSentryException } from '../monitoring/sentry.util';
 
 type ApiErrorBody = {
   code: string;
@@ -73,6 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= 500 && process.env.SENTRY_DSN) {
+      captureSentryException(exception);
       this.logger.error(
         JSON.stringify({
           sentry: true,

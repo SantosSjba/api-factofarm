@@ -172,6 +172,93 @@ export class UblBuilderService {
 </CreditNote>`;
   }
 
+  buildDebitNote(input: {
+    serie: string;
+    numero: string;
+    fechaEmision: string;
+    moneda: string;
+    emisorRuc: string;
+    emisorRazonSocial: string;
+    receptorTipoDoc: string;
+    receptorNumeroDoc: string;
+    receptorNombre: string;
+    subtotal: string;
+    igvTotal: string;
+    total: string;
+    relatedDocumentType: 'FACTURA' | 'BOLETA';
+    relatedSerie: string;
+    relatedNumero: string;
+    discrepancyReason: string;
+    lines: Array<{
+      lineNumber: number;
+      descripcion: string;
+      cantidad: string;
+      precioUnitario: string;
+      subtotalLinea: string;
+      igvLinea: string;
+      totalLinea: string;
+      taxAffectationCodigo?: string | null;
+    }>;
+  }): string {
+    const relatedTypeCode = input.relatedDocumentType === 'FACTURA' ? '01' : '03';
+    const linesXml = input.lines
+      .map(
+        (line) => `
+    <cac:DebitNoteLine>
+      <cbc:ID>${line.lineNumber}</cbc:ID>
+      <cbc:DebitedQuantity unitCode="NIU">${line.cantidad}</cbc:DebitedQuantity>
+      <cbc:LineExtensionAmount currencyID="${input.moneda}">${line.subtotalLinea}</cbc:LineExtensionAmount>
+      ${this.buildLineTaxXml(input.moneda, line.subtotalLinea, line.igvLinea, line.taxAffectationCodigo)}
+      <cac:Item><cbc:Description>${this.escape(line.descripcion)}</cbc:Description></cac:Item>
+      <cac:Price><cbc:PriceAmount currencyID="${input.moneda}">${line.precioUnitario}</cbc:PriceAmount></cac:Price>
+    </cac:DebitNoteLine>`,
+      )
+      .join('');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<DebitNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:DebitNote-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:CustomizationID>2.0</cbc:CustomizationID>
+  <cbc:ID>${input.serie}-${input.numero}</cbc:ID>
+  <cbc:IssueDate>${input.fechaEmision.slice(0, 10)}</cbc:IssueDate>
+  <cbc:DocumentCurrencyCode>${input.moneda}</cbc:DocumentCurrencyCode>
+  <cac:DiscrepancyResponse>
+    <cbc:ReferenceID>${input.relatedSerie}-${input.relatedNumero}</cbc:ReferenceID>
+    <cbc:ResponseCode>02</cbc:ResponseCode>
+    <cbc:Description>${this.escape(input.discrepancyReason)}</cbc:Description>
+  </cac:DiscrepancyResponse>
+  <cac:BillingReference>
+    <cac:InvoiceDocumentReference>
+      <cbc:ID>${input.relatedSerie}-${input.relatedNumero}</cbc:ID>
+      <cbc:DocumentTypeCode>${relatedTypeCode}</cbc:DocumentTypeCode>
+    </cac:InvoiceDocumentReference>
+  </cac:BillingReference>
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cac:PartyIdentification><cbc:ID schemeID="6">${input.emisorRuc}</cbc:ID></cac:PartyIdentification>
+      <cac:PartyLegalEntity><cbc:RegistrationName>${this.escape(input.emisorRazonSocial)}</cbc:RegistrationName></cac:PartyLegalEntity>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty>
+    <cac:Party>
+      <cac:PartyIdentification><cbc:ID schemeID="${input.receptorTipoDoc}">${input.receptorNumeroDoc}</cbc:ID></cac:PartyIdentification>
+      <cac:PartyLegalEntity><cbc:RegistrationName>${this.escape(input.receptorNombre)}</cbc:RegistrationName></cac:PartyLegalEntity>
+    </cac:Party>
+  </cac:AccountingCustomerParty>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="${input.moneda}">${input.igvTotal}</cbc:TaxAmount>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="${input.moneda}">${input.subtotal}</cbc:LineExtensionAmount>
+    <cbc:TaxInclusiveAmount currencyID="${input.moneda}">${input.total}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${input.moneda}">${input.total}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  ${linesXml}
+</DebitNote>`;
+  }
+
   private buildLineTaxXml(
     moneda: string,
     subtotalLinea: string,

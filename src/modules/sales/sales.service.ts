@@ -39,6 +39,7 @@ import { validateSalePayments } from './utils/payment-validation.util';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
   CreateSaleDto,
+  CreateSaleDebitNoteDto,
   CreateSaleReturnDto,
   SyncSalesDto,
   VoidSaleDto,
@@ -898,6 +899,44 @@ export class SalesService {
     };
   }
 
+  async createDebitNote(
+    saleId: string,
+    dto: CreateSaleDebitNoteDto,
+    actor: { sub: string; establecimientoId: string },
+  ) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
+      include: { electronicDocument: { select: { id: true, sunatStatus: true } } },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.estado === SaleStatus.ANULADA) {
+      throw new BadRequestException('No se puede emitir ND sobre una venta anulada');
+    }
+    if (sale.documentType !== SaleDocumentType.BOLETA && sale.documentType !== SaleDocumentType.FACTURA) {
+      throw new BadRequestException('La nota de débito solo aplica a boletas o facturas');
+    }
+    if (!sale.electronicDocument) {
+      throw new BadRequestException('La venta no tiene comprobante electrónico asociado');
+    }
+
+    const electronicDocumentId = await this.billing.scheduleDebitNoteFromSale(saleId, {
+      motivo: dto.motivo.trim(),
+      descripcion: dto.descripcion.trim(),
+      total: dto.total,
+    });
+    if (!electronicDocumentId) {
+      throw new BadRequestException(
+        'No se pudo programar la nota de débito. Verifique OSE, estado SUNAT del comprobante y series ND.',
+      );
+    }
+
+    return {
+      ok: true,
+      message: 'Nota de débito en proceso de emisión',
+      electronicDocumentId,
+    };
+  }
+
   async checkInteractions(productIds: string[]) {
     const uniqueIds = [...new Set(productIds)];
     const catalogRows = await this.prisma.drugInteraction.findMany({
@@ -1000,6 +1039,7 @@ export class SalesService {
           select: { cantidad: true },
         },
         esControlado: true,
+        imagenArchivoId: true,
       },
     });
 
@@ -1028,6 +1068,7 @@ export class SalesService {
           necesitaRecetaMedica: p.necesitaRecetaMedica,
           manejaLotes: p.manejaLotes,
           esControlado: p.esControlado,
+          imagenArchivoId: p.imagenArchivoId,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);

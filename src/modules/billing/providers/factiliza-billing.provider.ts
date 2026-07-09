@@ -263,9 +263,16 @@ export class FactilizaBillingProvider implements IBillingProvider {
     const igv = roundMoney(input.igvTotal);
     const total = roundMoney(input.total);
     const fecha = peruEmissionDate(input.fechaEmision);
-    const motivoCod = input.creditNoteReasonCode ?? '09';
+    const motivoCod =
+      input.documentType === 'NOTA_DEBITO'
+        ? (input.debitNoteReasonCode ?? '02')
+        : (input.creditNoteReasonCode ?? '09');
     const motivoDes =
-      motivoCod === '09' ? 'DEVOLUCION POR ITEMS' : input.voidReasonText ?? 'ANULACION DE LA OPERACION';
+      input.documentType === 'NOTA_DEBITO'
+        ? (input.voidReasonText ?? 'AUMENTO EN EL VALOR')
+        : motivoCod === '09'
+          ? 'DEVOLUCION POR ITEMS'
+          : (input.voidReasonText ?? 'ANULACION DE LA OPERACION');
 
     return {
       tipo_Operacion: '0101',

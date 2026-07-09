@@ -15,7 +15,10 @@ describe('AuditLogService', () => {
         RequestContextService,
         {
           provide: PrismaService,
-          useValue: { auditLog: { create } },
+          useValue: {
+            auditLog: { create },
+            user: { findUnique: jest.fn().mockResolvedValue({ tenantId: 'tenant-1' }) },
+          },
         },
       ],
     }).compile();

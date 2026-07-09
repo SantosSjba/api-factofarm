@@ -1,6 +1,8 @@
 # FactoFarm · API (NestJS)
 
-Backend REST de **FactoFarm**: autenticación JWT, usuarios, establecimientos, permisos, archivos y documentación OpenAPI.
+Backend REST de **FactoFarm**: sistema farmacéutico integral para Perú — POS, inventario, recetas, facturación electrónica SUNAT, cumplimiento DIGEMID/LPDP, finanzas y más. Expone API REST bajo el prefijo `/api` con autenticación JWT, RBAC por permisos y documentación OpenAPI (Scalar).
+
+**Alcance:** 48 módulos de dominio en `src/modules/` (Fases 0–11 implementadas). Ver [ROADMAP.md](../ROADMAP.md) y [AUDITORIA-SISTEMA.md](../AUDITORIA-SISTEMA.md).
 
 ---
 
@@ -25,28 +27,35 @@ src/
 ├── config/                 # Validación de entorno (Joi), variables centralizadas
 ├── prisma/                 # PrismaModule global + PrismaService (adaptador pg)
 ├── generated/prisma/       # Cliente Prisma generado (no editar a mano; ver .gitignore)
-└── modules/
-    ├── auth/               # Login JWT
-    ├── users/              # CRUD usuarios (ejemplo completo en capas)
-    │   ├── application/    # Casos de uso, DTOs, UsersService
-    │   ├── domain/         # Tipos de dominio, IUserRepository (puerto)
-    │   ├── infrastructure/ # PrismaUserRepository
-    │   ├── users.controller.ts
-    │   └── users.module.ts
-    ├── establishments/
-    ├── permissions/
-    └── files/              # Subida de archivos + tabla archivos
+└── modules/                # 48 módulos de dominio (ver tabla abajo)
+    ├── auth, users, permissions, establishments, tenants
+    ├── products, categories, brands, units, laboratories, active-principles
+    ├── pharmaceutical-forms, administration-routes, compound-products
+    ├── inventory-movements, inventory-transfers, inventory-physical-counts
+    ├── warehouses, warehouse-zones, suppliers, purchases
+    ├── sales, cash-registers, quotations, accounts-receivable
+    ├── billing, series, finance, compliance
+    ├── prescriptions, pharmaceutical, medicos, staff, hospital
+    ├── customers, customer-types, agreements, marketing
+    ├── delivery-orders, shipping-guides, cold-chain
+    ├── dashboard, audit, public, files, health, realtime, services
+    └── … (lista completa: `ls src/modules`)
 ```
 
-| Capa | Rol |
-|------|-----|
-| **domain/** | Contratos (`user.repository.ts`), tipos (`user.types.ts`). Sin Nest/Prisma. |
-| **application/** | Orquestación (`users.service.ts`), DTOs de entrada/salida. |
-| **infrastructure/** | Implementación concreta del repositorio (Prisma). |
-| **\*.controller.ts** | HTTP: validación, delegación al servicio de aplicación. |
-| **\*.module.ts** | Composición Nest (providers, imports, exports). |
+### Módulos por área funcional
 
-Los **nuevos dominios** deben seguir el mismo patrón bajo `src/modules/<nombre>/`.
+| Área | Módulos |
+|------|---------|
+| **Plataforma** | `auth`, `users`, `permissions`, `establishments`, `tenants`, `files`, `health`, `audit`, `realtime` |
+| **Catálogo** | `products`, `categories`, `brands`, `units`, `laboratories`, `active-principles`, `pharmaceutical-forms`, `administration-routes`, `compound-products`, `services` |
+| **Inventario** | `inventory-movements`, `inventory-transfers`, `inventory-physical-counts`, `warehouses`, `warehouse-zones`, `suppliers`, `purchases`, `cold-chain` |
+| **Ventas y caja** | `sales`, `cash-registers`, `quotations`, `accounts-receivable`, `customers`, `customer-types`, `agreements`, `marketing` |
+| **Facturación SUNAT** | `billing`, `series`, `finance`, `compliance` |
+| **Farmacia clínica** | `prescriptions`, `pharmaceutical`, `medicos`, `staff`, `hospital` |
+| **Logística** | `delivery-orders`, `shipping-guides` |
+| **Otros** | `dashboard`, `public` (libro reclamaciones) |
+
+Los módulos nuevos deben seguir el patrón por capas bajo `src/modules/<nombre>/` cuando aplique (ver `users/` como referencia).
 
 ### Prisma (fuera de `src/`)
 
@@ -93,6 +102,11 @@ JWT_EXPIRES_IN=7d
 
 # Archivos subidos (opcional; por defecto carpeta ./uploads)
 UPLOADS_DIR=uploads
+
+# Producción — obligatorias / recomendadas
+# LPDP_SENSITIVE_ENCRYPTION_KEY=secreto_largo_minimo_32_caracteres_para_cifrar_datos_salud
+# SWAGGER_ENABLED=false
+# BILLING_PROVIDER=FACTILIZA
 ```
 
 - **`JWT_SECRET`**: obligatorio; la validación Joi exige al menos 32 caracteres.
@@ -134,14 +148,14 @@ Credenciales de demostración (solo desarrollo; ver `prisma/seed/data/admin-demo
 ### 5. Compilar y arrancar la API
 
 ```bash
-ppnpm run build
-pppnpm run start:dev
+pnpm run build
+pnpm run start:dev
 ```
 
 Modo desarrollo con recarga:
 
 ```bash
-ppnpm run start:dev
+pnpm run start:dev
 ```
 
 Arranque en producción (tras `build`):
@@ -178,7 +192,7 @@ Content-Type: application/json
 
 | Script | Descripción |
 |--------|-------------|
-| `ppnpm run start:dev` | API en modo watch |
+| `pnpm run start:dev` | API en modo watch |
 | `pnpm run build` | Compila Nest (antes ejecuta `prisma generate`) |
 | `pnpm run prisma:generate` | Regenera el cliente Prisma |
 | `pnpm run prisma:migrate` | Migraciones en desarrollo (`migrate dev`) |
@@ -186,6 +200,25 @@ Content-Type: application/json
 | `pnpm run db:seed` | Ejecuta el seed |
 | `pnpm run lint` | ESLint |
 | `pnpm run test` | Tests unitarios |
+
+---
+
+## Documentación relacionada
+
+| Documento | Descripción |
+|-----------|-------------|
+| [ROADMAP.md](../ROADMAP.md) | Fases del proyecto y hardening 11.5 |
+| [AUDITORIA-SISTEMA.md](../AUDITORIA-SISTEMA.md) | Hallazgos pre-producción |
+| [docs/GO-LIVE-CHECKLIST.md](../docs/GO-LIVE-CHECKLIST.md) | Checklist operativo farmacia piloto |
+| [docs/LPDP-POLICY.md](../docs/LPDP-POLICY.md) | Política de protección de datos |
+
+## Tests de integración billing (opcional)
+
+Con token sandbox Factiliza:
+
+```bash
+FACTILIZA_INTEGRATION_TOKEN=tu_token pnpm run test -- factiliza-billing.integration-spec
+```
 
 ---
 
