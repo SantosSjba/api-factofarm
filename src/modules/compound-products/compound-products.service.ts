@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { actorFromJwt, assertTenantAccess, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
@@ -29,6 +31,7 @@ const selectCompoundList = {
 
 const selectCompoundDetail = {
   ...selectCompoundList,
+  tenantId: true,
   saleTaxAffectationId: true,
   plataformaId: true,
   items: {
@@ -60,6 +63,13 @@ function dec(v: Prisma.Decimal | null | undefined): string | null {
 @Injectable()
 export class CompoundProductsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private requireTenant(actor?: JwtRequestUser): string {
+    if (!actor) {
+      throw new ForbiddenException('No autorizado');
+    }
+    return requireTenantId(actorFromJwt(actor));
+  }
 
   listUnits() {
     return this.prisma.unitOfMeasure.findMany({
@@ -93,7 +103,7 @@ export class CompoundProductsService {
     });
   }
 
-  async list(query: CompoundProductListQueryDto) {
+  async list(query: CompoundProductListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -114,6 +124,7 @@ export class CompoundProductsService {
 
     const where: Prisma.CompoundProductWhereInput = {
       deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(or.length ? { OR: or } : {}),
     };
 
@@ -143,13 +154,14 @@ export class CompoundProductsService {
     };
   }
 
-  async getById(id: string) {
-    return this.getByIdOrThrow(id);
+  async getById(id: string, actor?: JwtRequestUser) {
+    return this.getByIdOrThrow(id, actor);
   }
 
-  async create(dto: CreateCompoundProductDto) {
+  async create(dto: CreateCompoundProductDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     await this.validateReferences(dto);
-    const normalizedItems = await this.normalizeItems(dto.items ?? []);
+    const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException('Debe agregar al menos un producto al compuesto.');
     }
@@ -158,7 +170,7 @@ export class CompoundProductsService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.compoundProduct.create({
-        data: this.buildData(dto, totalRef),
+        data: this.buildData(dto, totalRef, tenantId),
         select: { id: true },
       });
       await tx.compoundProductItem.createMany({
@@ -173,18 +185,19 @@ export class CompoundProductsService {
       return row.id;
     });
 
-    return this.getByIdOrThrow(created);
+    return this.getByIdOrThrow(created, actor);
   }
 
-  async update(id: string, dto: CreateCompoundProductDto) {
+  async update(id: string, dto: CreateCompoundProductDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const exists = await this.prisma.compoundProduct.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('Producto compuesto no encontrado');
 
     await this.validateReferences(dto);
-    const normalizedItems = await this.normalizeItems(dto.items ?? []);
+    const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException('Debe agregar al menos un producto al compuesto.');
     }
@@ -194,7 +207,7 @@ export class CompoundProductsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.compoundProduct.update({
         where: { id },
-        data: this.buildData(dto, totalRef),
+        data: this.buildData(dto, totalRef, tenantId),
       });
       await tx.compoundProductItem.deleteMany({ where: { compoundProductId: id } });
       await tx.compoundProductItem.createMany({
@@ -208,12 +221,13 @@ export class CompoundProductsService {
       });
     });
 
-    return this.getByIdOrThrow(id);
+    return this.getByIdOrThrow(id, actor);
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const exists = await this.prisma.compoundProduct.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('Producto compuesto no encontrado');
@@ -223,7 +237,8 @@ export class CompoundProductsService {
     });
   }
 
-  async importFromExcel(mode: CompoundProductImportMode, file: Express.Multer.File) {
+  async importFromExcel(mode: CompoundProductImportMode, file: Express.Multer.File, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     if (!file?.buffer?.length) {
       throw new NotFoundException('Archivo no válido para importar');
     }
@@ -235,9 +250,9 @@ export class CompoundProductsService {
       return { totalRows: 0, created: 0, updated: 0, errors: [] as string[] };
     }
     if (mode === 'DETALLE_PRODUCTOS_COMPUESTOS') {
-      return this.importCompoundDetailRows(rows);
+      return this.importCompoundDetailRows(rows, actor);
     }
-    return this.importCompoundRows(rows);
+    return this.importCompoundRows(rows, tenantId);
   }
 
   buildImportTemplateBuffer(mode: CompoundProductImportMode) {
@@ -274,7 +289,7 @@ export class CompoundProductsService {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 
-  private async importCompoundRows(rows: Record<string, unknown>[]) {
+  private async importCompoundRows(rows: Record<string, unknown>[], tenantId: string) {
     let created = 0;
     let updated = 0;
     const errors: string[] = [];
@@ -316,11 +331,12 @@ export class CompoundProductsService {
         const venta = this.toNumber(row['Precio Unitario Venta']);
         if (venta === null || venta < 0) throw new BadRequestException('Precio Unitario Venta inválido.');
 
-        const categoryId = await this.resolveCategoryId(this.cellString(row, 'Categoria'));
-        const brandId = await this.resolveBrandId(this.cellString(row, 'Marca'));
+        const categoryId = await this.resolveCategoryId(this.cellString(row, 'Categoria'), tenantId);
+        const brandId = await this.resolveBrandId(this.cellString(row, 'Marca'), tenantId);
         const plataformaId = await this.resolvePlatformId(this.cellString(row, 'Plataforma'));
 
         const payload: Prisma.CompoundProductUncheckedCreateInput = {
+          tenantId,
           nombre,
           codigoInterno,
           nombreSecundario: this.cellString(row, 'Nombre secundario') || null,
@@ -340,7 +356,7 @@ export class CompoundProductsService {
         };
 
         const current = await this.prisma.compoundProduct.findFirst({
-          where: { deletedAt: null, codigoInterno },
+          where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
         if (current) {
@@ -359,7 +375,9 @@ export class CompoundProductsService {
     return { totalRows: rows.length, created, updated, errors };
   }
 
-  private async importCompoundDetailRows(rows: Record<string, unknown>[]) {
+  private async importCompoundDetailRows(rows: Record<string, unknown>[], actor?: JwtRequestUser) {
+    const actorScope = actor ? actorFromJwt(actor) : undefined;
+    const tenantFilter = actorScope ? tenantWhere(actorScope) : {};
     let created = 0;
     let updated = 0;
     const errors: string[] = [];
@@ -385,16 +403,25 @@ export class CompoundProductsService {
 
       try {
         const compound = await this.prisma.compoundProduct.findFirst({
-          where: { codigoInterno: codigoCompuesto, deletedAt: null },
-          select: { id: true },
+          where: { codigoInterno: codigoCompuesto, deletedAt: null, ...tenantFilter },
+          select: { id: true, tenantId: true },
         });
         if (!compound) throw new BadRequestException(`Compuesto no encontrado (${codigoCompuesto})`);
+        if (actorScope) {
+          assertTenantAccess(actorScope, compound.tenantId);
+        }
 
         const product = await this.prisma.product.findFirst({
-          where: { codigoInterno: codigoProducto, deletedAt: null },
-          select: { id: true, precioUnitarioVenta: true },
+          where: { codigoInterno: codigoProducto, deletedAt: null, ...tenantFilter },
+          select: { id: true, precioUnitarioVenta: true, tenantId: true },
         });
         if (!product) throw new BadRequestException(`Producto no encontrado (${codigoProducto})`);
+        if (actorScope) {
+          assertTenantAccess(actorScope, product.tenantId);
+        }
+        if (product.tenantId !== compound.tenantId) {
+          throw new BadRequestException('El producto del detalle debe pertenecer al mismo tenant del compuesto.');
+        }
 
         const precioUnitario = product.precioUnitarioVenta;
         const cantidadDec = new Prisma.Decimal(cantidad);
@@ -427,8 +454,13 @@ export class CompoundProductsService {
     return { totalRows: rows.length, created, updated, errors };
   }
 
-  private buildData(dto: CreateCompoundProductDto, totalRef: Prisma.Decimal): Prisma.CompoundProductUncheckedCreateInput {
+  private buildData(
+    dto: CreateCompoundProductDto,
+    totalRef: Prisma.Decimal,
+    tenantId: string,
+  ): Prisma.CompoundProductUncheckedCreateInput {
     return {
+      tenantId,
       nombre: dto.nombre.trim(),
       nombreSecundario: dto.nombreSecundario?.trim() || null,
       descripcion: dto.descripcion?.trim() || null,
@@ -464,20 +496,21 @@ export class CompoundProductsService {
     });
   }
 
-  private async getByIdOrThrow(id: string) {
+  private async getByIdOrThrow(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.compoundProduct.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
       select: selectCompoundDetail,
     });
     if (!row) throw new NotFoundException('Producto compuesto no encontrado');
 
+    const { tenantId: _tenantId, ...compound } = row;
     return {
-      ...row,
-      precioUnitarioVenta: row.precioUnitarioVenta.toString(),
-      precioUnitarioCompra: row.precioUnitarioCompra.toString(),
-      totalPrecioCompraReferencia: row.totalPrecioCompraReferencia.toString(),
-      marcaNombre: row.brand?.nombre ?? null,
-      items: row.items.map((it) => ({
+      ...compound,
+      precioUnitarioVenta: compound.precioUnitarioVenta.toString(),
+      precioUnitarioCompra: compound.precioUnitarioCompra.toString(),
+      totalPrecioCompraReferencia: compound.totalPrecioCompraReferencia.toString(),
+      marcaNombre: compound.brand?.nombre ?? null,
+      items: compound.items.map((it) => ({
         ...it,
         cantidad: it.cantidad.toString(),
         precioUnitario: it.precioUnitario.toString(),
@@ -490,12 +523,17 @@ export class CompoundProductsService {
     };
   }
 
-  private async normalizeItems(items: { productId: string; cantidad: number; precioUnitario?: number }[]) {
+  private async normalizeItems(
+    items: { productId: string; cantidad: number; precioUnitario?: number }[],
+    actor?: JwtRequestUser,
+  ) {
     if (!items.length) return [];
+    const actorScope = actor ? actorFromJwt(actor) : undefined;
+    const tenantFilter = actorScope ? tenantWhere(actorScope) : {};
     const ids = Array.from(new Set(items.map((x) => x.productId)));
     const products = await this.prisma.product.findMany({
-      where: { id: { in: ids }, deletedAt: null },
-      select: { id: true, precioUnitarioVenta: true },
+      where: { id: { in: ids }, deletedAt: null, ...tenantFilter },
+      select: { id: true, precioUnitarioVenta: true, tenantId: true },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
     const normalized: { productId: string; cantidad: Prisma.Decimal; precioUnitario: Prisma.Decimal; total: Prisma.Decimal }[] = [];
@@ -503,6 +541,9 @@ export class CompoundProductsService {
     for (const item of items) {
       const product = productById.get(item.productId);
       if (!product) throw new BadRequestException('Uno de los productos agregados no existe.');
+      if (actorScope) {
+        assertTenantAccess(actorScope, product.tenantId);
+      }
       const cantidad = new Prisma.Decimal(item.cantidad);
       if (cantidad.lte(0)) throw new BadRequestException('La cantidad del detalle debe ser mayor a 0.');
       const precioUnitario = new Prisma.Decimal(
@@ -597,27 +638,35 @@ export class CompoundProductsService {
     return fallback;
   }
 
-  private async resolveCategoryId(nombre: string): Promise<string | null> {
+  private async resolveCategoryId(nombre: string, tenantId: string): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.category.findFirst({
-      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: {
+        deletedAt: null,
+        tenantId,
+        nombre: { equals: clean, mode: 'insensitive' },
+      },
       select: { id: true },
     });
     if (existing) return existing.id;
-    const created = await this.prisma.category.create({ data: { nombre: clean }, select: { id: true } });
+    const created = await this.prisma.category.create({ data: { tenantId, nombre: clean }, select: { id: true } });
     return created.id;
   }
 
-  private async resolveBrandId(nombre: string): Promise<string | null> {
+  private async resolveBrandId(nombre: string, tenantId: string): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.brand.findFirst({
-      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: {
+        deletedAt: null,
+        tenantId,
+        nombre: { equals: clean, mode: 'insensitive' },
+      },
       select: { id: true },
     });
     if (existing) return existing.id;
-    const created = await this.prisma.brand.create({ data: { nombre: clean }, select: { id: true } });
+    const created = await this.prisma.brand.create({ data: { tenantId, nombre: clean }, select: { id: true } });
     return created.id;
   }
 

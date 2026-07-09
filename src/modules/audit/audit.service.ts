@@ -9,6 +9,8 @@ import { buildPaginatedResult, paginationArgs } from '../../common/dto/paginatio
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogExportQueryDto, AuditLogQueryDto } from './dto/audit-log.dto';
 import * as XLSX from 'xlsx';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
+import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
 
 type AuditLogRow = {
   id: string;
@@ -26,8 +28,8 @@ type AuditLogRow = {
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: AuditLogQueryDto) {
-    const where = this.buildWhere(query);
+  async findAll(query: AuditLogQueryDto, actor: JwtRequestUser) {
+    const where = this.buildWhere(query, actor);
 
     if (query.cursor) {
       return this.findAllCursor(where, query);
@@ -89,8 +91,12 @@ export class AuditService {
     };
   }
 
-  private buildWhere(query: AuditLogExportQueryDto | AuditLogQueryDto): Prisma.AuditLogWhereInput {
+  private buildWhere(
+    query: AuditLogExportQueryDto | AuditLogQueryDto,
+    actor: JwtRequestUser,
+  ): Prisma.AuditLogWhereInput {
     return {
+      ...tenantWhere(actorFromJwt(actor)),
       ...(query.entity ? { entity: query.entity } : {}),
       ...('action' in query && query.action ? { action: query.action } : {}),
       ...('userId' in query && query.userId ? { userId: query.userId } : {}),
@@ -119,10 +125,10 @@ export class AuditService {
     };
   }
 
-  async buildExportBuffer(query: AuditLogExportQueryDto) {
+  async buildExportBuffer(query: AuditLogExportQueryDto, actor: JwtRequestUser) {
     const limit = query.limit ?? 5000;
     const rows = await this.prisma.auditLog.findMany({
-      where: this.buildWhere(query),
+      where: this.buildWhere(query, actor),
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });

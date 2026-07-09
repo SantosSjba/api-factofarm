@@ -1,6 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerDocumentType, Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LpdpService } from '../compliance/services/lpdp.service';
 import { CreateCustomerZoneDto } from './dto/create-customer-zone.dto';
@@ -79,7 +81,7 @@ export class CustomersService {
     private readonly lpdp: LpdpService,
   ) {}
 
-  async list(query: CustomerListQueryDto) {
+  async list(query: CustomerListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -101,6 +103,7 @@ export class CustomersService {
 
     const where: Prisma.CustomerWhereInput = {
       deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(query.customerTypeId ? { customerTypeId: query.customerTypeId } : {}),
       ...(query.zoneId ? { zoneId: query.zoneId } : {}),
       ...(estado === 'habilitado'
@@ -132,39 +135,47 @@ export class CustomersService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.customer.findFirst({
       where: { id, deletedAt: null },
-      select: selectCustomer,
+      select: { ...selectCustomer, tenantId: true },
     });
     if (!row) throw new NotFoundException('Cliente no encontrado');
-    return row;
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), row.tenantId);
+    }
+    const { tenantId: _tenantId, ...customer } = row;
+    return customer;
   }
 
-  async create(dto: CreateCustomerDto, actorId?: string) {
+  async create(dto: CreateCustomerDto, actor?: JwtRequestUser) {
+    const tenantId = actor ? requireTenantId(actorFromJwt(actor)) : undefined;
+    if (!tenantId) {
+      throw new ForbiddenException('Debe operar dentro de un cliente');
+    }
     try {
       const created = await this.prisma.customer.create({
-        data: this.toCreateInput(dto),
+        data: { ...this.toCreateInput(dto), tenantId },
         select: { id: true },
       });
       if (dto.addresses?.length) {
         await this.replaceAddresses(created.id, dto.addresses);
       }
-      await this.lpdp.ensureCustomerConsentOnCreate(dto, created.id, actorId);
+      await this.lpdp.ensureCustomerConsentOnCreate(dto, created.id, actor?.sub);
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'Customer',
         entityId: created.id,
       });
-      return this.findOne(created.id);
+      return this.findOne(created.id, actor);
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async update(id: string, dto: UpdateCustomerDto, actorId?: string) {
-    await this.ensureCustomer(id);
+  async update(id: string, dto: UpdateCustomerDto, actor?: JwtRequestUser) {
+    await this.ensureCustomer(id, actor);
     const data: Prisma.CustomerUncheckedUpdateInput = this.toUpdateInput(dto);
     try {
       await this.prisma.customer.update({ where: { id }, data });
@@ -172,41 +183,41 @@ export class CustomersService {
         await this.replaceAddresses(id, dto.addresses);
       }
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'Customer',
         entityId: id,
         diff: dto,
       });
-      return this.findOne(id);
+      return this.findOne(id, actor);
     } catch (err) {
       this.handleKnownError(err);
     }
   }
 
-  async remove(id: string, actorId?: string) {
-    await this.ensureCustomer(id);
+  async remove(id: string, actor?: JwtRequestUser) {
+    await this.ensureCustomer(id, actor);
     await this.prisma.customer.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false, habilitado: false },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'Customer',
       entityId: id,
     });
   }
 
-  async updateStatus(id: string, dto: UpdateCustomerStatusDto, actorId?: string) {
-    await this.ensureCustomer(id);
+  async updateStatus(id: string, dto: UpdateCustomerStatusDto, actor?: JwtRequestUser) {
+    await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
       data: { habilitado: dto.habilitado },
       select: selectCustomer,
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_STATUS',
       entity: 'Customer',
       entityId: id,
@@ -215,15 +226,15 @@ export class CustomersService {
     return updated;
   }
 
-  async updateBarcode(id: string, dto: UpdateCustomerBarcodeDto, actorId?: string) {
-    await this.ensureCustomer(id);
+  async updateBarcode(id: string, dto: UpdateCustomerBarcodeDto, actor?: JwtRequestUser) {
+    await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
       data: { codigoBarra: dto.codigoBarra.trim() || null },
       select: selectCustomer,
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_BARCODE',
       entity: 'Customer',
       entityId: id,
@@ -232,8 +243,8 @@ export class CustomersService {
     return updated;
   }
 
-  async updateTags(id: string, dto: UpdateCustomerTagsDto, actorId?: string) {
-    await this.ensureCustomer(id);
+  async updateTags(id: string, dto: UpdateCustomerTagsDto, actor?: JwtRequestUser) {
+    await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
       data: {
@@ -242,7 +253,7 @@ export class CustomersService {
       select: selectCustomer,
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_TAGS',
       entity: 'Customer',
       entityId: id,
@@ -251,22 +262,24 @@ export class CustomersService {
     return updated;
   }
 
-  listZones() {
+  listZones(actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     return this.prisma.customerZone.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...tenantFilter },
       orderBy: { nombre: 'asc' },
       select: { id: true, nombre: true },
     });
   }
 
-  async createZone(dto: CreateCustomerZoneDto, actorId?: string) {
+  async createZone(dto: CreateCustomerZoneDto, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     try {
       const created = await this.prisma.customerZone.create({
-        data: { nombre: dto.nombre.trim().toUpperCase() },
+        data: { nombre: dto.nombre.trim().toUpperCase(), tenantId },
         select: { id: true, nombre: true },
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'CustomerZone',
         entityId: created.id,
@@ -277,12 +290,15 @@ export class CustomersService {
     }
   }
 
-  async updateZone(id: string, dto: UpdateCustomerZoneDto, actorId?: string) {
+  async updateZone(id: string, dto: UpdateCustomerZoneDto, actor?: JwtRequestUser) {
     const zone = await this.prisma.customerZone.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!zone) throw new NotFoundException('Zona no encontrada');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), zone.tenantId);
+    }
     try {
       const updated = await this.prisma.customerZone.update({
         where: { id },
@@ -290,7 +306,7 @@ export class CustomersService {
         select: { id: true, nombre: true },
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'CustomerZone',
         entityId: id,
@@ -302,15 +318,18 @@ export class CustomersService {
     }
   }
 
-  async removeZone(id: string, actorId?: string) {
+  async removeZone(id: string, actor?: JwtRequestUser) {
     const zone = await this.prisma.customerZone.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!zone) throw new NotFoundException('Zona no encontrada');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), zone.tenantId);
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.customer.updateMany({
-        where: { zoneId: id, deletedAt: null },
+        where: { zoneId: id, deletedAt: null, tenantId: zone.tenantId },
         data: { zoneId: null },
       });
       await tx.customerZone.update({
@@ -319,16 +338,17 @@ export class CustomersService {
       });
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'CustomerZone',
       entityId: id,
     });
   }
 
-  async listSellers() {
+  async listSellers(actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     return this.prisma.user.findMany({
-      where: { deletedAt: null, role: 'VENDEDOR' },
+      where: { deletedAt: null, role: 'VENDEDOR', ...tenantFilter },
       orderBy: { nombre: 'asc' },
       select: { id: true, nombre: true },
     });
@@ -348,17 +368,21 @@ export class CustomersService {
     }));
   }
 
-  async previewImportFromExcel(file: Express.Multer.File) {
-    return this.importFromExcel(file, undefined, { dryRun: true });
+  async previewImportFromExcel(file: Express.Multer.File, actor?: JwtRequestUser) {
+    return this.importFromExcel(file, actor, { dryRun: true });
   }
 
   async importFromExcel(
     file: Express.Multer.File,
-    actorId?: string,
+    actor?: JwtRequestUser,
     options?: { dryRun?: boolean },
   ) {
     if (!file?.buffer?.length) {
       throw new NotFoundException('Archivo no válido para importar');
+    }
+    const tenantId = actor ? requireTenantId(actorFromJwt(actor)) : undefined;
+    if (!tenantId) {
+      throw new ForbiddenException('Debe operar dentro de un cliente');
     }
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
@@ -418,6 +442,7 @@ export class CustomersService {
       try {
         const existing = await this.prisma.customer.findFirst({
           where: {
+            tenantId,
             tipoDocumento,
             numeroDocumento,
           },
@@ -474,6 +499,7 @@ export class CustomersService {
         } else {
           const createdCustomer = await this.prisma.customer.create({
             data: {
+              tenantId,
               nombre: nombre.toUpperCase(),
               nombreComercial: nombreComercial || null,
               tipoDocumento,
@@ -516,7 +542,7 @@ export class CustomersService {
     };
     if (!options?.dryRun) {
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'IMPORT',
         entity: 'Customer',
         diff: result,
@@ -585,8 +611,11 @@ export class CustomersService {
     return clean;
   }
 
-  async buildExportBuffer(dto: ExportCustomersDto) {
-    const where: Prisma.CustomerWhereInput = { deletedAt: null };
+  async buildExportBuffer(dto: ExportCustomersDto, actor?: JwtRequestUser) {
+    const where: Prisma.CustomerWhereInput = {
+      deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+    };
     if (dto.sellerId) where.vendedorAsignadoId = dto.sellerId;
 
     const period = dto.period ?? 'all';
@@ -651,7 +680,7 @@ export class CustomersService {
     return { start, end };
   }
 
-  private toCreateInput(dto: CreateCustomerDto): Prisma.CustomerUncheckedCreateInput {
+  private toCreateInput(dto: CreateCustomerDto): Omit<Prisma.CustomerUncheckedCreateInput, 'tenantId'> {
     return {
       nombre: dto.nombre.trim().toUpperCase(),
       nombreComercial: this.norm(dto.nombreComercial),
@@ -735,12 +764,15 @@ export class CustomersService {
     });
   }
 
-  private async ensureCustomer(id: string): Promise<void> {
+  private async ensureCustomer(id: string, actor?: JwtRequestUser): Promise<void> {
     const row = await this.prisma.customer.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!row) throw new NotFoundException('Cliente no encontrado');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), row.tenantId);
+    }
   }
 
   private norm(v?: string | null): string | undefined {

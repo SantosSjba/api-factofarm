@@ -45,6 +45,17 @@ model Tenant {
   establishments Establishment[]
   users          User[]
   leads          TenantLead[]
+  products       Product[]
+  customers      Customer[]
+  suppliers      Supplier[]
+  services       Service[]
+  compoundProducts CompoundProduct[]
+  categories     Category[]
+  brands         Brand[]
+  customerZones  CustomerZone[]
+  customerTypes  CustomerType[]
+  auditLogs      AuditLog[]
+  archivos       Archivo[]
 
   @@index([status])
   @@index([deletedAt])

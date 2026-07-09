@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   CloseCashSessionDto,
@@ -16,73 +17,76 @@ import { CashRegistersService } from './cash-registers.service';
 @ApiBearerAuth()
 @Controller('cash-registers')
 export class CashRegistersController {
-  constructor(private readonly service: CashRegistersService) {}
+  constructor(
+    private readonly service: CashRegistersService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get()
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Listar cajas del establecimiento' })
-  list(@CurrentUser() actor: JwtRequestUser) {
-    return this.service.listRegisters(actor.establecimientoId);
+  async list(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.listRegisters(await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('cash.open')
   @ApiOperation({ summary: 'Crear caja POS' })
-  create(@Body() dto: CreateCashRegisterDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createRegister(actor.establecimientoId, dto, actor.sub);
+  async create(@Body() dto: CreateCashRegisterDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.createRegister(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Patch(':id/hardware')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Configurar hardware POS de la caja (impresora, escáner, pantalla)' })
-  updateHardware(
+  async updateHardware(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCashRegisterHardwareDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateHardware(id, actor.establecimientoId, dto, actor.sub);
+    return this.service.updateHardware(id, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get('sessions/active')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos', 'nav.punto_venta')
   @ApiOperation({ summary: 'Sesión de caja activa del usuario' })
-  activeSession(@CurrentUser() actor: JwtRequestUser) {
-    return this.service.getActiveSession(actor.establecimientoId, actor.sub);
+  async activeSession(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.getActiveSession(await this.scope.resolve(actor), actor.sub);
   }
 
   @Post('sessions/open')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Apertura de caja' })
-  open(@Body() dto: OpenCashSessionDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.openSession(actor.establecimientoId, actor.sub, dto);
+  async open(@Body() dto: OpenCashSessionDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.openSession(await this.scope.resolve(actor), actor.sub, dto);
   }
 
   @Post('sessions/:id/close')
   @RequirePermissions('cash.close', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Cierre de caja con arqueo' })
-  close(
+  async close(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CloseCashSessionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.closeSession(id, actor.establecimientoId, actor.sub, dto);
+    return this.service.closeSession(id, await this.scope.resolve(actor), actor.sub, dto);
   }
 
   @Get('sessions/:id/summary')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Resumen de sesión (movimientos y ventas)' })
-  summary(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.sessionSummary(id, actor.establecimientoId, actor.sub);
+  async summary(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.sessionSummary(id, await this.scope.resolve(actor), actor.sub);
   }
 
   @Post('sessions/:id/movements')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Ingreso/egreso manual de caja' })
-  addMovement(
+  async addMovement(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateCashMovementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.addMovement(id, actor.establecimientoId, actor.sub, dto);
+    return this.service.addMovement(id, await this.scope.resolve(actor), actor.sub, dto);
   }
 }

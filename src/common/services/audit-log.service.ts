@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export type AuditLogInput = {
   userId?: string;
+  tenantId?: string | null;
   action: string;
   entity: string;
   entityId?: string;
@@ -21,9 +22,18 @@ export class AuditLogService {
 
   async log(input: AuditLogInput): Promise<void> {
     const ctx = this.requestContext.get();
+    let tenantId = input.tenantId ?? null;
+    if (tenantId == null && input.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { tenantId: true },
+      });
+      tenantId = user?.tenantId ?? null;
+    }
     await this.prisma.auditLog.create({
       data: {
         userId: input.userId ?? null,
+        tenantId,
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? null,

@@ -1,11 +1,15 @@
 model CustomerType {
   id          String   @id @default(uuid())
-  descripcion String   @unique
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  descripcion String
   deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   customers Customer[]
 
+  @@unique([tenantId, descripcion])
+  @@index([tenantId])
   @@index([deletedAt])
 }

@@ -71,18 +71,20 @@ export class ProductsController {
   @Get('catalogs/warehouses')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Almacenes por establecimiento' })
-  catalogWarehouses(@CurrentUser() actor: JwtRequestUser) {
-    return this.productsService.listWarehouses(this.scope.resolve(actor));
+  async catalogWarehouses(@CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.listWarehouses(await this.scope.resolve(actor));
   }
 
   @Get('catalogs/product-locations')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Ubicaciones de producto por establecimiento' })
-  catalogLocations(
+  async catalogLocations(
     @CurrentUser() actor: JwtRequestUser,
     @Query('establishmentId') establishmentId?: string,
   ) {
-    return this.productsService.listProductLocations(this.scope.resolve(actor, establishmentId));
+    return this.productsService.listProductLocations(
+      await this.scope.resolve(actor, establishmentId),
+    );
   }
 
   @Post('catalogs/product-locations')
@@ -111,8 +113,8 @@ export class ProductsController {
   @Get(':id/equivalents')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Productos bioequivalentes / gen?ricos relacionados' })
-  listEquivalents(@Param('id') id: string) {
-    return this.productsService.listEquivalents(id);
+  listEquivalents(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.listEquivalents(id, actor);
   }
 
   @Post(':id/equivalents')
@@ -123,14 +125,14 @@ export class ProductsController {
     @Body() dto: SetProductEquivalentsDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.setEquivalents(id, dto.equivalentProductIds, actor.sub);
+    return this.productsService.setEquivalents(id, dto.equivalentProductIds, actor);
   }
 
   @Get(':id/suppliers')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Proveedores vinculados al producto' })
-  listSuppliers(@Param('id') id: string) {
-    return this.productsService.listSupplierLinks(id);
+  listSuppliers(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.listSupplierLinks(id, actor);
   }
 
   @Post(':id/suppliers')
@@ -141,7 +143,7 @@ export class ProductsController {
     @Body() dto: UpsertProductSupplierDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.upsertSupplierLink(id, dto, actor.sub);
+    return this.productsService.upsertSupplierLink(id, dto, actor);
   }
 
   @Delete(':id/suppliers/:supplierId')
@@ -152,57 +154,69 @@ export class ProductsController {
     @Param('supplierId') supplierId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.removeSupplierLink(id, supplierId, actor.sub);
+    return this.productsService.removeSupplierLink(id, supplierId, actor);
   }
 
   @Get(':id/history/stock')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Historial de stock por ubicaci?n del producto' })
-  historyStock(@Param('id') id: string) {
-    return this.productsService.historyStock(id);
+  historyStock(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.historyStock(id, actor);
   }
 
   @Get(':id/history/prices')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Historial de cambios de precio del producto' })
-  historyPrices(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
-    return this.productsService.listPriceHistory(id, query);
+  historyPrices(
+    @Param('id') id: string,
+    @Query() query: ProductPriceHistoryQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.listPriceHistory(id, query, actor);
   }
 
   @Get(':id/history/sales')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Últimas ventas del producto' })
-  historySales(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
-    return this.productsService.historySales(id, query);
+  historySales(
+    @Param('id') id: string,
+    @Query() query: ProductPriceHistoryQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.historySales(id, query, actor);
   }
 
   @Get(':id/history/purchases')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Últimas compras del producto' })
-  historyPurchases(@Param('id') id: string, @Query() query: ProductPriceHistoryQueryDto) {
-    return this.productsService.historyPurchases(id, query);
+  historyPurchases(
+    @Param('id') id: string,
+    @Query() query: ProductPriceHistoryQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.historyPurchases(id, query, actor);
   }
 
   @Get(':id/stock')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Stock de producto y lista de precios creados' })
-  stock(@Param('id') id: string) {
-    return this.productsService.stockSummary(id);
+  stock(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.stockSummary(id, actor);
   }
 
   @Get(':id')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Detalle completo del producto' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.findOne(id, actor);
   }
 
   @Get()
   @RequirePermissions('products.read', 'nav.productos')
   @ApiOperation({ summary: 'Listar productos con paginaci?n' })
-  list(@Query() query: ProductListQueryDto) {
-    return this.productsService.list(query);
+  list(@Query() query: ProductListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.list(query, actor);
   }
 
   @Post()
@@ -210,7 +224,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Crear producto' })
   @ApiBody({ type: CreateProductDto })
   create(@Body() dto: CreateProductDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.productsService.create(dto, actor.sub);
+    return this.productsService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -222,21 +236,21 @@ export class ProductsController {
     @Body() dto: CreateProductDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.update(id, dto, actor.sub);
+    return this.productsService.update(id, dto, actor);
   }
 
   @Delete(':id')
   @RequirePermissions('products.delete')
   @ApiOperation({ summary: 'Eliminar (l?gico) producto' })
   remove(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.productsService.remove(id, actor.sub);
+    return this.productsService.remove(id, actor);
   }
 
   @Post(':id/duplicate')
   @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Duplicar producto' })
   duplicate(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.productsService.duplicate(id, actor.sub);
+    return this.productsService.duplicate(id, actor);
   }
 
   @Patch(':id/status')
@@ -247,7 +261,7 @@ export class ProductsController {
     @Body() dto: UpdateProductStatusDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.updateStatus(id, dto, actor.sub);
+    return this.productsService.updateStatus(id, dto, actor);
   }
 
   @Patch(':id/barcode')
@@ -258,14 +272,17 @@ export class ProductsController {
     @Body() dto: UpdateProductBarcodeDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.updateBarcode(id, dto, actor.sub);
+    return this.productsService.updateBarcode(id, dto, actor);
   }
 
   @Post('export')
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Exportar cat?logo de productos a Excel' })
-  async exportProducts(@Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
-    const buffer = await this.productsService.buildExportBuffer();
+  async exportProducts(
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() actor: JwtRequestUser,
+  ): Promise<StreamableFile> {
+    const buffer = await this.productsService.buildExportBuffer(actor);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('productos-export.xlsx')}`,
@@ -297,8 +314,9 @@ export class ProductsController {
   previewImportProducts(
     @Body() dto: ImportProductsDto,
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.previewImportFromExcel(dto.mode, file);
+    return this.productsService.previewImportFromExcel(dto.mode, file, actor);
   }
 
   @Post('import')
@@ -326,7 +344,7 @@ export class ProductsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.importFromExcel(dto.mode, file, actor.sub);
+    return this.productsService.importFromExcel(dto.mode, file, actor);
   }
 
   @Get('import/template')

@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { ArcoRequestStatus, ArcoRequestType, TaxWithholdingKind } from '../../generated/prisma/client';
 import { LegalService } from './services/legal.service';
@@ -71,6 +72,7 @@ export class ComplianceController {
     private readonly ple: PleService,
     private readonly taxWithholding: TaxWithholdingService,
     private readonly sunatBooks: SunatBooksService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   @Get('lpdp/treatment-matrix')
@@ -159,7 +161,7 @@ export class ComplianceController {
   @Get('pharmacist-licenses/dispensation-signature')
   @RequirePermissions('pharmaceutical.write', 'sales.write', 'nav.punto_venta')
   @ApiOperation({ summary: 'Generar firma digital para dispensación controlados' })
-  dispensationSignature(
+  async dispensationSignature(
     @Query('licenseId') licenseId: string,
     @Query('approverUserId') approverUserId: string,
     @CurrentUser() actor: JwtRequestUser,
@@ -168,7 +170,7 @@ export class ComplianceController {
       signature: this.pharmacist.buildDispensationSignature(
         licenseId,
         approverUserId,
-        actor.establecimientoId,
+        await this.scope.resolve(actor),
       ),
     };
   }
@@ -215,7 +217,7 @@ export class ComplianceController {
     @Query('period') period: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.ple.buildTxt(actor.establecimientoId, period, book);
+    return this.ple.buildTxt(await this.scope.resolve(actor), period, book);
   }
 
   @Get('accountant-summary')
@@ -227,8 +229,8 @@ export class ComplianceController {
     'nav.sire_compras',
   )
   @ApiOperation({ summary: 'Resumen para contador externo' })
-  accountantSummary(@Query('period') period: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.ple.accountantSummary(actor.establecimientoId, period);
+  async accountantSummary(@Query('period') period: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.ple.accountantSummary(await this.scope.resolve(actor), period);
   }
 
   @Get('sunat-rates')
@@ -241,12 +243,12 @@ export class ComplianceController {
   @Get('tax-withholding/:kind')
   @RequirePermissions('compliance.read', 'billing.read', 'nav.retenciones', 'nav.percepciones')
   @ApiOperation({ summary: 'Listar registros de retención, percepción o detracción' })
-  listTaxWithholding(
+  async listTaxWithholding(
     @Param('kind') kind: TaxWithholdingKind,
     @CurrentUser() actor: JwtRequestUser,
     @Query('period') period?: string,
   ) {
-    return this.taxWithholding.listRecords(actor.establecimientoId, kind, period);
+    return this.taxWithholding.listRecords(await this.scope.resolve(actor), kind, period);
   }
 
   @Post('tax-withholding/calculate')
@@ -259,22 +261,22 @@ export class ComplianceController {
   @Post('tax-withholding/retenciones')
   @RequirePermissions('compliance.write', 'billing.write', 'nav.retenciones')
   @ApiOperation({ summary: 'Registrar y emitir comprobante de retención' })
-  createRetention(@Body() dto: CreateTaxWithholdingDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.taxWithholding.createRetention(actor.establecimientoId, dto, actor.sub);
+  async createRetention(@Body() dto: CreateTaxWithholdingDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.taxWithholding.createRetention(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Post('tax-withholding/percepciones')
   @RequirePermissions('compliance.write', 'billing.write', 'nav.percepciones')
   @ApiOperation({ summary: 'Registrar y emitir comprobante de percepción' })
-  createPerception(@Body() dto: CreateTaxWithholdingDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.taxWithholding.createPerception(actor.establecimientoId, dto, actor.sub);
+  async createPerception(@Body() dto: CreateTaxWithholdingDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.taxWithholding.createPerception(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Post('tax-withholding/detracciones/sync')
   @RequirePermissions('compliance.write', 'billing.write', 'nav.retenciones')
   @ApiOperation({ summary: 'Sincronizar detracciones desde facturas electrónicas' })
-  syncDetracciones(@CurrentUser() actor: JwtRequestUser, @Query('period') period?: string) {
-    return this.taxWithholding.syncDetracciones(actor.establecimientoId, period, actor.sub);
+  async syncDetracciones(@CurrentUser() actor: JwtRequestUser, @Query('period') period?: string) {
+    return this.taxWithholding.syncDetracciones(await this.scope.resolve(actor), period, actor.sub);
   }
 
   @Get('sunat-books/sales-register')
@@ -286,7 +288,7 @@ export class ComplianceController {
     @Res() res: Response,
   ) {
     const { buffer, filename } = await this.sunatBooks.buildSalesRegisterBuffer(
-      actor.establecimientoId,
+      await this.scope.resolve(actor),
       period,
     );
     res.setHeader(
@@ -309,7 +311,7 @@ export class ComplianceController {
     @Res() res: Response,
   ) {
     const { buffer, filename } = await this.sunatBooks.buildInventoryRegisterBuffer(
-      actor.establecimientoId,
+      await this.scope.resolve(actor),
       period,
     );
     res.setHeader(

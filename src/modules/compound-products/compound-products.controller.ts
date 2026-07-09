@@ -13,15 +13,18 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CompoundProductsService } from './compound-products.service';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
 import { CreateCompoundProductDto } from './dto/create-compound-product.dto';
 import { ImportCompoundProductsDto } from './dto/import-compound-products.dto';
 
 @ApiTags('CompoundProducts')
+@ApiBearerAuth()
 @Controller('compound-products')
 export class CompoundProductsController {
   constructor(private readonly service: CompoundProductsService) {}
@@ -52,32 +55,32 @@ export class CompoundProductsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar productos compuestos con paginación' })
-  list(@Query() query: CompoundProductListQueryDto) {
-    return this.service.list(query);
+  list(@Query() query: CompoundProductListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.list(query, actor);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalle del producto compuesto' })
-  getById(@Param('id') id: string) {
-    return this.service.getById(id);
+  getById(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.getById(id, actor);
   }
 
   @Post()
   @ApiOperation({ summary: 'Crear producto compuesto' })
-  create(@Body() dto: CreateCompoundProductDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateCompoundProductDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.create(dto, actor);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Editar producto compuesto' })
-  update(@Param('id') id: string, @Body() dto: CreateCompoundProductDto) {
-    return this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: CreateCompoundProductDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.update(id, dto, actor);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar producto compuesto (soft delete)' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.remove(id, actor);
   }
 
   @Post('import')
@@ -99,8 +102,12 @@ export class CompoundProductsController {
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
-  importCompoundProducts(@Body() dto: ImportCompoundProductsDto, @UploadedFile() file: Express.Multer.File) {
-    return this.service.importFromExcel(dto.mode, file);
+  importCompoundProducts(
+    @Body() dto: ImportCompoundProductsDto,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.importFromExcel(dto.mode, file, actor);
   }
 
   @Get('import/template')

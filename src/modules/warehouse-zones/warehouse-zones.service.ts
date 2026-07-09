@@ -1,7 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateWarehouseZoneDto } from './dto/create-warehouse-zone.dto';
 import { UpdateWarehouseZoneDto } from './dto/update-warehouse-zone.dto';
 
@@ -10,9 +12,11 @@ export class WarehouseZonesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
-  findByWarehouse(warehouseId: string) {
+  async findByWarehouse(warehouseId: string, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, warehouseId);
     return this.prisma.warehouseZone.findMany({
       where: { warehouseId, deletedAt: null },
       orderBy: [{ tipo: 'asc' }, { nombre: 'asc' }],
@@ -26,7 +30,8 @@ export class WarehouseZonesService {
     });
   }
 
-  async create(dto: CreateWarehouseZoneDto, actorId?: string) {
+  async create(dto: CreateWarehouseZoneDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
       select: { id: true },
@@ -43,7 +48,7 @@ export class WarehouseZonesService {
         select: { id: true, nombre: true, tipo: true, activo: true },
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor.sub,
         action: 'CREATE',
         entity: 'WarehouseZone',
         entityId: created.id,
@@ -57,12 +62,13 @@ export class WarehouseZonesService {
     }
   }
 
-  async update(id: string, dto: UpdateWarehouseZoneDto, actorId?: string) {
+  async update(id: string, dto: UpdateWarehouseZoneDto, actor: JwtRequestUser) {
     const current = await this.prisma.warehouseZone.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, warehouseId: true },
     });
     if (!current) throw new NotFoundException('Zona de almacén no encontrada');
+    await this.scope.assertWarehouseInTenant(actor, current.warehouseId);
 
     const updated = await this.prisma.warehouseZone.update({
       where: { id },
@@ -75,7 +81,7 @@ export class WarehouseZonesService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'UPDATE',
       entity: 'WarehouseZone',
       entityId: id,
@@ -84,16 +90,17 @@ export class WarehouseZonesService {
     return updated;
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor: JwtRequestUser) {
     const current = await this.prisma.warehouseZone.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, warehouseId: true },
     });
     if (!current) throw new NotFoundException('Zona de almacén no encontrada');
+    await this.scope.assertWarehouseInTenant(actor, current.warehouseId);
 
     await this.prisma.warehouseZone.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'DELETE',
       entity: 'WarehouseZone',
       entityId: id,

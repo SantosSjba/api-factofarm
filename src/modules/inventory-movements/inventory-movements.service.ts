@@ -55,7 +55,7 @@ export class InventoryMovementsService {
   ) {}
 
   async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor, query.establishmentId);
+    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -196,7 +196,7 @@ export class InventoryMovementsService {
   }
 
   async listLots(query: InventoryLotListQueryDto, actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor, query.establishmentId);
+    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -290,7 +290,7 @@ export class InventoryMovementsService {
   }
 
   async kardex(query: KardexQueryDto, actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor);
+    const establishmentId = await this.scope.resolve(actor);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -364,7 +364,7 @@ export class InventoryMovementsService {
   }
 
   async alerts(actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor);
+    const establishmentId = await this.scope.resolve(actor);
     const now = new Date();
     const in30 = new Date(now);
     in30.setDate(in30.getDate() + 30);
@@ -505,7 +505,7 @@ export class InventoryMovementsService {
   }
 
   async listPendingAdjustments(actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor);
+    const establishmentId = await this.scope.resolve(actor);
     return this.prisma.inventoryPendingAdjustment.findMany({
       where: {
         estado: InventoryPendingAdjustmentStatus.PENDIENTE,
@@ -586,7 +586,7 @@ export class InventoryMovementsService {
   }
 
   async valuationReport(query: InventoryValuationReportQueryDto, actor: JwtRequestUser) {
-    const establishmentId = this.scope.resolve(actor, query.establishmentId);
+    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,

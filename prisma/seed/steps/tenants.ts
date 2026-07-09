@@ -42,4 +42,40 @@ export async function backfillTenantAssignments(
     where: { role: { not: 'SUPER_ADMIN' } },
     data: { tenantId: demoTenantId },
   });
+
+  await prisma.product.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.customer.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.supplier.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.service.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.compoundProduct.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.category.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.brand.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.customerZone.updateMany({
+    data: { tenantId: demoTenantId },
+  });
+
+  await prisma.customerType.updateMany({
+    data: { tenantId: demoTenantId },
+  });
 }

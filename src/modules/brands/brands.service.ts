@@ -6,6 +6,8 @@ import {
 } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
@@ -24,8 +26,8 @@ export class BrandsService {
     private readonly audit: AuditLogService,
   ) {}
 
-  async findAll(filters?: MaestroListQueryDto) {
-    const where = this.buildWhere(filters);
+  async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
+    const where = this.buildWhere(filters, actor ? tenantWhere(actorFromJwt(actor)) : {});
 
     if (filters?.page == null) {
       return this.prisma.brand.findMany({
@@ -54,15 +56,16 @@ export class BrandsService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateBrandDto, actorId?: string) {
+  async create(dto: CreateBrandDto, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     const nombre = this.normalizeNombre(dto.nombre);
     try {
       const created = await this.prisma.brand.create({
-        data: { nombre },
+        data: { nombre, tenantId },
         select: selectBrand,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'Brand',
         entityId: created.id,
@@ -73,13 +76,16 @@ export class BrandsService {
     }
   }
 
-  async update(id: string, dto: UpdateBrandDto, actorId?: string) {
+  async update(id: string, dto: UpdateBrandDto, actor?: JwtRequestUser) {
     const current = await this.prisma.brand.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Marca no encontrada');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     const data: Prisma.BrandUpdateInput = {};
@@ -94,7 +100,7 @@ export class BrandsService {
         select: selectBrand,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'Brand',
         entityId: id,
@@ -106,13 +112,16 @@ export class BrandsService {
     }
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
     const current = await this.prisma.brand.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Marca no encontrada');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     await this.prisma.brand.update({
@@ -120,14 +129,17 @@ export class BrandsService {
       data: { deletedAt: new Date() },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'Brand',
       entityId: id,
     });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.BrandWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+    tenantFilter: Prisma.BrandWhereInput = {},
+  ): Prisma.BrandWhereInput {
     const search = filters?.search?.trim();
     const field = filters?.field?.trim().toLowerCase();
 
@@ -137,6 +149,7 @@ export class BrandsService {
 
     return {
       deletedAt: null,
+      ...tenantFilter,
       ...(search
         ? {
             OR:

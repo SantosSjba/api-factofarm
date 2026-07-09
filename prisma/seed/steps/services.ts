@@ -2,7 +2,7 @@ import { Prisma } from '../../../src/generated/prisma/client';
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { servicesData } from '../data/services';
 
-export async function seedServices(prisma: PrismaClient): Promise<void> {
+export async function seedServices(prisma: PrismaClient, demoTenantId: string): Promise<void> {
   const [unit, currency, saleTax] = await Promise.all([
     prisma.unitOfMeasure.findFirst({
       where: { codigo: 'ZZ', deletedAt: null },
@@ -24,11 +24,12 @@ export async function seedServices(prisma: PrismaClient): Promise<void> {
 
   for (const row of servicesData) {
     const existing = await prisma.service.findFirst({
-      where: { codigoInterno: row.codigoInterno, deletedAt: null },
+      where: { tenantId: demoTenantId, codigoInterno: row.codigoInterno, deletedAt: null },
       select: { id: true },
     });
 
     const data: Prisma.ServiceUncheckedCreateInput = {
+      tenantId: demoTenantId,
       nombre: row.nombre.trim(),
       descripcion: row.descripcion?.trim() || null,
       codigoInterno: row.codigoInterno.trim(),

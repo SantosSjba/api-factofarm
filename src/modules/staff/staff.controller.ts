@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   AttendanceCheckInDto,
@@ -27,85 +28,94 @@ import { StaffService } from './staff.service';
 @ApiBearerAuth()
 @Controller('staff')
 export class StaffController {
-  constructor(private readonly service: StaffService) {}
+  constructor(
+    private readonly service: StaffService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get('users/:userId/work-schedule')
   @RequirePermissions('staff.read', 'nav.gestion_personal')
-  getSchedule(@Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.getWorkSchedule(userId, actor.establecimientoId);
+  async getSchedule(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.getWorkSchedule(userId, await this.scope.resolve(actor));
   }
 
   @Post('users/:userId/work-schedule')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  upsertSchedule(
+  async upsertSchedule(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: UpsertWorkScheduleDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertWorkSchedule(userId, actor.establecimientoId, dto, actor.sub);
+    return this.service.upsertWorkSchedule(userId, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Post('users/:userId/attendance/check-in')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  checkIn(
+  async checkIn(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: AttendanceCheckInDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.checkIn(userId, actor.establecimientoId, dto.notas);
+    return this.service.checkIn(userId, await this.scope.resolve(actor), dto.notas);
   }
 
   @Post('users/:userId/attendance/check-out')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  checkOut(@Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.checkOut(userId, actor.establecimientoId);
+  async checkOut(@Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.checkOut(userId, await this.scope.resolve(actor));
   }
 
   @Get('attendance')
   @RequirePermissions('staff.read', 'nav.gestion_personal')
-  listAttendance(@Query() query: AttendanceListQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.listAttendance(actor.establecimientoId, query);
+  async listAttendance(@Query() query: AttendanceListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.listAttendance(await this.scope.resolve(actor), query);
   }
 
   @Post('users/:userId/commission-rule')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  upsertCommission(
+  async upsertCommission(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: UpsertCommissionRuleDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertCommissionRule(userId, actor.establecimientoId, dto, actor.sub);
+    return this.service.upsertCommissionRule(userId, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get('productivity-report')
   @RequirePermissions('staff.read', 'nav.gestion_personal')
-  productivity(@Query() query: StaffProductivityQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.getProductivityReport(actor.establecimientoId, query);
+  async productivity(@Query() query: StaffProductivityQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.getProductivityReport(await this.scope.resolve(actor), query);
   }
 
   @Post('users/:userId/leaves')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  createLeave(
+  async createLeave(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: CreateLeaveDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createLeave(userId, actor.establecimientoId, dto, actor.sub);
+    return this.service.createLeave(userId, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get('leaves')
   @RequirePermissions('staff.read', 'nav.gestion_personal')
-  listLeaves(@Query('userId') userId: string | undefined, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.listLeaves(actor.establecimientoId, userId);
+  async listLeaves(
+    @Query('userId') userId: string | undefined,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.listLeaves(await this.scope.resolve(actor), userId);
   }
 
   @Patch('leaves/:leaveId/status')
   @RequirePermissions('staff.write', 'nav.gestion_personal')
-  updateLeave(
+  async updateLeave(
     @Param('leaveId', ParseUUIDPipe) leaveId: string,
     @Body() dto: UpdateLeaveStatusDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateLeaveStatus(leaveId, actor.establecimientoId, dto, actor.sub);
+    return this.service.updateLeaveStatus(leaveId, await this.scope.resolve(actor), dto, actor.sub);
   }
 }

@@ -33,8 +33,8 @@ export class CustomerTypesController {
   @Get()
   @RequirePermissions('customer-types.read', 'nav.tipo_clientes')
   @ApiOperation({ summary: 'Listar tipos de cliente (paginado si page está presente)' })
-  findAll(@Query() query: MaestroListQueryDto) {
-    return this.customerTypesService.findAll(query);
+  findAll(@Query() query: MaestroListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.customerTypesService.findAll(query, actor);
   }
 
   @Post()
@@ -42,7 +42,7 @@ export class CustomerTypesController {
   @ApiOperation({ summary: 'Crear tipo de cliente' })
   @ApiBody({ type: CreateCustomerTypeDto })
   create(@Body() dto: CreateCustomerTypeDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.customerTypesService.create(dto, actor.sub);
+    return this.customerTypesService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -55,7 +55,7 @@ export class CustomerTypesController {
     @Body() dto: UpdateCustomerTypeDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customerTypesService.update(id, dto, actor.sub);
+    return this.customerTypesService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -63,6 +63,6 @@ export class CustomerTypesController {
   @ApiOperation({ summary: 'Eliminar tipo de cliente (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.customerTypesService.remove(id, actor.sub);
+    return this.customerTypesService.remove(id, actor);
   }
 }

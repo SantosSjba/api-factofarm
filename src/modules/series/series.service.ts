@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductSerialStatus } from '../../generated/prisma/client';
+import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SeriesListQueryDto } from './dto/series-list-query.dto';
 import { UpdateSeriesStatusDto } from './dto/update-series-status.dto';
@@ -24,7 +26,7 @@ const selectSerialList = {
 export class SeriesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: SeriesListQueryDto) {
+  async list(query: SeriesListQueryDto, actor: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -48,6 +50,7 @@ export class SeriesService {
 
     const where: Prisma.ProductSerialWhereInput = {
       deletedAt: null,
+      product: tenantWhere(actorFromJwt(actor)),
       ...(or.length ? { OR: or } : {}),
     };
 
@@ -71,9 +74,9 @@ export class SeriesService {
     };
   }
 
-  async updateStatus(id: string, dto: UpdateSeriesStatusDto) {
+  async updateStatus(id: string, dto: UpdateSeriesStatusDto, actor: JwtRequestUser) {
     const row = await this.prisma.productSerial.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, product: tenantWhere(actorFromJwt(actor)) },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Serie no encontrada');
@@ -89,9 +92,9 @@ export class SeriesService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor: JwtRequestUser) {
     const row = await this.prisma.productSerial.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, product: tenantWhere(actorFromJwt(actor)) },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Serie no encontrada');
@@ -102,8 +105,8 @@ export class SeriesService {
     return { ok: true };
   }
 
-  async buildExportBuffer(query: SeriesListQueryDto) {
-    const data = await this.list({ ...query, page: 1, pageSize: 100000 });
+  async buildExportBuffer(query: SeriesListQueryDto, actor: JwtRequestUser) {
+    const data = await this.list({ ...query, page: 1, pageSize: 100000 }, actor);
     const rows = data.items.map((x) => ({
       Serie: x.serie,
       Producto: x.product.nombre,

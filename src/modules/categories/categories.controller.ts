@@ -33,15 +33,15 @@ export class CategoriesController {
   @Get()
   @RequirePermissions('categories.read', 'nav.categorias')
   @ApiOperation({ summary: 'Listar categorías (paginado si page está presente)' })
-  findAll(@Query() query: MaestroListQueryDto) {
-    return this.categoriesService.findAll(query);
+  findAll(@Query() query: MaestroListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.categoriesService.findAll(query, actor);
   }
 
   @Get('tree')
   @RequirePermissions('categories.read', 'nav.categorias')
   @ApiOperation({ summary: 'Árbol jerárquico de categorías' })
-  findTree() {
-    return this.categoriesService.findTree();
+  findTree(@CurrentUser() actor: JwtRequestUser) {
+    return this.categoriesService.findTree(actor);
   }
 
   @Post()
@@ -49,7 +49,7 @@ export class CategoriesController {
   @ApiOperation({ summary: 'Crear categoría' })
   @ApiBody({ type: CreateCategoryDto })
   create(@Body() dto: CreateCategoryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.categoriesService.create(dto, actor.sub);
+    return this.categoriesService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -62,7 +62,7 @@ export class CategoriesController {
     @Body() dto: UpdateCategoryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.categoriesService.update(id, dto, actor.sub);
+    return this.categoriesService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -70,6 +70,6 @@ export class CategoriesController {
   @ApiOperation({ summary: 'Eliminar categoría (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.categoriesService.remove(id, actor.sub);
+    return this.categoriesService.remove(id, actor);
   }
 }

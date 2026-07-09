@@ -19,7 +19,6 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
-import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { FilesService } from './application/files.service';
@@ -54,17 +53,17 @@ export class FilesController {
     if (!file) {
       throw new BadRequestException('Se requiere un archivo en el campo `file`');
     }
-    return this.files.saveUploaded(file, user.sub);
+    return this.files.saveUploaded(file, user);
   }
 
-  @Public()
   @Get(':id')
   @ApiOkResponse({ description: 'Cuerpo binario del archivo (p. ej. imagen)' })
   async download(
     @Param('id') id: string,
+    @CurrentUser() actor: JwtRequestUser,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const meta = await this.files.createReadStreamForId(id);
+    const meta = await this.files.createReadStreamForId(id, actor);
     res.setHeader('Content-Type', meta.mimeType);
     res.setHeader(
       'Content-Disposition',

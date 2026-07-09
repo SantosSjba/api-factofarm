@@ -1,5 +1,7 @@
 model Supplier {
   id                String               @id @default(uuid())
+  tenantId          String
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   razonSocial       String
   nombreComercial   String?
   tipoDocumento     CustomerDocumentType @default(RUC)
@@ -29,7 +31,8 @@ model Supplier {
   accountPayables AccountPayable[]
   creditNotes     SupplierCreditNote[]
 
-  @@unique([tipoDocumento, numeroDocumento])
+  @@unique([tenantId, tipoDocumento, numeroDocumento])
+  @@index([tenantId])
   @@index([deletedAt])
   @@index([razonSocial])
   @@index([numeroDocumento])

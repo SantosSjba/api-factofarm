@@ -34,23 +34,23 @@ export class SuppliersController {
   @Get()
   @RequirePermissions('suppliers.read', 'nav.proveedores')
   @ApiOperation({ summary: 'Listar proveedores con paginación' })
-  list(@Query() query: SupplierListQueryDto) {
-    return this.suppliersService.list(query);
+  list(@Query() query: SupplierListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.list(query, actor);
   }
 
   @Get('options')
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Opciones de proveedores habilitados (combos)' })
-  options() {
-    return this.suppliersService.findAllOptions();
+  options(@CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.findAllOptions(actor);
   }
 
   @Get(':id')
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Detalle de proveedor' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.suppliersService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.findOne(id, actor);
   }
 
   @Post()
@@ -58,7 +58,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Crear proveedor' })
   @ApiBody({ type: CreateSupplierDto })
   create(@Body() dto: CreateSupplierDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.suppliersService.create(dto, actor.sub);
+    return this.suppliersService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -70,7 +70,7 @@ export class SuppliersController {
     @Body() dto: UpdateSupplierDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.suppliersService.update(id, dto, actor.sub);
+    return this.suppliersService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -78,21 +78,21 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Eliminar proveedor (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.suppliersService.remove(id, actor.sub);
+    return this.suppliersService.remove(id, actor);
   }
 
   @Get(':id/purchase-history')
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Historial de compras del proveedor (placeholder Fase 4)' })
-  listPurchaseHistory(@Param('id', ParseUUIDPipe) id: string) {
-    return this.suppliersService.listPurchaseHistory(id);
+  listPurchaseHistory(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.listPurchaseHistory(id, actor);
   }
 
   @Get(':id/products')
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Productos vinculados al proveedor' })
-  listProducts(@Param('id', ParseUUIDPipe) id: string) {
-    return this.suppliersService.listProducts(id);
+  listProducts(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.listProducts(id, actor);
   }
 
   @Post(':id/products')
@@ -103,7 +103,7 @@ export class SuppliersController {
     @Body() dto: UpsertSupplierProductDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.suppliersService.upsertProduct(id, dto, actor.sub);
+    return this.suppliersService.upsertProduct(id, dto, actor);
   }
 
   @Delete(':id/products/:productId')
@@ -114,6 +114,6 @@ export class SuppliersController {
     @Param('productId', ParseUUIDPipe) productId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.suppliersService.removeProduct(id, productId, actor.sub);
+    return this.suppliersService.removeProduct(id, productId, actor);
   }
 }

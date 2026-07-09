@@ -12,36 +12,37 @@ export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
   @Get('stats')
-  @ApiOperation({ summary: 'KPIs del panel administrativo' })
-  getStats() {
-    return this.dashboard.getStats();
+  @RequirePermissions('nav.dashboard_admin')
+  @ApiOperation({ summary: 'KPIs del panel administrativo (por tenant)' })
+  getStats(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getStats(actor);
   }
 
   @Get('chain-summary')
   @RequirePermissions('nav.dashboard_admin')
-  @ApiOperation({ summary: 'Vista consolidada multi-sucursal (últimos 30 días)' })
-  getChainSummary() {
-    return this.dashboard.getChainSummary();
+  @ApiOperation({ summary: 'Vista consolidada multi-sucursal del tenant (últimos 30 días)' })
+  getChainSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getChainSummary(actor);
   }
 
   @Get('manager')
   @RequirePermissions('nav.dashboard_admin')
   @ApiOperation({ summary: 'Dashboard gerente de sucursal' })
   getManager(@CurrentUser() actor: JwtRequestUser) {
-    return this.dashboard.getManagerDashboard(actor.establecimientoId);
+    return this.dashboard.getManagerDashboard(actor);
   }
 
   @Get('pharmacist')
   @RequirePermissions('nav.dashboard_admin', 'nav.recetas')
   @ApiOperation({ summary: 'Dashboard farmacéutico titular' })
   getPharmacist(@CurrentUser() actor: JwtRequestUser) {
-    return this.dashboard.getPharmacistDashboard(actor.establecimientoId);
+    return this.dashboard.getPharmacistDashboard(actor);
   }
 
   @Get('cashier')
   @RequirePermissions('nav.dashboard_admin', 'nav.punto_venta')
   @ApiOperation({ summary: 'Dashboard cajero / POS' })
   getCashier(@CurrentUser() actor: JwtRequestUser) {
-    return this.dashboard.getCashierDashboard(actor.establecimientoId, actor.sub);
+    return this.dashboard.getCashierDashboard(actor);
   }
 }

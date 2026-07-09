@@ -27,7 +27,7 @@ export class WarehousesService {
   ) {}
 
   async findAll(query: WarehouseListQueryDto, actor: JwtRequestUser) {
-    const scopedEstablishmentId = this.scope.resolve(actor, query.establishmentId);
+    const scopedEstablishmentId = await this.scope.resolve(actor, query.establishmentId);
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,

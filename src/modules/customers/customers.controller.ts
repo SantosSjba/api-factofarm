@@ -49,8 +49,8 @@ export class CustomersController {
   @Get()
   @RequirePermissions('customers.read', 'nav.clientes_list')
   @ApiOperation({ summary: 'Listar clientes con filtros y paginación' })
-  list(@Query() query: CustomerListQueryDto) {
-    return this.customersService.list(query);
+  list(@Query() query: CustomerListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.customersService.list(query, actor);
   }
 
   @Post()
@@ -58,7 +58,7 @@ export class CustomersController {
   @ApiOperation({ summary: 'Crear cliente' })
   @ApiBody({ type: CreateCustomerDto, examples: { natural: { value: OPENAPI_EXAMPLES.createCustomer } } })
   create(@Body() dto: CreateCustomerDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.customersService.create(dto, actor.sub);
+    return this.customersService.create(dto, actor);
   }
 
   @Get('catalogs/document-types')
@@ -75,20 +75,20 @@ export class CustomersController {
 
   @Get('catalogs/sellers')
   @RequirePermissions('customers.read')
-  listSellers() {
-    return this.customersService.listSellers();
+  listSellers(@CurrentUser() actor: JwtRequestUser) {
+    return this.customersService.listSellers(actor);
   }
 
   @Get('zones')
   @RequirePermissions('customers.read')
-  listZones() {
-    return this.customersService.listZones();
+  listZones(@CurrentUser() actor: JwtRequestUser) {
+    return this.customersService.listZones(actor);
   }
 
   @Post('zones')
   @RequirePermissions('customers.write')
   createZone(@Body() dto: CreateCustomerZoneDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.customersService.createZone(dto, actor.sub);
+    return this.customersService.createZone(dto, actor);
   }
 
   @Patch('zones/:id')
@@ -98,13 +98,13 @@ export class CustomersController {
     @Body() dto: UpdateCustomerZoneDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.updateZone(id, dto, actor.sub);
+    return this.customersService.updateZone(id, dto, actor);
   }
 
   @Delete('zones/:id')
   @RequirePermissions('customers.write')
   removeZone(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.customersService.removeZone(id, actor.sub);
+    return this.customersService.removeZone(id, actor);
   }
 
   @Get('import/template')
@@ -139,8 +139,11 @@ export class CustomersController {
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  previewImportCustomers(@UploadedFile() file: Express.Multer.File) {
-    return this.customersService.previewImportFromExcel(file);
+  previewImportCustomers(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.customersService.previewImportFromExcel(file, actor);
   }
 
   @Post('import')
@@ -163,7 +166,7 @@ export class CustomersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.importFromExcel(file, actor.sub);
+    return this.customersService.importFromExcel(file, actor);
   }
 
   @Post('export')
@@ -172,8 +175,9 @@ export class CustomersController {
   async exportCustomers(
     @Body() dto: ExportCustomersDto,
     @Res({ passthrough: true }) res: Response,
+    @CurrentUser() actor: JwtRequestUser,
   ): Promise<StreamableFile> {
-    const buffer = await this.customersService.buildExportBuffer(dto);
+    const buffer = await this.customersService.buildExportBuffer(dto, actor);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('clientes-export.xlsx')}`,
@@ -188,8 +192,8 @@ export class CustomersController {
   @Get(':id')
   @RequirePermissions('customers.read')
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.customersService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.customersService.findOne(id, actor);
   }
 
   @Patch(':id')
@@ -200,14 +204,14 @@ export class CustomersController {
     @Body() dto: UpdateCustomerDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.update(id, dto, actor.sub);
+    return this.customersService.update(id, dto, actor);
   }
 
   @Delete(':id')
   @RequirePermissions('customers.delete')
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.customersService.remove(id, actor.sub);
+    return this.customersService.remove(id, actor);
   }
 
   @Patch(':id/status')
@@ -218,7 +222,7 @@ export class CustomersController {
     @Body() dto: UpdateCustomerStatusDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.updateStatus(id, dto, actor.sub);
+    return this.customersService.updateStatus(id, dto, actor);
   }
 
   @Patch(':id/barcode')
@@ -229,7 +233,7 @@ export class CustomersController {
     @Body() dto: UpdateCustomerBarcodeDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.updateBarcode(id, dto, actor.sub);
+    return this.customersService.updateBarcode(id, dto, actor);
   }
 
   @Patch(':id/tags')
@@ -240,6 +244,6 @@ export class CustomersController {
     @Body() dto: UpdateCustomerTagsDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.customersService.updateTags(id, dto, actor.sub);
+    return this.customersService.updateTags(id, dto, actor);
   }
 }

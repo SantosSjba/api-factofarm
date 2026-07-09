@@ -5,7 +5,9 @@ import {
   ProductPriceField,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult } from '../../common/dto/pagination.dto';
+import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import type { CreateProductDto } from './dto/create-product.dto';
 import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 
@@ -53,9 +55,10 @@ const SOURCE_LABELS: Record<ProductPriceChangeSource, string> = {
 export class ProductPriceHistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(productId: string, query: ProductPriceHistoryQueryDto) {
+  async list(productId: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     const exists = await this.prisma.product.findFirst({
-      where: { id: productId, deletedAt: null },
+      where: { id: productId, deletedAt: null, ...tenantFilter },
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('Producto no encontrado');

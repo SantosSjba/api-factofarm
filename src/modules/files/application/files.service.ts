@@ -1,10 +1,14 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { Express } from 'express';
+import { actorFromJwt, assertTenantAccess } from '../../../common/scoping/tenant-scope.util';
+import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { FILE_REPOSITORY } from '../domain/file.repository';
 import type { IFileRepository } from '../domain/file.repository';
 import { LocalDiskFileStorage } from '../infrastructure/local-disk-file.storage';
@@ -20,7 +24,7 @@ export class FilesService {
 
   async saveUploaded(
     file: Express.Multer.File,
-    uploadedByUserId: string | undefined,
+    actor: JwtRequestUser,
   ): Promise<{
     id: string;
     nombreOriginal: string;
@@ -43,7 +47,8 @@ export class FilesService {
       mimeType: (file.mimetype || 'application/octet-stream').slice(0, 200),
       tamanoBytes: file.size,
       rutaRelativa: stored.rutaRelativa,
-      uploadedByUserId: uploadedByUserId ?? null,
+      uploadedByUserId: actor.sub,
+      tenantId: actor.tenantId ?? null,
     });
 
     return {
@@ -55,12 +60,15 @@ export class FilesService {
     };
   }
 
-  async getForStream(id: string): Promise<{
+  async getForStream(id: string, actor: JwtRequestUser): Promise<{
     absPath: string;
     mimeType: string;
     nombreOriginal: string;
   }> {
     const row = await this.files.findById(id);
+    if (row) {
+      this.assertFileTenantAccess(actor, row.tenantId);
+    }
     if (!row || !this.storage.exists(row.rutaRelativa)) {
       throw new NotFoundException('Archivo no encontrado');
     }
@@ -71,8 +79,11 @@ export class FilesService {
     };
   }
 
-  async createReadStreamForId(id: string) {
+  async createReadStreamForId(id: string, actor: JwtRequestUser) {
     const row = await this.files.findById(id);
+    if (row) {
+      this.assertFileTenantAccess(actor, row.tenantId);
+    }
     if (!row || !this.storage.exists(row.rutaRelativa)) {
       throw new NotFoundException('Archivo no encontrado');
     }
@@ -81,5 +92,15 @@ export class FilesService {
       mimeType: row.mimeType,
       nombreOriginal: row.nombreOriginal,
     };
+  }
+
+  private assertFileTenantAccess(actor: JwtRequestUser, fileTenantId: string | null): void {
+    if (!fileTenantId) {
+      if (isPlatformAdmin(actor.role)) {
+        return;
+      }
+      throw new ForbiddenException('Archivo sin tenant asignado');
+    }
+    assertTenantAccess(actorFromJwt(actor), fileTenantId);
   }
 }

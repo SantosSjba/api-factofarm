@@ -1,8 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductPriceChangeSource } from '../../generated/prisma/client';
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 import { CreateProductLocationDto } from './dto/create-product-location.dto';
@@ -103,7 +105,14 @@ export class ProductsService {
     private readonly priceHistory: ProductPriceHistoryService,
   ) {}
 
-  async list(query: ProductListQueryDto) {
+  private requireTenant(actor?: JwtRequestUser): string {
+    if (!actor) {
+      throw new ForbiddenException('No autorizado');
+    }
+    return requireTenantId(actorFromJwt(actor));
+  }
+
+  async list(query: ProductListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -130,6 +139,7 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(searchable.length ? { OR: searchable } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.brandId ? { brandId: query.brandId } : {}),
@@ -201,9 +211,9 @@ export class ProductsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
       include: {
         unit: { select: { id: true, codigo: true, nombre: true } },
         currency: { select: { id: true, codigo: true, nombre: true } },
@@ -338,8 +348,8 @@ export class ProductsService {
     };
   }
 
-  async listSupplierLinks(productId: string) {
-    await this.findOne(productId);
+  async listSupplierLinks(productId: string, actor?: JwtRequestUser) {
+    await this.findOne(productId, actor);
     const rows = await this.prisma.supplierProduct.findMany({
       where: { productId },
       orderBy: { createdAt: 'desc' },
@@ -363,9 +373,9 @@ export class ProductsService {
   async upsertSupplierLink(
     productId: string,
     dto: { supplierId: string; codigoProveedor?: string; precioCompra?: number; plazoDias?: number },
-    actorId?: string,
+    actor?: JwtRequestUser,
   ) {
-    await this.findOne(productId);
+    await this.findOne(productId, actor);
     const supplier = await this.prisma.supplier.findFirst({
       where: { id: dto.supplierId, deletedAt: null },
       select: { id: true },
@@ -400,7 +410,7 @@ export class ProductsService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPSERT',
       entity: 'SupplierProduct',
       entityId: row.id,
@@ -418,7 +428,8 @@ export class ProductsService {
     };
   }
 
-  async removeSupplierLink(productId: string, supplierId: string, actorId?: string) {
+  async removeSupplierLink(productId: string, supplierId: string, actor?: JwtRequestUser) {
+    await this.findOne(productId, actor);
     const link = await this.prisma.supplierProduct.findUnique({
       where: { supplierId_productId: { supplierId, productId } },
       select: { id: true },
@@ -429,14 +440,15 @@ export class ProductsService {
       where: { supplierId_productId: { supplierId, productId } },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'SupplierProduct',
       entityId: link.id,
     });
   }
 
-  async create(dto: CreateProductDto, actorId?: string) {
+  async create(dto: CreateProductDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const unit = await this.prisma.unitOfMeasure.findFirst({
       where: { id: dto.unitId, deletedAt: null },
     });
@@ -478,7 +490,7 @@ export class ProductsService {
 
     const defaultWarehouse = dto.defaultWarehouseId
       ? await this.prisma.warehouse.findFirst({
-        where: { id: dto.defaultWarehouseId, deletedAt: null },
+        where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
       })
       : null;
     if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
@@ -512,7 +524,9 @@ export class ProductsService {
       warehouseIds.add(s.warehouseId);
     }
     for (const wid of warehouseIds) {
-      const w = await this.prisma.warehouse.findFirst({ where: { id: wid, deletedAt: null } });
+      const w = await this.prisma.warehouse.findFirst({
+        where: { id: wid, deletedAt: null, establishment: { tenantId } },
+      });
       if (!w) throw new BadRequestException(`Almacén no válido: ${wid}`);
     }
 
@@ -533,6 +547,7 @@ export class ProductsService {
     const created = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
+          tenantId,
           nombre: dto.nombre.trim(),
           descripcion: dto.descripcion?.trim() || null,
           principioActivo: dto.principioActivo?.trim() || null,
@@ -685,23 +700,24 @@ export class ProductsService {
         });
       }
 
-      await this.priceHistory.recordOnCreate(tx, product.id, dto, actorId);
+      await this.priceHistory.recordOnCreate(tx, product.id, dto, actor?.sub);
 
       return product.id;
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'CREATE',
       entity: 'Product',
       entityId: created,
     });
-    return this.findOne(created);
+    return this.findOne(created, actor);
   }
 
-  async update(id: string, dto: CreateProductDto, actorId?: string) {
+  async update(id: string, dto: CreateProductDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const exists = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true, manejaLotes: true, codigoLote: true, fechaVencimientoLote: true },
     });
     if (!exists) throw new NotFoundException('Producto no encontrado');
@@ -747,7 +763,7 @@ export class ProductsService {
 
     const defaultWarehouse = dto.defaultWarehouseId
       ? await this.prisma.warehouse.findFirst({
-          where: { id: dto.defaultWarehouseId, deletedAt: null },
+          where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
         })
       : null;
     if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
@@ -781,7 +797,9 @@ export class ProductsService {
       warehouseIds.add(s.warehouseId);
     }
     for (const wid of warehouseIds) {
-      const w = await this.prisma.warehouse.findFirst({ where: { id: wid, deletedAt: null } });
+      const w = await this.prisma.warehouse.findFirst({
+        where: { id: wid, deletedAt: null, establishment: { tenantId } },
+      });
       if (!w) throw new BadRequestException(`Almacén no válido: ${wid}`);
     }
 
@@ -970,21 +988,22 @@ export class ProductsService {
         }
       }
 
-      await this.priceHistory.recordOnUpdate(tx, id, beforeSnapshot, dto, actorId);
+      await this.priceHistory.recordOnUpdate(tx, id, beforeSnapshot, dto, actor?.sub);
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE',
       entity: 'Product',
       entityId: id,
     });
-    return this.findOne(id);
+    return this.findOne(id, actor);
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const row = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Producto no encontrado');
@@ -993,7 +1012,7 @@ export class ProductsService {
       data: { deletedAt: new Date(), habilitado: false },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'Product',
       entityId: id,
@@ -1001,19 +1020,15 @@ export class ProductsService {
     return { ok: true };
   }
 
-  async updateStatus(id: string, dto: UpdateProductStatusDto, actorId?: string) {
-    const row = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!row) throw new NotFoundException('Producto no encontrado');
+  async updateStatus(id: string, dto: UpdateProductStatusDto, actor?: JwtRequestUser) {
+    await this.findOne(id, actor);
     const updated = await this.prisma.product.update({
       where: { id },
       data: { habilitado: dto.habilitado },
       select: selectProductList,
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_STATUS',
       entity: 'Product',
       entityId: id,
@@ -1022,19 +1037,15 @@ export class ProductsService {
     return updated;
   }
 
-  async updateBarcode(id: string, dto: UpdateProductBarcodeDto, actorId?: string) {
-    const row = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!row) throw new NotFoundException('Producto no encontrado');
+  async updateBarcode(id: string, dto: UpdateProductBarcodeDto, actor?: JwtRequestUser) {
+    await this.findOne(id, actor);
     const updated = await this.prisma.product.update({
       where: { id },
       data: { codigoBarra: dto.codigoBarra.trim() || null },
       select: selectProductList,
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_BARCODE',
       entity: 'Product',
       entityId: id,
@@ -1043,9 +1054,10 @@ export class ProductsService {
     return updated;
   }
 
-  async duplicate(id: string, actorId?: string) {
+  async duplicate(id: string, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const source = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       include: {
         warehousePrices: true,
         warehouseStocks: true,
@@ -1061,7 +1073,7 @@ export class ProductsService {
       let n = 2;
       while (
         await tx.product.findFirst({
-          where: { nombre: nextName, deletedAt: null },
+          where: { nombre: nextName, deletedAt: null, tenantId },
           select: { id: true },
         })
       ) {
@@ -1070,6 +1082,7 @@ export class ProductsService {
 
       const created = await tx.product.create({
         data: {
+          tenantId,
           nombre: nextName,
           descripcion: source.descripcion,
           principioActivo: source.principioActivo,
@@ -1186,7 +1199,7 @@ export class ProductsService {
             precio3: pr.precio3.toNumber(),
           })),
         } as CreateProductDto,
-        actorId,
+        actor?.sub,
         ProductPriceChangeSource.DUPLICATE,
       );
 
@@ -1194,26 +1207,27 @@ export class ProductsService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DUPLICATE',
       entity: 'Product',
       entityId: cloneId,
       diff: { sourceId: id },
     });
-    return this.findOne(cloneId);
+    return this.findOne(cloneId, actor);
   }
 
-  async previewImportFromExcel(mode: ProductImportMode, file: Express.Multer.File) {
-    return this.parseAndImportExcel(mode, file, undefined, { dryRun: true });
+  async previewImportFromExcel(mode: ProductImportMode, file: Express.Multer.File, actor?: JwtRequestUser) {
+    return this.parseAndImportExcel(mode, file, actor, { dryRun: true });
   }
 
-  async importFromExcel(mode: ProductImportMode, file: Express.Multer.File, actorId?: string) {
-    return this.parseAndImportExcel(mode, file, actorId, { dryRun: false });
+  async importFromExcel(mode: ProductImportMode, file: Express.Multer.File, actor?: JwtRequestUser) {
+    return this.parseAndImportExcel(mode, file, actor, { dryRun: false });
   }
 
-  async buildExportBuffer() {
+  async buildExportBuffer(actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     const rows = await this.prisma.product.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...tenantFilter },
       orderBy: { nombre: 'asc' },
       include: {
         unit: { select: { codigo: true } },
@@ -1251,8 +1265,8 @@ export class ProductsService {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 
-  async listEquivalents(productId: string) {
-    await this.findOne(productId);
+  async listEquivalents(productId: string, actor?: JwtRequestUser) {
+    await this.findOne(productId, actor);
     const links = await this.prisma.productEquivalent.findMany({
       where: { productId },
       include: {
@@ -1264,12 +1278,13 @@ export class ProductsService {
     return links.map((l) => l.equivalentProduct);
   }
 
-  async setEquivalents(productId: string, equivalentProductIds: string[], actorId?: string) {
-    await this.findOne(productId);
+  async setEquivalents(productId: string, equivalentProductIds: string[], actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
+    await this.findOne(productId, actor);
     const uniqueIds = [...new Set(equivalentProductIds.filter((id) => id !== productId))];
     for (const eqId of uniqueIds) {
       const exists = await this.prisma.product.findFirst({
-        where: { id: eqId, deletedAt: null },
+        where: { id: eqId, deletedAt: null, tenantId },
         select: { id: true },
       });
       if (!exists) throw new NotFoundException(`Producto equivalente no encontrado: ${eqId}`);
@@ -1281,19 +1296,19 @@ export class ProductsService {
       ),
     ]);
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE',
       entity: 'Product',
       entityId: productId,
       diff: { equivalentProductIds: uniqueIds },
     });
-    return this.listEquivalents(productId);
+    return this.listEquivalents(productId, actor);
   }
 
   private async parseAndImportExcel(
     mode: ProductImportMode,
     file: Express.Multer.File,
-    actorId?: string,
+    actor?: JwtRequestUser,
     options?: { dryRun?: boolean },
   ) {
     if (!file?.buffer?.length) {
@@ -1309,7 +1324,7 @@ export class ProductsService {
       const empty = { totalRows: 0, created: 0, updated: 0, errors: [] as string[], preview: options?.dryRun ?? false };
       if (!options?.dryRun) {
         await this.audit.log({
-          userId: actorId,
+          userId: actor?.sub,
           action: 'IMPORT',
           entity: 'Product',
           diff: { mode, ...empty },
@@ -1321,13 +1336,13 @@ export class ProductsService {
     let result: { totalRows: number; created: number; updated: number; errors: string[] };
     switch (mode) {
       case 'PRODUCTOS':
-        result = await this.importItemsRows(rows, actorId, options);
+        result = await this.importItemsRows(rows, actor, options);
         break;
       case 'L_PRECIOS':
-        result = await this.importPriceListRows(rows, options);
+        result = await this.importPriceListRows(rows, actor, options);
         break;
       case 'ACTUALIZAR_PRECIOS':
-        result = await this.importUpdatePricesRows(rows, options);
+        result = await this.importUpdatePricesRows(rows, actor, options);
         break;
       default:
         throw new BadRequestException('Modo de importación no soportado');
@@ -1335,7 +1350,7 @@ export class ProductsService {
     const payload = { ...result, preview: options?.dryRun ?? false };
     if (!options?.dryRun) {
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'IMPORT',
         entity: 'Product',
         diff: { mode, ...result },
@@ -1412,15 +1427,16 @@ export class ProductsService {
 
   private async importItemsRows(
     rows: Record<string, unknown>[],
-    actorId?: string,
+    actor?: JwtRequestUser,
     options?: { dryRun?: boolean },
   ) {
+    const tenantId = this.requireTenant(actor);
     let created = 0;
     let updated = 0;
     const errors: string[] = [];
 
     const warehouses = await this.prisma.warehouse.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, establishment: { tenantId } },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: { id: true, establishmentId: true, nombre: true },
     });
@@ -1475,8 +1491,8 @@ export class ProductsService {
           throw new BadRequestException(`Tipo afectación compra no encontrado (${purchaseTaxCode})`);
         }
 
-        const categoryId = await this.resolveCategoryId(this.cellString(row, 'Categoria'));
-        const brandId = await this.resolveBrandId(this.cellString(row, 'Marca'));
+        const categoryId = await this.resolveCategoryId(tenantId, this.cellString(row, 'Categoria'));
+        const brandId = await this.resolveBrandId(tenantId, this.cellString(row, 'Marca'));
         const productLocationId = await this.resolveProductLocationId(
           defaultWarehouse.establishmentId,
           this.cellString(row, 'Ubicación'),
@@ -1500,7 +1516,7 @@ export class ProductsService {
         }
 
         const current = await this.prisma.product.findFirst({
-          where: { deletedAt: null, codigoInterno },
+          where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
 
@@ -1552,6 +1568,7 @@ export class ProductsService {
             })
           : await this.prisma.product.create({
               data: {
+                tenantId,
                 nombre,
                 codigoBusqueda: this.cellString(row, 'Código Interno') || codigoInterno,
                 codigoInterno,
@@ -1605,7 +1622,7 @@ export class ProductsService {
           priceSnapshotBefore,
           precioVenta,
           precioCompra,
-          actorId,
+          actor?.sub,
         );
 
         if (current) updated++;
@@ -1624,7 +1641,12 @@ export class ProductsService {
     return { totalRows: rows.length, created, updated, errors };
   }
 
-  private async importPriceListRows(rows: Record<string, unknown>[], options?: { dryRun?: boolean }) {
+  private async importPriceListRows(
+    rows: Record<string, unknown>[],
+    actor?: JwtRequestUser,
+    options?: { dryRun?: boolean },
+  ) {
+    const tenantId = this.requireTenant(actor);
     let created = 0;
     let updated = 0;
     const errors: string[] = [];
@@ -1643,7 +1665,7 @@ export class ProductsService {
 
       try {
         const product = await this.prisma.product.findFirst({
-          where: { deletedAt: null, codigoInterno },
+          where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
         if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
@@ -1738,7 +1760,12 @@ export class ProductsService {
     return { totalRows: rows.length, created, updated, errors };
   }
 
-  private async importUpdatePricesRows(rows: Record<string, unknown>[], options?: { dryRun?: boolean }) {
+  private async importUpdatePricesRows(
+    rows: Record<string, unknown>[],
+    actor?: JwtRequestUser,
+    options?: { dryRun?: boolean },
+  ) {
+    const tenantId = this.requireTenant(actor);
     let updated = 0;
     const errors: string[] = [];
 
@@ -1750,7 +1777,7 @@ export class ProductsService {
 
       try {
         const product = await this.prisma.product.findFirst({
-          where: { deletedAt: null, codigoInterno },
+          where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
         if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
@@ -1845,27 +1872,33 @@ export class ProductsService {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
 
-  private async resolveCategoryId(nombre: string): Promise<string | null> {
+  private async resolveCategoryId(tenantId: string, nombre: string): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.category.findFirst({
-      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: { tenantId, deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
       select: { id: true },
     });
     if (existing) return existing.id;
-    const created = await this.prisma.category.create({ data: { nombre: clean }, select: { id: true } });
+    const created = await this.prisma.category.create({
+      data: { tenantId, nombre: clean.toUpperCase() },
+      select: { id: true },
+    });
     return created.id;
   }
 
-  private async resolveBrandId(nombre: string): Promise<string | null> {
+  private async resolveBrandId(tenantId: string, nombre: string): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.brand.findFirst({
-      where: { deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: { tenantId, deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
       select: { id: true },
     });
     if (existing) return existing.id;
-    const created = await this.prisma.brand.create({ data: { nombre: clean }, select: { id: true } });
+    const created = await this.prisma.brand.create({
+      data: { tenantId, nombre: clean.toUpperCase() },
+      select: { id: true },
+    });
     return created.id;
   }
 
@@ -1924,16 +1957,12 @@ export class ProductsService {
     });
   }
 
-  listPriceHistory(id: string, query: ProductPriceHistoryQueryDto) {
-    return this.priceHistory.list(id, query);
+  listPriceHistory(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+    return this.findOne(id, actor).then(() => this.priceHistory.list(id, query, actor));
   }
 
-  async historySales(id: string, query: ProductPriceHistoryQueryDto) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!product) throw new NotFoundException('Producto no encontrado');
+  async historySales(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+    await this.findOne(id, actor);
 
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.SaleItemWhereInput = {
@@ -1984,12 +2013,8 @@ export class ProductsService {
     );
   }
 
-  async historyPurchases(id: string, query: ProductPriceHistoryQueryDto) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!product) throw new NotFoundException('Producto no encontrado');
+  async historyPurchases(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+    await this.findOne(id, actor);
 
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.PurchaseOrderItemWhereInput = {
@@ -2042,12 +2067,8 @@ export class ProductsService {
     );
   }
 
-  async historyStock(id: string) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!product) throw new NotFoundException('Producto no encontrado');
+  async historyStock(id: string, actor?: JwtRequestUser) {
+    await this.findOne(id, actor);
 
     const rows = await this.prisma.productWarehouseStock.findMany({
       where: {
@@ -2075,9 +2096,10 @@ export class ProductsService {
     }));
   }
 
-  async stockSummary(id: string) {
+  async stockSummary(id: string, actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     const product = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...tenantFilter },
       select: {
         id: true,
         warehouseStocks: {

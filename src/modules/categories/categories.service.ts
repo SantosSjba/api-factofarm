@@ -6,6 +6,8 @@ import {
 } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -25,8 +27,8 @@ export class CategoriesService {
     private readonly audit: AuditLogService,
   ) {}
 
-  async findAll(filters?: MaestroListQueryDto) {
-    const where = this.buildWhere(filters);
+  async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
+    const where = this.buildWhere(filters, actor ? tenantWhere(actorFromJwt(actor)) : {});
 
     if (filters?.page == null) {
       return this.prisma.category.findMany({
@@ -55,9 +57,9 @@ export class CategoriesService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async findTree() {
+  async findTree(actor?: JwtRequestUser) {
     const rows = await this.prisma.category.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
       orderBy: { nombre: 'asc' },
       select: selectCategory,
     });
@@ -74,18 +76,19 @@ export class CategoriesService {
     return roots;
   }
 
-  async create(dto: CreateCategoryDto, actorId?: string) {
+  async create(dto: CreateCategoryDto, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     const nombre = this.normalizeNombre(dto.nombre);
     if (dto.parentId) {
-      await this.assertParentExists(dto.parentId);
+      await this.assertParentExists(dto.parentId, tenantId);
     }
     try {
       const created = await this.prisma.category.create({
-        data: { nombre, parentId: dto.parentId ?? null },
+        data: { nombre, parentId: dto.parentId ?? null, tenantId },
         select: selectCategory,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'Category',
         entityId: created.id,
@@ -96,13 +99,16 @@ export class CategoriesService {
     }
   }
 
-  async update(id: string, dto: UpdateCategoryDto, actorId?: string) {
+  async update(id: string, dto: UpdateCategoryDto, actor?: JwtRequestUser) {
     const current = await this.prisma.category.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Categoría no encontrada');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     const data: Prisma.CategoryUpdateInput = {};
@@ -114,7 +120,7 @@ export class CategoriesService {
         throw new ConflictException('Una categoría no puede ser padre de sí misma.');
       }
       if (dto.parentId) {
-        await this.assertParentExists(dto.parentId);
+        await this.assertParentExists(dto.parentId, current.tenantId);
       }
       data.parent = dto.parentId ? { connect: { id: dto.parentId } } : { disconnect: true };
     }
@@ -126,7 +132,7 @@ export class CategoriesService {
         select: selectCategory,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'Category',
         entityId: id,
@@ -138,13 +144,16 @@ export class CategoriesService {
     }
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
     const current = await this.prisma.category.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Categoría no encontrada');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     await this.prisma.category.update({
@@ -152,14 +161,17 @@ export class CategoriesService {
       data: { deletedAt: new Date() },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'Category',
       entityId: id,
     });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.CategoryWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+    tenantFilter: Prisma.CategoryWhereInput = {},
+  ): Prisma.CategoryWhereInput {
     const search = filters?.search?.trim();
     const field = filters?.field?.trim().toLowerCase();
 
@@ -169,6 +181,7 @@ export class CategoriesService {
 
     return {
       deletedAt: null,
+      ...tenantFilter,
       ...(search
         ? {
             OR:
@@ -180,9 +193,9 @@ export class CategoriesService {
     };
   }
 
-  private async assertParentExists(parentId: string) {
+  private async assertParentExists(parentId: string, tenantId: string) {
     const parent = await this.prisma.category.findFirst({
-      where: { id: parentId, deletedAt: null },
+      where: { id: parentId, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!parent) {

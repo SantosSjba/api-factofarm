@@ -2,7 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InventoryPhysicalCountStatus, Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
 import { CreatePhysicalCountDto } from './dto/create-physical-count.dto';
 import { UpsertPhysicalCountItemDto } from './dto/upsert-physical-count-item.dto';
@@ -13,11 +16,15 @@ export class InventoryPhysicalCountsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly movements: InventoryMovementsService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
-  async findAll(page = 1, pageSize = 10) {
+  async findAll(page = 1, pageSize = 10, actor: JwtRequestUser) {
     const { skip, take } = paginationArgs({ page, pageSize });
-    const where = { deletedAt: null };
+    const where: Prisma.InventoryPhysicalCountWhereInput = {
+      deletedAt: null,
+      warehouse: { establishment: tenantWhere(actorFromJwt(actor)) },
+    };
     const [items, total] = await Promise.all([
       this.prisma.inventoryPhysicalCount.findMany({
         where,
@@ -52,9 +59,13 @@ export class InventoryPhysicalCountsService {
     );
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor: JwtRequestUser) {
     const count = await this.prisma.inventoryPhysicalCount.findFirst({
-      where: { id, deletedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        warehouse: { establishment: tenantWhere(actorFromJwt(actor)) },
+      },
       include: {
         warehouse: { select: { id: true, nombre: true } },
         user: { select: { nombre: true } },
@@ -66,6 +77,7 @@ export class InventoryPhysicalCountsService {
       },
     });
     if (!count) throw new NotFoundException('Conteo físico no encontrado');
+    await this.scope.assertWarehouseInTenant(actor, count.warehouse.id);
     return {
       id: count.id,
       estado: count.estado,
@@ -86,7 +98,8 @@ export class InventoryPhysicalCountsService {
     };
   }
 
-  async create(dto: CreatePhysicalCountDto, actorId?: string) {
+  async create(dto: CreatePhysicalCountDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
       select: { id: true },
@@ -96,14 +109,14 @@ export class InventoryPhysicalCountsService {
     const created = await this.prisma.inventoryPhysicalCount.create({
       data: {
         warehouseId: dto.warehouseId,
-        userId: actorId ?? null,
+        userId: actor.sub,
         comentario: dto.comentario?.trim() || null,
       },
       select: { id: true },
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'InventoryPhysicalCount',
       entityId: created.id,
@@ -112,8 +125,8 @@ export class InventoryPhysicalCountsService {
     return { id: created.id };
   }
 
-  async upsertItem(countId: string, dto: UpsertPhysicalCountItemDto) {
-    const count = await this.loadOpenCount(countId);
+  async upsertItem(countId: string, dto: UpsertPhysicalCountItemDto, actor: JwtRequestUser) {
+    const count = await this.loadOpenCount(countId, actor);
     const systemQty = await this.resolveSystemQty(
       count.warehouseId,
       dto.productId,
@@ -150,9 +163,14 @@ export class InventoryPhysicalCountsService {
     return { ok: true };
   }
 
-  async finalize(countId: string, actorId: string) {
+  async finalize(countId: string, actor: JwtRequestUser) {
     const count = await this.prisma.inventoryPhysicalCount.findFirst({
-      where: { id: countId, deletedAt: null, estado: InventoryPhysicalCountStatus.EN_PROCESO },
+      where: {
+        id: countId,
+        deletedAt: null,
+        estado: InventoryPhysicalCountStatus.EN_PROCESO,
+        warehouse: { establishment: tenantWhere(actorFromJwt(actor)) },
+      },
       include: { items: true },
     });
     if (!count) throw new NotFoundException('Conteo no encontrado o ya finalizado');
@@ -171,7 +189,7 @@ export class InventoryPhysicalCountsService {
           lotCode: item.codigoLote ?? undefined,
           reason: `Conteo físico ${countId}`,
         },
-        actorId,
+        actor.sub,
       );
       if (result.pendingApproval) pendingApproval += 1;
       else if (result.applied) applied += 1;
@@ -193,7 +211,7 @@ export class InventoryPhysicalCountsService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'FINALIZE',
       entity: 'InventoryPhysicalCount',
       entityId: countId,
@@ -208,9 +226,14 @@ export class InventoryPhysicalCountsService {
     };
   }
 
-  private async loadOpenCount(id: string) {
+  private async loadOpenCount(id: string, actor: JwtRequestUser) {
     const count = await this.prisma.inventoryPhysicalCount.findFirst({
-      where: { id, deletedAt: null, estado: InventoryPhysicalCountStatus.EN_PROCESO },
+      where: {
+        id,
+        deletedAt: null,
+        estado: InventoryPhysicalCountStatus.EN_PROCESO,
+        warehouse: { establishment: tenantWhere(actorFromJwt(actor)) },
+      },
       select: { id: true, warehouseId: true },
     });
     if (!count) throw new BadRequestException('Conteo no disponible para edición');

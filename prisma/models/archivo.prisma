@@ -1,6 +1,8 @@
 /// Archivos subidos (metadatos en BD + fichero en disco vía `rutaRelativa`).
 model Archivo {
   id               String   @id @default(uuid())
+  tenantId         String?
+  tenant           Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   nombreOriginal   String
   mimeType         String
   tamanoBytes      Int
@@ -17,6 +19,7 @@ model Archivo {
 
   createdAt DateTime @default(now())
 
+  @@index([tenantId])
   @@index([uploadedByUserId])
   @@map("archivos")
 }

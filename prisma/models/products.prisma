@@ -139,6 +139,8 @@ model ProductIscSystem {
 
 model Product {
   id          String  @id @default(uuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   nombre      String
   descripcion String?
 
@@ -246,6 +248,7 @@ model Product {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  @@index([tenantId])
   @@index([deletedAt])
   @@index([nombre])
   @@index([codigoInterno])
@@ -427,6 +430,8 @@ model CompoundProductPlatform {
 
 model CompoundProduct {
   id               String   @id @default(uuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   nombre           String
   nombreSecundario String?
   descripcion      String?
@@ -463,6 +468,7 @@ model CompoundProduct {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId])
   @@index([deletedAt])
   @@index([nombre])
   @@index([codigoInterno])
@@ -486,6 +492,8 @@ model CompoundProductItem {
 
 model Service {
   id          String  @id @default(uuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   nombre      String
   descripcion String?
 
@@ -547,6 +555,7 @@ model Service {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  @@index([tenantId])
   @@index([deletedAt])
   @@index([nombre])
   @@index([codigoInterno])

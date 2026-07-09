@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { actorFromJwt, assertTenantAccess, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { ServiceListQueryDto } from './dto/service-list-query.dto';
@@ -50,7 +52,14 @@ function decStr(v: Prisma.Decimal | null | undefined): string | null {
 export class ServicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: ServiceListQueryDto) {
+  private requireTenant(actor?: JwtRequestUser): string {
+    if (!actor) {
+      throw new ForbiddenException('No autorizado');
+    }
+    return requireTenantId(actorFromJwt(actor));
+  }
+
+  async list(query: ServiceListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -77,6 +86,7 @@ export class ServicesService {
 
     const where: Prisma.ServiceWhereInput = {
       deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(searchable.length ? { OR: searchable } : {}),
     };
 
@@ -151,9 +161,10 @@ export class ServicesService {
     });
   }
 
-  listProductLocations() {
+  listProductLocations(actor?: JwtRequestUser) {
+    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     return this.prisma.productLocation.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(actor ? { establishment: tenantFilter } : {}) },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,
@@ -163,22 +174,26 @@ export class ServicesService {
     });
   }
 
-  async listHistoryStock(id: string) {
+  async listHistoryStock(id: string, actor?: JwtRequestUser) {
     const exists = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
+      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      select: { id: true, tenantId: true },
     });
     if (!exists) throw new NotFoundException('Servicio no encontrado');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), exists.tenantId);
+    }
     return [] as { warehouseId: string; ubicacion: string; stock: string; series: string }[];
   }
 
-  async create(dto: CreateServiceDto) {
+  async create(dto: CreateServiceDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const unitId = await this.resolveServiceUnitId(dto.unitId);
     await this.validateReferences(dto);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const service = await tx.service.create({
-        data: this.buildData(dto, unitId),
+        data: this.buildData(dto, unitId, tenantId),
         select: { id: true },
       });
 
@@ -194,12 +209,13 @@ export class ServicesService {
       return service.id;
     });
 
-    return this.getByIdOrThrow(created);
+    return this.getByIdOrThrow(created, actor);
   }
 
-  async update(id: string, dto: CreateServiceDto) {
+  async update(id: string, dto: CreateServiceDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const current = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true, unitId: true },
     });
     if (!current) throw new NotFoundException('Servicio no encontrado');
@@ -210,7 +226,7 @@ export class ServicesService {
     await this.prisma.$transaction(async (tx) => {
       await tx.service.update({
         where: { id },
-        data: this.buildData(dto, unitId),
+        data: this.buildData(dto, unitId, tenantId),
       });
 
       if (dto.attributes) {
@@ -227,21 +243,23 @@ export class ServicesService {
       }
     });
 
-    return this.getByIdOrThrow(id);
+    return this.getByIdOrThrow(id, actor);
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const current = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Servicio no encontrado');
     await this.prisma.service.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
-  async updateStatus(id: string, dto: UpdateServiceStatusDto) {
+  async updateStatus(id: string, dto: UpdateServiceStatusDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const row = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Servicio no encontrado');
@@ -249,12 +267,13 @@ export class ServicesService {
       where: { id },
       data: { habilitado: dto.habilitado },
     });
-    return this.getByIdOrThrow(id);
+    return this.getByIdOrThrow(id, actor);
   }
 
-  async updateBarcode(id: string, dto: UpdateServiceBarcodeDto) {
+  async updateBarcode(id: string, dto: UpdateServiceBarcodeDto, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const row = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Servicio no encontrado');
@@ -262,12 +281,13 @@ export class ServicesService {
       where: { id },
       data: { codigoBarra: dto.codigoBarra.trim() || null },
     });
-    return this.getByIdOrThrow(id);
+    return this.getByIdOrThrow(id, actor);
   }
 
-  async duplicate(id: string) {
+  async duplicate(id: string, actor?: JwtRequestUser) {
+    const tenantId = this.requireTenant(actor);
     const source = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, tenantId },
       include: { attributes: true },
     });
     if (!source) throw new NotFoundException('Servicio no encontrado');
@@ -278,7 +298,7 @@ export class ServicesService {
       let n = 2;
       while (
         await tx.service.findFirst({
-          where: { nombre: nextName, deletedAt: null },
+          where: { nombre: nextName, deletedAt: null, tenantId },
           select: { id: true },
         })
       ) {
@@ -287,6 +307,7 @@ export class ServicesService {
 
       const created = await tx.service.create({
         data: {
+          tenantId,
           nombre: nextName,
           descripcion: source.descripcion,
           principioActivo: source.principioActivo,
@@ -339,12 +360,12 @@ export class ServicesService {
       return created.id;
     });
 
-    return this.getByIdOrThrow(cloneId);
+    return this.getByIdOrThrow(cloneId, actor);
   }
 
-  private async getByIdOrThrow(id: string) {
+  private async getByIdOrThrow(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
       select: selectServiceList,
     });
     if (!row) throw new NotFoundException('Servicio no encontrado');
@@ -360,8 +381,13 @@ export class ServicesService {
     };
   }
 
-  private buildData(dto: CreateServiceDto, unitId: string): Prisma.ServiceUncheckedCreateInput {
+  private buildData(
+    dto: CreateServiceDto,
+    unitId: string,
+    tenantId: string,
+  ): Prisma.ServiceUncheckedCreateInput {
     return {
+      tenantId,
       nombre: dto.nombre.trim(),
       descripcion: dto.descripcion?.trim() || null,
       principioActivo: dto.principioActivo?.trim() || null,

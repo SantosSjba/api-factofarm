@@ -59,8 +59,8 @@ export class UsersController {
   @RequirePermissions('users.read')
   @ApiOperation({ summary: 'Obtener usuario por id' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usersService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.usersService.findOne(id, actor);
   }
 
   @Patch(':id/permissions')
@@ -73,7 +73,7 @@ export class UsersController {
     @Body() dto: UpdateUserPermissionsDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.usersService.updatePermissions(id, dto.permissionCodes, actor.sub);
+    return this.usersService.updatePermissions(id, dto.permissionCodes, actor);
   }
 
   @Patch(':id')
@@ -86,7 +86,7 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.usersService.update(id, dto, actor.sub);
+    return this.usersService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -94,6 +94,6 @@ export class UsersController {
   @ApiOperation({ summary: 'Eliminar usuario (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.usersService.remove(id, actor.sub);
+    return this.usersService.remove(id, actor);
   }
 }

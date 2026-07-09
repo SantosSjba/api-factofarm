@@ -1,6 +1,8 @@
 model Brand {
   id        String   @id @default(uuid())
-  nombre    String   @unique
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  nombre    String
   deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -9,5 +11,7 @@ model Brand {
   services Service[]
   compoundProducts CompoundProduct[]
 
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
   @@index([deletedAt])
 }

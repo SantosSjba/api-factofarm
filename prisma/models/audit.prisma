@@ -1,6 +1,8 @@
 /// Registro de auditoría para operaciones CRUD críticas
 model AuditLog {
   id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   userId    String?
   action    String
   entity    String
@@ -10,6 +12,7 @@ model AuditLog {
   userAgent String?
   createdAt DateTime @default(now())
 
+  @@index([tenantId])
   @@index([userId])
   @@index([entity, entityId])
   @@index([createdAt])

@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateSaleDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
@@ -23,35 +24,41 @@ import { SalesService } from './sales.service';
 @ApiBearerAuth()
 @Controller('sales')
 export class SalesController {
-  constructor(private readonly service: SalesService) {}
+  constructor(
+    private readonly service: SalesService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get()
   @RequirePermissions('sales.read', 'nav.notas_venta', 'nav.punto_venta')
   @ApiOperation({ summary: 'Historial de ventas' })
-  findAll(@Query() query: SaleListQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findAll(actor.establecimientoId, query);
+  async findAll(@Query() query: SaleListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.findAll(establishmentId, query);
   }
 
   @Get('pos-catalog')
   @RequirePermissions('sales.read', 'nav.punto_venta')
   @ApiOperation({ summary: 'Catálogo rápido POS (búsqueda por nombre/código/barras)' })
-  posCatalog(
+  async posCatalog(
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Query('search') search: string | undefined,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.posCatalog(actor.establecimientoId, warehouseId, search);
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.posCatalog(establishmentId, warehouseId, search);
   }
 
   @Get('pos-substitutes')
   @RequirePermissions('sales.read', 'nav.punto_venta')
   @ApiOperation({ summary: 'Sugerencias de sustitutos genéricos/bioequivalentes con stock' })
-  posSubstitutes(
+  async posSubstitutes(
     @Query('productId', ParseUUIDPipe) productId: string,
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.suggestGenericSubstitutes(actor.establecimientoId, productId, warehouseId);
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.suggestGenericSubstitutes(establishmentId, productId, warehouseId);
   }
 
   @Post('check-interactions')
@@ -64,18 +71,20 @@ export class SalesController {
   @Get('void-requests')
   @RequirePermissions('sales.void', 'sales.write', 'nav.anulaciones')
   @ApiOperation({ summary: 'Solicitudes de anulación de venta' })
-  listVoidRequests(
+  async listVoidRequests(
     @Query('status') status: SaleVoidRequestStatus | undefined,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listVoidRequests(actor.establecimientoId, status);
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.listVoidRequests(establishmentId, status);
   }
 
   @Get(':id')
   @RequirePermissions('sales.read')
   @ApiOperation({ summary: 'Detalle de venta' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findOne(id, actor.establecimientoId);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.findOne(id, establishmentId);
   }
 
   @Post()

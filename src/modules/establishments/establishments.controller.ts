@@ -75,7 +75,7 @@ export class EstablishmentsController {
   @RequirePermissions('sales.read', 'nav.punto_venta')
   @ApiOperation({ summary: 'Números Yape/Plin del establecimiento activo (referencia POS)' })
   posPaymentSettings(@CurrentUser() actor: JwtRequestUser) {
-    return this.establishmentsService.getPosPaymentSettings(actor.establecimientoId);
+    return this.establishmentsService.getPosPaymentSettings(actor.establecimientoId, actor);
   }
 
   @Post()
@@ -91,24 +91,28 @@ export class EstablishmentsController {
   @ApiOperation({ summary: 'Actualizar establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: UpdateEstablishmentDto })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateEstablishmentDto) {
-    return this.establishmentsService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateEstablishmentDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.establishmentsService.update(id, dto, actor);
   }
 
   @Delete(':id')
   @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Eliminar establecimiento (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.establishmentsService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.remove(id, actor);
   }
 
   @Get(':id/series')
   @RequirePermissions('establishments.read', 'nav.establecimientos')
   @ApiOperation({ summary: 'Listar series de un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  listSeries(@Param('id', ParseUUIDPipe) id: string) {
-    return this.establishmentsService.listSeries(id);
+  listSeries(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.listSeries(id, actor);
   }
 
   @Post(':id/series')
@@ -119,8 +123,9 @@ export class EstablishmentsController {
   addSeries(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateEstablishmentSeriesDto,
+    @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.establishmentsService.addSeries(id, dto);
+    return this.establishmentsService.addSeries(id, dto, actor);
   }
 
   @Delete(':id/series/:seriesId')
@@ -131,7 +136,8 @@ export class EstablishmentsController {
   deleteSeries(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('seriesId', ParseUUIDPipe) seriesId: string,
+    @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.establishmentsService.deleteSeries(id, seriesId);
+    return this.establishmentsService.deleteSeries(id, seriesId, actor);
   }
 }

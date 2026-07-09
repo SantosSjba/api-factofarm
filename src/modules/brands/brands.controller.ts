@@ -33,8 +33,8 @@ export class BrandsController {
   @Get()
   @RequirePermissions('brands.read', 'nav.marcas')
   @ApiOperation({ summary: 'Listar marcas (paginado si page está presente)' })
-  findAll(@Query() query: MaestroListQueryDto) {
-    return this.brandsService.findAll(query);
+  findAll(@Query() query: MaestroListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.brandsService.findAll(query, actor);
   }
 
   @Post()
@@ -42,7 +42,7 @@ export class BrandsController {
   @ApiOperation({ summary: 'Crear marca' })
   @ApiBody({ type: CreateBrandDto })
   create(@Body() dto: CreateBrandDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.brandsService.create(dto, actor.sub);
+    return this.brandsService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -55,7 +55,7 @@ export class BrandsController {
     @Body() dto: UpdateBrandDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.brandsService.update(id, dto, actor.sub);
+    return this.brandsService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -63,6 +63,6 @@ export class BrandsController {
   @ApiOperation({ summary: 'Eliminar marca (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.brandsService.remove(id, actor.sub);
+    return this.brandsService.remove(id, actor);
   }
 }

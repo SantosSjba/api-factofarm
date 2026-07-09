@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateQuotationDto, QuotationListQueryDto } from './dto/quotation.dto';
 import { QuotationsService } from './quotations.service';
@@ -10,30 +11,33 @@ import { QuotationsService } from './quotations.service';
 @ApiBearerAuth()
 @Controller('quotations')
 export class QuotationsController {
-  constructor(private readonly service: QuotationsService) {}
+  constructor(
+    private readonly service: QuotationsService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get()
   @RequirePermissions('sales.read', 'nav.cotizaciones')
-  findAll(@Query() query: QuotationListQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findAll(actor.establecimientoId, query);
+  async findAll(@Query() query: QuotationListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
   @Get(':id')
   @RequirePermissions('sales.read', 'nav.cotizaciones')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findOne(id, actor.establecimientoId);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('sales.write', 'nav.cotizaciones')
   @ApiOperation({ summary: 'Crear cotización' })
-  create(@Body() dto: CreateQuotationDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(actor.establecimientoId, actor.sub, dto);
+  async create(@Body() dto: CreateQuotationDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.create(await this.scope.resolve(actor), actor.sub, dto);
   }
 
   @Post(':id/send')
   @RequirePermissions('sales.write', 'nav.cotizaciones')
-  markSent(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.markSent(id, actor.establecimientoId);
+  async markSent(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.markSent(id, await this.scope.resolve(actor));
   }
 }

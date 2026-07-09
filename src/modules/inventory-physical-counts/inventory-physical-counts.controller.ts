@@ -16,16 +16,20 @@ export class InventoryPhysicalCountsController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.reporte_inventario')
   @ApiOperation({ summary: 'Listar conteos físicos' })
-  findAll(@Query('page') page?: number, @Query('pageSize') pageSize?: number) {
-    return this.service.findAll(Number(page) || 1, Number(pageSize) || 10);
+  findAll(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ) {
+    return this.service.findAll(Number(page) || 1, Number(pageSize) || 10, actor);
   }
 
   @Get(':id')
   @RequirePermissions('inventory.read', 'nav.reporte_inventario')
   @ApiOperation({ summary: 'Detalle de conteo físico' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findOne(id, actor);
   }
 
   @Post()
@@ -33,7 +37,7 @@ export class InventoryPhysicalCountsController {
   @ApiOperation({ summary: 'Iniciar conteo físico' })
   @ApiBody({ type: CreatePhysicalCountDto })
   create(@Body() dto: CreatePhysicalCountDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(dto, actor.sub);
+    return this.service.create(dto, actor);
   }
 
   @Post(':id/items')
@@ -43,8 +47,9 @@ export class InventoryPhysicalCountsController {
   upsertItem(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpsertPhysicalCountItemDto,
+    @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertItem(id, dto);
+    return this.service.upsertItem(id, dto, actor);
   }
 
   @Post(':id/finalize')
@@ -52,6 +57,6 @@ export class InventoryPhysicalCountsController {
   @ApiOperation({ summary: 'Finalizar conteo y generar ajustes' })
   @ApiParam({ name: 'id', format: 'uuid' })
   finalize(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.finalize(id, actor.sub);
+    return this.service.finalize(id, actor);
   }
 }

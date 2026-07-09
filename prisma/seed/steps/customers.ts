@@ -1,14 +1,14 @@
 import type { CustomerDocumentType, PrismaClient } from '../../../src/generated/prisma/client';
 import { customersData, customerZonesData } from '../data/customers';
 
-export async function seedCustomers(prisma: PrismaClient): Promise<void> {
+export async function seedCustomers(prisma: PrismaClient, demoTenantId: string): Promise<void> {
   for (const zone of customerZonesData) {
     const nombre = zone.nombre.trim().toUpperCase();
     if (!nombre) continue;
     await prisma.customerZone.upsert({
-      where: { nombre },
+      where: { tenantId_nombre: { tenantId: demoTenantId, nombre } },
       update: { nombre, deletedAt: null },
-      create: { nombre },
+      create: { tenantId: demoTenantId, nombre },
     });
   }
 
@@ -36,7 +36,8 @@ export async function seedCustomers(prisma: PrismaClient): Promise<void> {
 
     const customer = await prisma.customer.upsert({
       where: {
-        tipoDocumento_numeroDocumento: {
+        tenantId_tipoDocumento_numeroDocumento: {
+          tenantId: demoTenantId,
           tipoDocumento: row.tipoDocumento as CustomerDocumentType,
           numeroDocumento,
         },
@@ -54,6 +55,7 @@ export async function seedCustomers(prisma: PrismaClient): Promise<void> {
         deletedAt: null,
       },
       create: {
+        tenantId: demoTenantId,
         nombre,
         tipoDocumento: row.tipoDocumento as CustomerDocumentType,
         numeroDocumento,

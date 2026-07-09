@@ -5,6 +5,7 @@ import {
   paginationArgs,
 } from '../../../common/dto/pagination.dto';
 import { CacheService } from '../../../common/cache/cache.service';
+import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { TenantsService } from '../../tenants/tenants.service';
@@ -192,13 +193,16 @@ export class EstablishmentsService {
     }
   }
 
-  async update(id: string, dto: UpdateEstablishmentDto) {
+  async update(id: string, dto: UpdateEstablishmentDto, actor?: JwtRequestUser) {
     const current = await this.prisma.establishment.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Establecimiento no encontrado');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     try {
@@ -212,13 +216,16 @@ export class EstablishmentsService {
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
     const current = await this.prisma.establishment.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Establecimiento no encontrado');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
     await this.prisma.establishment.update({
       where: { id },
@@ -262,8 +269,8 @@ export class EstablishmentsService {
     );
   }
 
-  async listSeries(establishmentId: string) {
-    await this.ensureEstablishment(establishmentId);
+  async listSeries(establishmentId: string, actor?: JwtRequestUser) {
+    await this.ensureEstablishment(establishmentId, actor);
     await this.ensureDefaultSeries(establishmentId);
     return this.prisma.establishmentSeries.findMany({
       where: { establishmentId },
@@ -279,8 +286,8 @@ export class EstablishmentsService {
     });
   }
 
-  async addSeries(establishmentId: string, dto: CreateEstablishmentSeriesDto) {
-    await this.ensureEstablishment(establishmentId);
+  async addSeries(establishmentId: string, dto: CreateEstablishmentSeriesDto, actor?: JwtRequestUser) {
+    await this.ensureEstablishment(establishmentId, actor);
 
     try {
       return await this.prisma.establishmentSeries.create({
@@ -307,8 +314,8 @@ export class EstablishmentsService {
     }
   }
 
-  async deleteSeries(establishmentId: string, seriesId: string) {
-    await this.ensureEstablishment(establishmentId);
+  async deleteSeries(establishmentId: string, seriesId: string, actor?: JwtRequestUser) {
+    await this.ensureEstablishment(establishmentId, actor);
     const removed = await this.prisma.establishmentSeries.deleteMany({
       where: { id: seriesId, establishmentId },
     });
@@ -317,13 +324,16 @@ export class EstablishmentsService {
     }
   }
 
-  private async ensureEstablishment(id: string) {
+  private async ensureEstablishment(id: string, actor?: JwtRequestUser) {
     const current = await this.prisma.establishment.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Establecimiento no encontrado');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
   }
 
@@ -458,7 +468,8 @@ export class EstablishmentsService {
     return data;
   }
 
-  async getPosPaymentSettings(establishmentId: string) {
+  async getPosPaymentSettings(establishmentId: string, actor?: JwtRequestUser) {
+    await this.ensureEstablishment(establishmentId, actor);
     const row = await this.prisma.establishment.findFirst({
       where: { id: establishmentId, deletedAt: null },
       select: {

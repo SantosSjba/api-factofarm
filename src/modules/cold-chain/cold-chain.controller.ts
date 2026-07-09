@@ -16,8 +16,11 @@ export class ColdChainController {
   @Get('temperature-logs')
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Listar registros de temperatura por zona' })
-  list(@Query('warehouseZoneId', ParseUUIDPipe) warehouseZoneId: string) {
-    return this.service.listByZone(warehouseZoneId);
+  list(
+    @Query('warehouseZoneId', ParseUUIDPipe) warehouseZoneId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.listByZone(warehouseZoneId, actor);
   }
 
   @Post('temperature-logs')
@@ -25,6 +28,6 @@ export class ColdChainController {
   @ApiOperation({ summary: 'Registrar temperatura de cadena de frío' })
   @ApiBody({ type: CreateTemperatureLogDto })
   create(@Body() dto: CreateTemperatureLogDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(dto, actor.sub);
+    return this.service.create(dto, actor);
   }
 }

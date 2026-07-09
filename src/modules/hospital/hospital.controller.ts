@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   CreateHospitalAreaDto,
@@ -24,47 +25,50 @@ import { HospitalService } from './hospital.service';
 @ApiBearerAuth()
 @Controller('hospital')
 export class HospitalController {
-  constructor(private readonly service: HospitalService) {}
+  constructor(
+    private readonly service: HospitalService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get('areas')
   @RequirePermissions('hospital.read', 'nav.hospital_dispensacion')
-  listAreas(@Query() query: HospitalAreaListQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.listAreas(actor.establecimientoId, query);
+  async listAreas(@Query() query: HospitalAreaListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.listAreas(await this.scope.resolve(actor), query);
   }
 
   @Post('areas')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  createArea(@Body() dto: CreateHospitalAreaDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createArea(actor.establecimientoId, dto, actor.sub);
+  async createArea(@Body() dto: CreateHospitalAreaDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.createArea(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get('consumptions')
   @RequirePermissions('hospital.read', 'nav.hospital_dispensacion')
-  listConsumptions(
+  async listConsumptions(
     @Query() query: HospitalConsumptionListQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listConsumptions(actor.establecimientoId, query);
+    return this.service.listConsumptions(await this.scope.resolve(actor), query);
   }
 
   @Post('consumptions')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  createConsumption(
+  async createConsumption(
     @Body() dto: CreateHospitalConsumptionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createConsumption(actor.establecimientoId, dto, actor.sub);
+    return this.service.createConsumption(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Patch('consumptions/:id/dispense')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  dispense(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.dispenseConsumption(id, actor.establecimientoId, actor.sub);
+  async dispense(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.dispenseConsumption(id, await this.scope.resolve(actor), actor.sub);
   }
 
   @Patch('consumptions/:id/cancel')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.cancelConsumption(id, actor.establecimientoId, actor.sub);
+  async cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.cancelConsumption(id, await this.scope.resolve(actor), actor.sub);
   }
 }

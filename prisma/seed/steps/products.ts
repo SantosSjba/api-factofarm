@@ -2,7 +2,7 @@ import { Prisma } from '../../../src/generated/prisma/client';
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { productsData } from '../data/products';
 
-export async function seedProducts(prisma: PrismaClient): Promise<void> {
+export async function seedProducts(prisma: PrismaClient, demoTenantId: string): Promise<void> {
   const [unit, currency, saleTax, establishments, categories, brands, attrTypes] = await Promise.all([
     prisma.unitOfMeasure.findFirst({
       where: { codigo: 'NIU', deletedAt: null },
@@ -110,6 +110,7 @@ export async function seedProducts(prisma: PrismaClient): Promise<void> {
     });
 
     const productData: Prisma.ProductUncheckedCreateInput = {
+      tenantId: demoTenantId,
       nombre: row.nombre.trim(),
       descripcion: row.descripcion?.trim() || null,
       codigoInterno,

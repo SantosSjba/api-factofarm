@@ -2,7 +2,7 @@ import { Prisma } from '../../../src/generated/prisma/client';
 import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { compoundProductsData, compoundProductPlatformsData } from '../data/compound-products';
 
-export async function seedCompoundProducts(prisma: PrismaClient): Promise<void> {
+export async function seedCompoundProducts(prisma: PrismaClient, demoTenantId: string): Promise<void> {
   for (const row of compoundProductPlatformsData) {
     const found = await prisma.compoundProductPlatform.findFirst({
       where: { nombre: row.nombre.trim() },
@@ -34,11 +34,11 @@ export async function seedCompoundProducts(prisma: PrismaClient): Promise<void> 
       select: { id: true },
     }),
     prisma.category.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, nombre: true },
     }),
     prisma.brand.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, nombre: true },
     }),
     prisma.compoundProductPlatform.findMany({
@@ -46,7 +46,7 @@ export async function seedCompoundProducts(prisma: PrismaClient): Promise<void> 
       select: { id: true, nombre: true },
     }),
     prisma.product.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, codigoInterno: true, precioUnitarioVenta: true, nombre: true },
     }),
   ]);
@@ -87,11 +87,12 @@ export async function seedCompoundProducts(prisma: PrismaClient): Promise<void> 
     const totalRef = parsedItems.reduce((acc, it) => acc.plus(it.total), new Prisma.Decimal(0));
 
     const existing = await prisma.compoundProduct.findFirst({
-      where: { codigoInterno: code, deletedAt: null },
+      where: { tenantId: demoTenantId, codigoInterno: code, deletedAt: null },
       select: { id: true },
     });
 
     const data: Prisma.CompoundProductUncheckedCreateInput = {
+      tenantId: demoTenantId,
       codigoInterno: code,
       nombre: row.nombre.trim(),
       nombreSecundario: row.nombreSecundario?.trim() || null,

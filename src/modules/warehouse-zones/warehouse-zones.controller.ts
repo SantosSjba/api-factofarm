@@ -26,8 +26,11 @@ export class WarehouseZonesController {
   @Get()
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Listar zonas BPA por almacén' })
-  findByWarehouse(@Query('warehouseId', ParseUUIDPipe) warehouseId: string) {
-    return this.service.findByWarehouse(warehouseId);
+  findByWarehouse(
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.findByWarehouse(warehouseId, actor);
   }
 
   @Post()
@@ -35,7 +38,7 @@ export class WarehouseZonesController {
   @ApiOperation({ summary: 'Crear zona de almacén (BPA)' })
   @ApiBody({ type: CreateWarehouseZoneDto })
   create(@Body() dto: CreateWarehouseZoneDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(dto, actor.sub);
+    return this.service.create(dto, actor);
   }
 
   @Patch(':id')
@@ -47,7 +50,7 @@ export class WarehouseZonesController {
     @Body() dto: UpdateWarehouseZoneDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.update(id, dto, actor.sub);
+    return this.service.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -55,6 +58,6 @@ export class WarehouseZonesController {
   @ApiOperation({ summary: 'Eliminar zona de almacén' })
   @ApiParam({ name: 'id', format: 'uuid' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.remove(id, actor.sub);
+    return this.service.remove(id, actor);
   }
 }

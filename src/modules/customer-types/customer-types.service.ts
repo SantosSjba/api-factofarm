@@ -6,6 +6,8 @@ import {
 } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerTypeDto } from './dto/create-customer-type.dto';
 import { UpdateCustomerTypeDto } from './dto/update-customer-type.dto';
@@ -24,8 +26,8 @@ export class CustomerTypesService {
     private readonly audit: AuditLogService,
   ) {}
 
-  async findAll(filters?: MaestroListQueryDto) {
-    const where = this.buildWhere(filters);
+  async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
+    const where = this.buildWhere(filters, actor ? tenantWhere(actorFromJwt(actor)) : {});
 
     if (filters?.page == null) {
       return this.prisma.customerType.findMany({
@@ -54,15 +56,16 @@ export class CustomerTypesService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async create(dto: CreateCustomerTypeDto, actorId?: string) {
+  async create(dto: CreateCustomerTypeDto, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     const descripcion = this.normalizeDescripcion(dto.descripcion);
     try {
       const created = await this.prisma.customerType.create({
-        data: { descripcion },
+        data: { descripcion, tenantId },
         select: selectCustomerType,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'CustomerType',
         entityId: created.id,
@@ -73,13 +76,16 @@ export class CustomerTypesService {
     }
   }
 
-  async update(id: string, dto: UpdateCustomerTypeDto, actorId?: string) {
+  async update(id: string, dto: UpdateCustomerTypeDto, actor?: JwtRequestUser) {
     const current = await this.prisma.customerType.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Tipo de cliente no encontrado');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     const data: Prisma.CustomerTypeUpdateInput = {};
@@ -94,7 +100,7 @@ export class CustomerTypesService {
         select: selectCustomerType,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'CustomerType',
         entityId: id,
@@ -106,13 +112,16 @@ export class CustomerTypesService {
     }
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor?: JwtRequestUser) {
     const current = await this.prisma.customerType.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!current) {
       throw new NotFoundException('Tipo de cliente no encontrado');
+    }
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
 
     await this.prisma.customerType.update({
@@ -120,14 +129,17 @@ export class CustomerTypesService {
       data: { deletedAt: new Date() },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'CustomerType',
       entityId: id,
     });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.CustomerTypeWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+    tenantFilter: Prisma.CustomerTypeWhereInput = {},
+  ): Prisma.CustomerTypeWhereInput {
     const search = filters?.search?.trim();
     const field = filters?.field?.trim().toLowerCase();
 
@@ -137,6 +149,7 @@ export class CustomerTypesService {
 
     return {
       deletedAt: null,
+      ...tenantFilter,
       ...(search
         ? {
             OR:

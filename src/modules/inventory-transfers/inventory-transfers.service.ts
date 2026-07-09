@@ -9,9 +9,9 @@ import {
   InventoryTransferStatus,
   Prisma,
 } from '../../generated/prisma/client';
-import { resolveEstablishmentScope } from '../../common/scoping/establishment-scope.util';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateInventoryTransferDto } from './dto/create-inventory-transfer.dto';
@@ -27,6 +27,7 @@ export class InventoryTransfersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly billing: BillingService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async findAll(query: InventoryTransferListQueryDto, actor: JwtRequestUser) {
@@ -35,7 +36,7 @@ export class InventoryTransfersService {
       pageSize: query.pageSize,
     });
 
-    const scopedEstablishmentId = resolveEstablishmentScope(actor, query.establishmentId);
+    const scopedEstablishmentId = await this.scope.resolve(actor, query.establishmentId);
     const scopedWarehouses = await this.prisma.warehouse.findMany({
       where: { establishmentId: scopedEstablishmentId, deletedAt: null },
       select: { id: true },

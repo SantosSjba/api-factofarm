@@ -46,6 +46,16 @@ export function assertTenantAccess(
   }
 }
 
+export function requireTenantId(actor: TenantScopeActor): string {
+  if (isPlatformAdmin(actor.role)) {
+    throw new ForbiddenException('Use la consola de plataforma para esta operación');
+  }
+  if (!actor.tenantId) {
+    throw new ForbiddenException('Usuario sin tenant asignado');
+  }
+  return actor.tenantId;
+}
+
 export function actorFromJwt(actor: {
   role: UserRole;
   tenantId?: string | null;

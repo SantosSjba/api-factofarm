@@ -13,6 +13,7 @@ import { expandUserPermissionCodes } from '../../../common/permissions/nav-permi
 import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
+import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
 import { TenantsService } from '../../tenants/tenants.service';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { USER_REPOSITORY } from '../domain/user.repository';
@@ -111,15 +112,21 @@ export class UsersService {
     });
   }
 
-  async findOne(id: string): Promise<UserSnapshot> {
+  async findOne(id: string, actor?: JwtRequestUser): Promise<UserSnapshot> {
     const u = await this.users.findById(id);
     if (!u) throw new NotFoundException('Usuario no encontrado');
+    if (actor) {
+      this.assertUserTenantAccess(u, actor);
+    }
     return u;
   }
 
-  async update(id: string, dto: UpdateUserDto, actorId?: string): Promise<UserSnapshot> {
+  async update(id: string, dto: UpdateUserDto, actor?: JwtRequestUser): Promise<UserSnapshot> {
     const current = await this.users.findById(id);
     if (!current) throw new NotFoundException('Usuario no encontrado');
+    if (actor) {
+      this.assertUserTenantAccess(current, actor);
+    }
 
     if (dto.email && dto.email.toLowerCase().trim() !== current.email) {
       const taken = await this.users.findByEmail(dto.email.toLowerCase().trim());
@@ -138,6 +145,9 @@ export class UsersService {
     }
 
     const role = dto.role ?? current.role;
+    if (dto.role === UserRole.SUPER_ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo plataforma puede asignar super administrador');
+    }
     const patch: UpdateUserInput = {};
     if (dto.nombre !== undefined) patch.nombre = dto.nombre.trim();
     if (dto.email !== undefined) patch.email = dto.email.toLowerCase().trim();
@@ -145,7 +155,13 @@ export class UsersService {
       patch.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     }
     if (dto.role !== undefined) patch.role = dto.role;
-    if (dto.establecimientoId !== undefined) patch.establecimientoId = dto.establecimientoId;
+    if (dto.establecimientoId !== undefined) {
+      const tenantId = current.tenantId ?? actor?.tenantId;
+      if (tenantId) {
+        await this.assertEstablishmentBelongsToTenant(dto.establecimientoId, tenantId);
+      }
+      patch.establecimientoId = dto.establecimientoId;
+    }
     if (dto.profile !== undefined) patch.profile = this.mapProfileDto(dto.profile);
     if (dto.permissionCodes !== undefined) {
       patch.permissionCodes = this.normalizePermissionCodes(dto.permissionCodes, role);
@@ -155,7 +171,7 @@ export class UsersService {
 
     const updated = await this.users.update(id, patch);
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE',
       entity: 'User',
       entityId: id,
@@ -166,10 +182,13 @@ export class UsersService {
   async updatePermissions(
     id: string,
     permissionCodes: string[],
-    actorId?: string,
+    actor?: JwtRequestUser,
   ): Promise<UserSnapshot> {
     const current = await this.users.findById(id);
     if (!current) throw new NotFoundException('Usuario no encontrado');
+    if (actor) {
+      this.assertUserTenantAccess(current, actor);
+    }
 
     const normalized = this.normalizePermissionCodes(permissionCodes, current.role);
     if (!normalized?.length) {
@@ -178,7 +197,7 @@ export class UsersService {
 
     const updated = await this.users.syncPermissions(id, normalized);
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPDATE_PERMISSIONS',
       entity: 'User',
       entityId: id,
@@ -187,16 +206,28 @@ export class UsersService {
     return updated;
   }
 
-  async remove(id: string, actorId?: string): Promise<void> {
+  async remove(id: string, actor?: JwtRequestUser): Promise<void> {
     const current = await this.users.findById(id);
     if (!current) throw new NotFoundException('Usuario no encontrado');
+    if (actor) {
+      this.assertUserTenantAccess(current, actor);
+    }
     await this.users.delete(id);
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'User',
       entityId: id,
     });
+  }
+
+  private assertUserTenantAccess(user: UserSnapshot, actor: JwtRequestUser): void {
+    if (user.role === UserRole.SUPER_ADMIN && actor.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('No puede acceder a usuarios de plataforma');
+    }
+    if (user.tenantId) {
+      assertTenantAccess(actorFromJwt(actor), user.tenantId);
+    }
   }
 
   private resolvePermissionCodes(

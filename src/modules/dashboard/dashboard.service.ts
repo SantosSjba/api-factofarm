@@ -1,5 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { actorFromJwt, requireTenantId } from '../../common/scoping/tenant-scope.util';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type DashboardInventoryAlerts = {
@@ -21,9 +25,21 @@ export type DashboardStats = {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly establishmentScope: EstablishmentScopeService,
+  ) {}
 
-  async getStats(): Promise<DashboardStats> {
+  private tenantIdForDashboard(actor: JwtRequestUser): string {
+    const scope = actorFromJwt(actor);
+    if (isPlatformAdmin(scope.role)) {
+      throw new ForbiddenException('Use la consola de plataforma (/platform/clientes)');
+    }
+    return requireTenantId(scope);
+  }
+
+  async getStats(actor: JwtRequestUser): Promise<DashboardStats> {
+    const tenantId = this.tenantIdForDashboard(actor);
     const now = new Date();
     const in30 = new Date(now);
     in30.setDate(in30.getDate() + 30);
@@ -45,25 +61,41 @@ export class DashboardService {
       porVencer90,
       zonasFrioSinLogHoy,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { deletedAt: null } }),
-      this.prisma.establishment.count({ where: { deletedAt: null, activo: true } }),
-      this.prisma.customer.count({ where: { deletedAt: null, activo: true } }),
-      this.prisma.product.count({ where: { deletedAt: null, habilitado: true } }),
+      this.prisma.user.count({
+        where: { tenantId, deletedAt: null, role: { not: 'SUPER_ADMIN' } },
+      }),
+      this.prisma.establishment.count({
+        where: { tenantId, deletedAt: null, activo: true },
+      }),
+      this.prisma.customer.count({
+        where: { tenantId, deletedAt: null, activo: true },
+      }),
+      this.prisma.product.count({
+        where: { tenantId, deletedAt: null, habilitado: true },
+      }),
       this.prisma.productWarehouseStock.findMany({
         where: {
-          product: { deletedAt: null, habilitado: true },
-          warehouse: { deletedAt: null },
+          product: { tenantId, deletedAt: null, habilitado: true },
+          warehouse: { deletedAt: null, establishment: { tenantId } },
         },
         select: { cantidad: true, product: { select: { stockMinimo: true } } },
       }),
       this.prisma.productLotStock.count({
-        where: { deletedAt: null, stock: { gt: 0 }, fechaVencimiento: { lt: now } },
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { lt: now },
+          product: { tenantId },
+          warehouse: { establishment: { tenantId } },
+        },
       }),
       this.prisma.productLotStock.count({
         where: {
           deletedAt: null,
           stock: { gt: 0 },
           fechaVencimiento: { gte: now, lte: in30 },
+          product: { tenantId },
+          warehouse: { establishment: { tenantId } },
         },
       }),
       this.prisma.productLotStock.count({
@@ -71,6 +103,8 @@ export class DashboardService {
           deletedAt: null,
           stock: { gt: 0 },
           fechaVencimiento: { gt: in30, lte: in60 },
+          product: { tenantId },
+          warehouse: { establishment: { tenantId } },
         },
       }),
       this.prisma.productLotStock.count({
@@ -78,6 +112,8 @@ export class DashboardService {
           deletedAt: null,
           stock: { gt: 0 },
           fechaVencimiento: { gt: in60, lte: in90 },
+          product: { tenantId },
+          warehouse: { establishment: { tenantId } },
         },
       }),
       this.prisma.warehouseZone.count({
@@ -85,6 +121,7 @@ export class DashboardService {
           deletedAt: null,
           activo: true,
           tipo: 'REFRIGERADO',
+          warehouse: { establishment: { tenantId } },
           temperatureLogs: { none: { fecha: { gte: startOfDay } } },
         },
       }),
@@ -110,10 +147,10 @@ export class DashboardService {
     };
   }
 
-  /** Vista consolidada multi-sucursal para administradores de cadena. */
-  async getChainSummary() {
+  async getChainSummary(actor: JwtRequestUser) {
+    const tenantId = this.tenantIdForDashboard(actor);
     const establishments = await this.prisma.establishment.findMany({
-      where: { deletedAt: null, activo: true },
+      where: { tenantId, deletedAt: null, activo: true },
       select: { id: true, nombre: true, codigo: true },
       orderBy: { nombre: 'asc' },
     });
@@ -142,7 +179,10 @@ export class DashboardService {
             _sum: { total: true },
           }),
           this.prisma.productWarehouseStock.aggregate({
-            where: { warehouse: { establishmentId: est.id, deletedAt: null } },
+            where: {
+              product: { tenantId },
+              warehouse: { establishmentId: est.id, deletedAt: null },
+            },
             _sum: { cantidad: true },
           }),
         ]);
@@ -160,7 +200,8 @@ export class DashboardService {
     return { periodDays: 30, establishments: rows };
   }
 
-  async getManagerDashboard(establishmentId: string) {
+  async getManagerDashboard(actor: JwtRequestUser) {
+    const establishmentId = await this.establishmentScope.resolveScoped(actor);
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startOfWeek = new Date(startOfDay);
@@ -209,7 +250,10 @@ export class DashboardService {
     };
   }
 
-  async getPharmacistDashboard(establishmentId: string) {
+  async getPharmacistDashboard(actor: JwtRequestUser) {
+    const establishmentId = await this.establishmentScope.resolveScoped(actor);
+    const tenantId = requireTenantId(actorFromJwt(actor));
+
     const [pendingPrescriptions, pendingVoids, controlledProducts] = await Promise.all([
       this.prisma.prescription.count({
         where: {
@@ -222,7 +266,7 @@ export class DashboardService {
         where: { establishmentId, status: 'PENDIENTE' },
       }),
       this.prisma.product.count({
-        where: { esControlado: true, deletedAt: null, habilitado: true },
+        where: { tenantId, esControlado: true, deletedAt: null, habilitado: true },
       }),
     ]);
 
@@ -233,7 +277,8 @@ export class DashboardService {
     };
   }
 
-  async getCashierDashboard(establishmentId: string, userId: string) {
+  async getCashierDashboard(actor: JwtRequestUser) {
+    const establishmentId = await this.establishmentScope.resolveScoped(actor);
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -241,7 +286,7 @@ export class DashboardService {
       this.prisma.sale.aggregate({
         where: {
           establishmentId,
-          sellerId: userId,
+          sellerId: actor.sub,
           deletedAt: null,
           estado: 'COMPLETADA',
           createdAt: { gte: startOfDay },
@@ -252,7 +297,7 @@ export class DashboardService {
       this.prisma.cashSession.findFirst({
         where: {
           estado: 'ABIERTA',
-          userId,
+          userId: actor.sub,
           cashRegister: { establishmentId },
         },
         select: { id: true, openedAt: true, montoApertura: true },

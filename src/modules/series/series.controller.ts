@@ -1,6 +1,8 @@
 import { Controller, Delete, Get, Param, Patch, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { SeriesListQueryDto } from './dto/series-list-query.dto';
 import { UpdateSeriesStatusDto } from './dto/update-series-status.dto';
 import { SeriesService } from './series.service';
@@ -13,29 +15,34 @@ export class SeriesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar series' })
-  list(@Query() query: SeriesListQueryDto) {
-    return this.seriesService.list(query);
+  list(@Query() query: SeriesListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.seriesService.list(query, actor);
   }
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Actualizar estado de serie' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateSeriesStatusDto) {
-    return this.seriesService.updateStatus(id, dto);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateSeriesStatusDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.seriesService.updateStatus(id, dto, actor);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar serie (soft delete)' })
-  remove(@Param('id') id: string) {
-    return this.seriesService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.seriesService.remove(id, actor);
   }
 
   @Get('export')
   @ApiOperation({ summary: 'Exportar series' })
   async export(
     @Query() query: SeriesListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const buffer = await this.seriesService.buildExportBuffer(query);
+    const buffer = await this.seriesService.buildExportBuffer(query, actor);
     const filename = 'series.xlsx';
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { AgreementsService } from './agreements.service';
 import {
@@ -27,82 +28,85 @@ import {
 @ApiBearerAuth()
 @Controller('agreements')
 export class AgreementsController {
-  constructor(private readonly service: AgreementsService) {}
+  constructor(
+    private readonly service: AgreementsService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get()
   @RequirePermissions('agreements.read', 'nav.convenios')
-  findAll(@Query() query: AgreementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findAll(actor.establecimientoId, query);
+  async findAll(@Query() query: AgreementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
   @Get(':id')
   @RequirePermissions('agreements.read', 'nav.convenios')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.findOne(id, actor.establecimientoId);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('agreements.write', 'nav.convenios')
-  create(@Body() dto: CreateAgreementDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(actor.establecimientoId, dto, actor.sub);
+  async create(@Body() dto: CreateAgreementDto, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.create(await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Patch(':id')
   @RequirePermissions('agreements.write', 'nav.convenios')
-  update(
+  async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAgreementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.update(id, actor.establecimientoId, dto, actor.sub);
+    return this.service.update(id, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Delete(':id')
   @RequirePermissions('agreements.write', 'nav.convenios')
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.remove(id, actor.establecimientoId, actor.sub);
+  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    return this.service.remove(id, await this.scope.resolve(actor), actor.sub);
   }
 
   @Post(':id/product-prices')
   @RequirePermissions('agreements.write', 'nav.convenios')
-  upsertPrices(
+  async upsertPrices(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpsertAgreementPricesDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertPrices(id, actor.establecimientoId, dto, actor.sub);
+    return this.service.upsertPrices(id, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get(':id/settlement')
   @ApiOperation({ summary: 'Liquidación de ventas del convenio en un rango' })
   @RequirePermissions('agreements.read', 'nav.convenios')
-  settlement(
+  async settlement(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: AgreementSettlementQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.getSettlement(id, actor.establecimientoId, query);
+    return this.service.getSettlement(id, await this.scope.resolve(actor), query);
   }
 
   @Post(':id/monthly-billing')
   @ApiOperation({ summary: 'Generar facturación mensual del convenio' })
   @RequirePermissions('agreements.write', 'nav.convenios')
-  monthlyBilling(
+  async monthlyBilling(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: GenerateMonthlyBillingDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.generateMonthlyBilling(id, actor.establecimientoId, dto, actor.sub);
+    return this.service.generateMonthlyBilling(id, await this.scope.resolve(actor), dto, actor.sub);
   }
 
   @Get(':id/export-institutional')
   @ApiOperation({ summary: 'Export CSV SIS/EsSalud/EPS' })
   @RequirePermissions('agreements.read', 'nav.convenios')
-  exportInstitutional(
+  async exportInstitutional(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: AgreementSettlementQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.exportInstitutionalCsv(id, actor.establecimientoId, query);
+    return this.service.exportInstitutionalCsv(id, await this.scope.resolve(actor), query);
   }
 }

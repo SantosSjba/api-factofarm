@@ -13,10 +13,12 @@ export class PrismaFileRepository implements IFileRepository {
     tamanoBytes: number;
     rutaRelativa: string;
     uploadedByUserId: string | null;
+    tenantId?: string | null;
   }): Promise<ArchivoRow> {
     const row = await this.prisma.archivo.create({ data });
     return {
       id: row.id,
+      tenantId: row.tenantId,
       nombreOriginal: row.nombreOriginal,
       mimeType: row.mimeType,
       tamanoBytes: row.tamanoBytes,
@@ -29,6 +31,7 @@ export class PrismaFileRepository implements IFileRepository {
     if (!row) return null;
     return {
       id: row.id,
+      tenantId: row.tenantId,
       nombreOriginal: row.nombreOriginal,
       mimeType: row.mimeType,
       tamanoBytes: row.tamanoBytes,

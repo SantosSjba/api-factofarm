@@ -6,6 +6,8 @@ import {
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { SupplierListQueryDto } from './dto/supplier-list-query.dto';
@@ -59,7 +61,7 @@ export class SuppliersService {
     private readonly audit: AuditLogService,
   ) {}
 
-  async list(query: SupplierListQueryDto) {
+  async list(query: SupplierListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -77,6 +79,7 @@ export class SuppliersService {
 
     const where: Prisma.SupplierWhereInput = {
       deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(searchable.length ? { OR: searchable } : {}),
     };
 
@@ -94,31 +97,36 @@ export class SuppliersService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async findAllOptions() {
+  async findAllOptions(actor?: JwtRequestUser) {
     return this.prisma.supplier.findMany({
-      where: { deletedAt: null, habilitado: true },
+      where: { deletedAt: null, habilitado: true, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
       orderBy: { razonSocial: 'asc' },
       select: { id: true, razonSocial: true, numeroDocumento: true },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.supplier.findFirst({
       where: { id, deletedAt: null },
-      select: selectSupplier,
+      select: { ...selectSupplier, tenantId: true },
     });
     if (!row) throw new NotFoundException('Proveedor no encontrado');
-    return row;
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), row.tenantId);
+    }
+    const { tenantId: _tenantId, ...supplier } = row;
+    return supplier;
   }
 
-  async create(dto: CreateSupplierDto, actorId?: string) {
+  async create(dto: CreateSupplierDto, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     try {
       const created = await this.prisma.supplier.create({
-        data: this.toCreateInput(dto),
+        data: this.toCreateInput(dto, tenantId),
         select: selectSupplier,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'CREATE',
         entity: 'Supplier',
         entityId: created.id,
@@ -129,8 +137,8 @@ export class SuppliersService {
     }
   }
 
-  async update(id: string, dto: UpdateSupplierDto, actorId?: string) {
-    await this.ensureSupplier(id);
+  async update(id: string, dto: UpdateSupplierDto, actor?: JwtRequestUser) {
+    await this.ensureSupplier(id, actor);
     try {
       const updated = await this.prisma.supplier.update({
         where: { id },
@@ -138,7 +146,7 @@ export class SuppliersService {
         select: selectSupplier,
       });
       await this.audit.log({
-        userId: actorId,
+        userId: actor?.sub,
         action: 'UPDATE',
         entity: 'Supplier',
         entityId: id,
@@ -150,22 +158,22 @@ export class SuppliersService {
     }
   }
 
-  async remove(id: string, actorId?: string) {
-    await this.ensureSupplier(id);
+  async remove(id: string, actor?: JwtRequestUser) {
+    await this.ensureSupplier(id, actor);
     await this.prisma.supplier.update({
       where: { id },
       data: { deletedAt: new Date(), habilitado: false },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'Supplier',
       entityId: id,
     });
   }
 
-  async listProducts(supplierId: string) {
-    await this.ensureSupplier(supplierId);
+  async listProducts(supplierId: string, actor?: JwtRequestUser) {
+    await this.ensureSupplier(supplierId, actor);
     const rows = await this.prisma.supplierProduct.findMany({
       where: { supplierId },
       orderBy: { createdAt: 'desc' },
@@ -180,14 +188,20 @@ export class SuppliersService {
   async upsertProduct(
     supplierId: string,
     dto: UpsertSupplierProductDto,
-    actorId?: string,
+    actor?: JwtRequestUser,
   ) {
-    await this.ensureSupplier(supplierId);
+    const supplier = await this.ensureSupplier(supplierId, actor);
     const product = await this.prisma.product.findFirst({
       where: { id: dto.productId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), product.tenantId);
+    }
+    if (supplier.tenantId !== product.tenantId) {
+      throw new NotFoundException('Producto no encontrado');
+    }
 
     const data = {
       codigoProveedor: dto.codigoProveedor?.trim() || null,
@@ -206,7 +220,7 @@ export class SuppliersService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'UPSERT',
       entity: 'SupplierProduct',
       entityId: row.id,
@@ -216,8 +230,8 @@ export class SuppliersService {
     return { ...row, precioCompra: row.precioCompra?.toString() ?? null };
   }
 
-  async removeProduct(supplierId: string, productId: string, actorId?: string) {
-    await this.ensureSupplier(supplierId);
+  async removeProduct(supplierId: string, productId: string, actor?: JwtRequestUser) {
+    await this.ensureSupplier(supplierId, actor);
     const link = await this.prisma.supplierProduct.findUnique({
       where: { supplierId_productId: { supplierId, productId } },
       select: { id: true },
@@ -228,23 +242,28 @@ export class SuppliersService {
       where: { supplierId_productId: { supplierId, productId } },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor?.sub,
       action: 'DELETE',
       entity: 'SupplierProduct',
       entityId: link.id,
     });
   }
 
-  private async ensureSupplier(id: string) {
+  private async ensureSupplier(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.supplier.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!row) throw new NotFoundException('Proveedor no encontrado');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), row.tenantId);
+    }
+    return row;
   }
 
-  private toCreateInput(dto: CreateSupplierDto): Prisma.SupplierCreateInput {
+  private toCreateInput(dto: CreateSupplierDto, tenantId: string): Prisma.SupplierCreateInput {
     return {
+      tenant: { connect: { id: tenantId } },
       razonSocial: dto.razonSocial.trim().toUpperCase(),
       nombreComercial: dto.nombreComercial?.trim() || null,
       tipoDocumento: dto.tipoDocumento,
@@ -315,8 +334,8 @@ export class SuppliersService {
     return data;
   }
 
-  async listPurchaseHistory(supplierId: string) {
-    await this.findOne(supplierId);
+  async listPurchaseHistory(supplierId: string, actor?: JwtRequestUser) {
+    await this.findOne(supplierId, actor);
     const rows = await this.prisma.purchaseOrder.findMany({
       where: { supplierId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
