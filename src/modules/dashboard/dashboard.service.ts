@@ -6,6 +6,18 @@ import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 
+export type SalesTrendPoint = {
+  date: string;
+  label: string;
+  total: string;
+  count: number;
+};
+
+export type SalesTrend = {
+  periodDays: number;
+  points: SalesTrendPoint[];
+};
+
 export type DashboardInventoryAlerts = {
   stockBajo: number;
   lotesVencidos: number;
@@ -198,6 +210,47 @@ export class DashboardService {
     );
 
     return { periodDays: 30, establishments: rows };
+  }
+
+  async getSalesTrend(actor: JwtRequestUser, periodDays = 14): Promise<SalesTrend> {
+    const tenantId = this.tenantIdForDashboard(actor);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(today);
+    start.setDate(start.getDate() - (periodDays - 1));
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        deletedAt: null,
+        estado: 'COMPLETADA',
+        createdAt: { gte: start },
+        establishment: { tenantId },
+      },
+      select: { createdAt: true, total: true },
+    });
+
+    const buckets = new Map<string, { total: Prisma.Decimal; count: number }>();
+    for (let i = 0; i < periodDays; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      buckets.set(d.toISOString().slice(0, 10), { total: new Prisma.Decimal(0), count: 0 });
+    }
+    for (const sale of sales) {
+      const key = sale.createdAt.toISOString().slice(0, 10);
+      const bucket = buckets.get(key);
+      if (!bucket) continue;
+      bucket.total = bucket.total.plus(sale.total);
+      bucket.count += 1;
+    }
+
+    const points = [...buckets.entries()].map(([date, row]) => ({
+      date,
+      label: `${date.slice(8, 10)}/${date.slice(5, 7)}`,
+      total: row.total.toFixed(2),
+      count: row.count,
+    }));
+
+    return { periodDays, points };
   }
 
   async getManagerDashboard(actor: JwtRequestUser) {

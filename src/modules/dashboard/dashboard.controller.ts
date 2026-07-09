@@ -25,6 +25,13 @@ export class DashboardController {
     return this.dashboard.getChainSummary(actor);
   }
 
+  @Get('sales-trend')
+  @RequirePermissions('nav.dashboard_admin')
+  @ApiOperation({ summary: 'Tendencia de ventas diarias (últimos 14 días)' })
+  getSalesTrend(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getSalesTrend(actor);
+  }
+
   @Get('manager')
   @RequirePermissions('nav.dashboard_admin')
   @ApiOperation({ summary: 'Dashboard gerente de sucursal' })

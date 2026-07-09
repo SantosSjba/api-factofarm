@@ -1,6 +1,6 @@
-import { MockBillingProvider } from '../providers/mock-billing.provider';
-import { getBillingProviderCapabilities } from '../utils/billing-capabilities.util';
-import { BillingProviderType } from '../../../generated/prisma/client';
+import { MockBillingProvider } from './providers/mock-billing.provider';
+import { getBillingProviderCapabilities } from './utils/billing-capabilities.util';
+import { BillingProviderType } from '../../generated/prisma/client';
 
 describe('Billing sale flow (mock OSE)', () => {
   const mock = new MockBillingProvider();
