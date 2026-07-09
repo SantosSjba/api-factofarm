@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isTaxGravado } from '../../../common/utils/sale-pricing.util';
 import type { EmitDocumentInput } from '../domain/billing-provider.port';
 
 @Injectable()
@@ -43,18 +44,7 @@ export class UblBuilderService {
       <cbc:ID>${line.lineNumber}</cbc:ID>
       <cbc:InvoicedQuantity unitCode="NIU">${line.cantidad}</cbc:InvoicedQuantity>
       <cbc:LineExtensionAmount currencyID="${input.moneda}">${line.subtotalLinea}</cbc:LineExtensionAmount>
-      <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="${input.moneda}">${line.igvLinea}</cbc:TaxAmount>
-        <cac:TaxSubtotal>
-          <cbc:TaxableAmount currencyID="${input.moneda}">${line.subtotalLinea}</cbc:TaxableAmount>
-          <cbc:TaxAmount currencyID="${input.moneda}">${line.igvLinea}</cbc:TaxAmount>
-          <cac:TaxCategory>
-            <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier">${line.taxAffectationCodigo ?? '10'}</cbc:ID>
-            <cbc:Percent>18.00</cbc:Percent>
-            <cac:TaxScheme><cbc:ID>1000</cbc:ID><cbc:Name>IGV</cbc:Name><cbc:TaxTypeCode>VAT</cbc:TaxTypeCode></cac:TaxScheme>
-          </cac:TaxCategory>
-        </cac:TaxSubtotal>
-      </cac:TaxTotal>
+      ${this.buildLineTaxXml(input.moneda, line.subtotalLinea, line.igvLinea, line.taxAffectationCodigo)}
       <cac:Item><cbc:Description>${this.escape(line.descripcion)}</cbc:Description></cac:Item>
       <cac:Price><cbc:PriceAmount currencyID="${input.moneda}">${line.precioUnitario}</cbc:PriceAmount></cac:Price>
     </cac:InvoiceLine>`,
@@ -131,18 +121,7 @@ export class UblBuilderService {
       <cbc:ID>${line.lineNumber}</cbc:ID>
       <cbc:CreditedQuantity unitCode="NIU">${line.cantidad}</cbc:CreditedQuantity>
       <cbc:LineExtensionAmount currencyID="${input.moneda}">${line.subtotalLinea}</cbc:LineExtensionAmount>
-      <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="${input.moneda}">${line.igvLinea}</cbc:TaxAmount>
-        <cac:TaxSubtotal>
-          <cbc:TaxableAmount currencyID="${input.moneda}">${line.subtotalLinea}</cbc:TaxableAmount>
-          <cbc:TaxAmount currencyID="${input.moneda}">${line.igvLinea}</cbc:TaxAmount>
-          <cac:TaxCategory>
-            <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier">${line.taxAffectationCodigo ?? '10'}</cbc:ID>
-            <cbc:Percent>18.00</cbc:Percent>
-            <cac:TaxScheme><cbc:ID>1000</cbc:ID><cbc:Name>IGV</cbc:Name><cbc:TaxTypeCode>VAT</cbc:TaxTypeCode></cac:TaxScheme>
-          </cac:TaxCategory>
-        </cac:TaxSubtotal>
-      </cac:TaxTotal>
+      ${this.buildLineTaxXml(input.moneda, line.subtotalLinea, line.igvLinea, line.taxAffectationCodigo)}
       <cac:Item><cbc:Description>${this.escape(line.descripcion)}</cbc:Description></cac:Item>
       <cac:Price><cbc:PriceAmount currencyID="${input.moneda}">${line.precioUnitario}</cbc:PriceAmount></cac:Price>
     </cac:CreditNoteLine>`,
@@ -191,6 +170,28 @@ export class UblBuilderService {
   </cac:LegalMonetaryTotal>
   ${linesXml}
 </CreditNote>`;
+  }
+
+  private buildLineTaxXml(
+    moneda: string,
+    subtotalLinea: string,
+    igvLinea: string,
+    taxAffectationCodigo?: string | null,
+  ): string {
+    const codigo = taxAffectationCodigo ?? '10';
+    const percent = isTaxGravado(codigo) ? '18.00' : '0.00';
+    return `<cac:TaxTotal>
+        <cbc:TaxAmount currencyID="${moneda}">${igvLinea}</cbc:TaxAmount>
+        <cac:TaxSubtotal>
+          <cbc:TaxableAmount currencyID="${moneda}">${subtotalLinea}</cbc:TaxableAmount>
+          <cbc:TaxAmount currencyID="${moneda}">${igvLinea}</cbc:TaxAmount>
+          <cac:TaxCategory>
+            <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier">${codigo}</cbc:ID>
+            <cbc:Percent>${percent}</cbc:Percent>
+            <cac:TaxScheme><cbc:ID>1000</cbc:ID><cbc:Name>IGV</cbc:Name><cbc:TaxTypeCode>VAT</cbc:TaxTypeCode></cac:TaxScheme>
+          </cac:TaxCategory>
+        </cac:TaxSubtotal>
+      </cac:TaxTotal>`;
   }
 
   private escape(value: string): string {

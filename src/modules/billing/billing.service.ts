@@ -912,9 +912,24 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async resolveProvider(establishmentId: string): Promise<IBillingProvider> {
+    const nodeEnv = this.config.get<string>('NODE_ENV');
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
     });
+
+    if (nodeEnv === 'production') {
+      if (!config || config.provider === BillingProviderType.MOCK) {
+        throw new BadRequestException(
+          'Facturación electrónica: en producción debe configurar un proveedor OSE (Factiliza o Nubefact) con credenciales válidas.',
+        );
+      }
+      if (!config.apiTokenEncrypted?.trim()) {
+        throw new BadRequestException(
+          'Facturación electrónica: configure el token API del proveedor OSE antes de emitir comprobantes.',
+        );
+      }
+    }
+
     if (config?.provider === BillingProviderType.FACTILIZA) {
       const token = config.apiTokenEncrypted
         ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SunatDocumentStatus } from '../../../generated/prisma/client';
 import type {
   DailySummaryInput,
@@ -10,6 +11,7 @@ import type {
   VoidDocumentInput,
   VoidDocumentResult,
 } from '../domain/billing-provider.port';
+import { assertOseCredentialsOrThrow } from '../utils/billing-provider-guard.util';
 import { MockBillingProvider } from './mock-billing.provider';
 
 type NubefactResponse = {
@@ -30,7 +32,10 @@ type NubefactResponse = {
 export class NubefactBillingProvider implements IBillingProvider {
   private readonly logger = new Logger(NubefactBillingProvider.name);
 
-  constructor(private readonly mock: MockBillingProvider) {}
+  constructor(
+    private readonly mock: MockBillingProvider,
+    private readonly config: ConfigService,
+  ) {}
 
   private apiUrl: string | null = null;
   private apiToken: string | null = null;
@@ -41,8 +46,11 @@ export class NubefactBillingProvider implements IBillingProvider {
   }
 
   async emit(input: EmitDocumentInput): Promise<EmitDocumentResult> {
-    if (!this.apiUrl?.trim() || !this.apiToken?.trim()) {
-      this.logger.warn('Nubefact sin credenciales; usando mock');
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
+    assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
+    if (!hasCredentials) {
+      this.logger.warn('Nubefact sin credenciales; usando mock (solo desarrollo)');
       return this.mock.emit(input);
     }
 
@@ -89,7 +97,12 @@ export class NubefactBillingProvider implements IBillingProvider {
   }
 
   async getStatus(externalId: string): Promise<DocumentStatusResult> {
-    if (!this.apiUrl?.trim() || !this.apiToken?.trim()) {
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
+    if (!hasCredentials) {
+      if (nodeEnv === 'production') {
+        assertOseCredentialsOrThrow(nodeEnv, false, 'Nubefact');
+      }
       return this.mock.getStatus(externalId);
     }
     const [serie, numero] = externalId.split('-');
@@ -107,7 +120,11 @@ export class NubefactBillingProvider implements IBillingProvider {
   }
 
   async voidDocument(input: VoidDocumentInput): Promise<VoidDocumentResult> {
-    if (!this.apiUrl?.trim() || !this.apiToken?.trim()) {
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
+    assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
+    if (!hasCredentials) {
+      this.logger.warn('Nubefact sin credenciales; mock baja (solo desarrollo)');
       return this.mock.voidDocument(input);
     }
     const response = await this.postJson({
@@ -126,7 +143,11 @@ export class NubefactBillingProvider implements IBillingProvider {
   }
 
   async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
-    if (!this.apiUrl?.trim() || !this.apiToken?.trim()) {
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
+    assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
+    if (!hasCredentials) {
+      this.logger.warn('Nubefact sin credenciales; mock RC (solo desarrollo)');
       return this.mock.sendDailySummary(input);
     }
     const [year, month, day] = input.fecha.split('-');

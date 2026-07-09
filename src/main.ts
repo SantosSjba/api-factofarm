@@ -59,7 +59,9 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
   });
 
-  const swaggerEnabled = config.get<boolean>('SWAGGER_ENABLED', true);
+  const nodeEnv = config.get<string>('NODE_ENV', 'development');
+  const swaggerEnabled =
+    config.get<boolean>('SWAGGER_ENABLED') ?? nodeEnv !== 'production';
   if (swaggerEnabled) {
     const openApiConfig = new DocumentBuilder()
       .setTitle('FactoFarm API')

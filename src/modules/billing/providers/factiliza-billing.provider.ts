@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SunatDocumentStatus } from '../../../generated/prisma/client';
 import type {
   DailySummaryInput,
@@ -19,6 +20,11 @@ import {
   roundMoney,
   type FactilizaOkResponse,
 } from '../utils/factiliza.helpers';
+import {
+  assertEmitDocumentTypeSupportedOrThrow,
+  assertOseCredentialsOrThrow,
+  assertOseOperationSupportedOrThrow,
+} from '../utils/billing-provider-guard.util';
 import { MockBillingProvider } from './mock-billing.provider';
 
 const DEFAULT_API_URL = 'https://apife-qa.factiliza.com/api/v1';
@@ -27,7 +33,10 @@ const DEFAULT_API_URL = 'https://apife-qa.factiliza.com/api/v1';
 export class FactilizaBillingProvider implements IBillingProvider {
   private readonly logger = new Logger(FactilizaBillingProvider.name);
 
-  constructor(private readonly mock: MockBillingProvider) {}
+  constructor(
+    private readonly mock: MockBillingProvider,
+    private readonly config: ConfigService,
+  ) {}
 
   private apiUrl: string | null = null;
   private apiToken: string | null = null;
@@ -38,8 +47,11 @@ export class FactilizaBillingProvider implements IBillingProvider {
   }
 
   async emit(input: EmitDocumentInput): Promise<EmitDocumentResult> {
-    if (!this.apiToken?.trim()) {
-      this.logger.warn('Factiliza sin token Bearer; usando mock');
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const hasToken = !!this.apiToken?.trim();
+    assertOseCredentialsOrThrow(nodeEnv, hasToken, 'Factiliza');
+    if (!hasToken) {
+      this.logger.warn('Factiliza sin token Bearer; usando mock (solo desarrollo)');
       return this.mock.emit(input);
     }
 
@@ -53,7 +65,8 @@ export class FactilizaBillingProvider implements IBillingProvider {
       'COMUNICACION_BAJA',
     ]);
     if (unsupported.has(input.documentType)) {
-      this.logger.warn(`Factiliza sin endpoint para ${input.documentType}; mock`);
+      assertEmitDocumentTypeSupportedOrThrow(nodeEnv, 'Factiliza', input.documentType);
+      this.logger.warn(`Factiliza sin endpoint para ${input.documentType}; mock (solo desarrollo)`);
       return this.mock.emit(input);
     }
 
@@ -130,14 +143,30 @@ export class FactilizaBillingProvider implements IBillingProvider {
   }
 
   async voidDocument(input: VoidDocumentInput): Promise<VoidDocumentResult> {
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    assertOseCredentialsOrThrow(nodeEnv, !!this.apiToken?.trim(), 'Factiliza');
+    assertOseOperationSupportedOrThrow(
+      nodeEnv,
+      'Factiliza',
+      'Comunicación de baja (anulación de comprobante)',
+      'Configure el proveedor Nubefact para comunicaciones de baja o gestione la baja desde su panel OSE.',
+    );
     this.logger.warn(
-      `Factiliza: comunicación de baja no documentada en API pública; mock para ${input.serie}-${input.numero}`,
+      `Factiliza: comunicación de baja no disponible; mock para ${input.serie}-${input.numero} (solo desarrollo)`,
     );
     return this.mock.voidDocument(input);
   }
 
   async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
-    this.logger.warn('Factiliza: resumen diario RC no documentado; usando mock');
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    assertOseCredentialsOrThrow(nodeEnv, !!this.apiToken?.trim(), 'Factiliza');
+    assertOseOperationSupportedOrThrow(
+      nodeEnv,
+      'Factiliza',
+      'Resumen diario de boletas (RC)',
+      'Configure el proveedor Nubefact para el resumen diario o envíe el RC desde su panel OSE.',
+    );
+    this.logger.warn('Factiliza: resumen diario RC no disponible; mock (solo desarrollo)');
     return this.mock.sendDailySummary(input);
   }
 
