@@ -1,5 +1,6 @@
 import { BillingProviderType } from '../../../generated/prisma/client';
 import {
+  assertSpecialDocumentSupported,
   getBillingProviderCapabilities,
   type BillingSpecialDocumentType,
 } from './billing-capabilities.util';
@@ -27,5 +28,11 @@ describe('billing-capabilities.util', () => {
   it('MOCK no permitido en producción según nota', () => {
     const caps = getBillingProviderCapabilities(BillingProviderType.MOCK, 'production');
     expect(caps.mockAllowed).toBe(false);
+  });
+
+  it('assertSpecialDocumentSupported lanza en Factiliza', () => {
+    expect(() =>
+      assertSpecialDocumentSupported(BillingProviderType.FACTILIZA, 'RETENCION'),
+    ).toThrow(/Factiliza/);
   });
 });
