@@ -4,8 +4,10 @@
 # compiled output
 /dist
 /node_modules
+/.pnpm-store
 package-lock.json
 /build
+*.tsbuildinfo
 
 # Logs
 logs
