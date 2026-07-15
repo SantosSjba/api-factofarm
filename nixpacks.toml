@@ -1,13 +1,13 @@
-# Coolify · Nixpacks (Node / pnpm)
-# Prisma 7 + Node 22.11 de Nix: require(ESM) necesita NODE_OPTIONS.
+# Coolify · Nixpacks
+# Prisma 7 exige Node 20.19+ / 22.12+ / 24+ (nodejs_22 de Nix = 22.11 → falla).
 [variables]
 NODE_OPTIONS = "--experimental-require-module"
-NIXPACKS_NODE_VERSION = "22"
-# Solo para generate en build; Coolify inyecta DATABASE_URL real en runtime.
+NIXPACKS_NODE_VERSION = "24"
 DATABASE_URL = "postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public"
+NPM_CONFIG_PRODUCTION = "false"
 
 [phases.setup]
-nixPkgs = ["nodejs_22", "pnpm-10_x", "openssl"]
+nixPkgs = ["nodejs_24", "pnpm-10_x", "openssl"]
 
 [phases.install]
 cmds = [
