@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { defineConfig, env } from 'prisma/config';
+import { defineConfig } from 'prisma/config';
 
 /**
  * Prisma ORM 7 — configuración en la raíz del proyecto (no en schema.prisma).
@@ -9,14 +9,15 @@ import { defineConfig, env } from 'prisma/config';
  *   y todos los `*.prisma` dentro (p. ej. `prisma/models/*.prisma`).
  * - No hay `import` entre archivos `.prisma`; Prisma compone un único esquema lógico.
  *
- * Reglas para modularizar sin errores:
- * - Un solo `generator` y un solo `datasource` (solo en `prisma/schema.prisma`).
- * - Nombres de modelos únicos en todo el proyecto (no repetir el mismo `model` en dos archivos).
- * - Nuevos dominios = nuevos `prisma/models/mi-dominio.prisma` (se incluyen automáticamente).
- * - Variables: `DATABASE_URL` debe existir al ejecutar `prisma generate`, `migrate`, etc.
+ * DATABASE_URL real viene del runtime (Coolify / .env). En build/CI usamos un
+ * placeholder para que `prisma generate` no falle sin secretos.
  *
  * @see https://www.prisma.io/docs/orm/prisma-schema/overview/location#multi-file-prisma-schema
  */
+const databaseUrl =
+  process.env.DATABASE_URL?.trim() ||
+  'postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public';
+
 export default defineConfig({
   schema: 'prisma',
   migrations: {
@@ -24,6 +25,6 @@ export default defineConfig({
     seed: 'tsx prisma/seed.ts',
   },
   datasource: {
-    url: env('DATABASE_URL'),
+    url: databaseUrl,
   },
 });

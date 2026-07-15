@@ -1,10 +1,12 @@
 FROM node:22-alpine AS base
 WORKDIR /app
 ENV NODE_OPTIONS=--experimental-require-module
+# Placeholder solo para `prisma generate` durante el build
+ENV DATABASE_URL=postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 
 FROM base AS deps
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml .npmrc pnpm-workspace.yaml ./
 COPY prisma prisma
 COPY prisma.config.ts ./
 RUN pnpm install --frozen-lockfile
@@ -18,7 +20,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--experimental-require-module
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/.npmrc ./
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/.npmrc /app/pnpm-workspace.yaml ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./

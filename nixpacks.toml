@@ -1,8 +1,10 @@
-# Coolify/Nixpacks: Node 22.11 no habilita require(ESM) por defecto;
-# Prisma 7 carga zeptomatch (ESM) vía @prisma/dev.
+# Coolify · Nixpacks (Node / pnpm)
+# Prisma 7 + Node 22.11 de Nix: require(ESM) necesita NODE_OPTIONS.
 [variables]
 NODE_OPTIONS = "--experimental-require-module"
 NIXPACKS_NODE_VERSION = "22"
+# Solo para generate en build; Coolify inyecta DATABASE_URL real en runtime.
+DATABASE_URL = "postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public"
 
 [phases.setup]
 nixPkgs = ["nodejs_22", "pnpm-10_x", "openssl"]
@@ -17,4 +19,4 @@ cmds = [
 cmds = ["pnpm run build"]
 
 [start]
-cmd = "pnpm run start:prod"
+cmd = "pnpm prisma migrate deploy && pnpm run start:prod"
