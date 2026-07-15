@@ -1,0 +1,20 @@
+# Coolify/Nixpacks: Node 22.11 no habilita require(ESM) por defecto;
+# Prisma 7 carga zeptomatch (ESM) vía @prisma/dev.
+[variables]
+NODE_OPTIONS = "--experimental-require-module"
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm-10_x", "openssl"]
+
+[phases.install]
+cmds = [
+  "npm install -g corepack@0.24.1 && corepack enable",
+  "pnpm i --frozen-lockfile",
+]
+
+[phases.build]
+cmds = ["pnpm run build"]
+
+[start]
+cmd = "pnpm run start:prod"
