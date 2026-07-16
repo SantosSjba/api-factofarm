@@ -1,6 +1,6 @@
 FROM node:24-alpine AS base
 WORKDIR /app
-ENV NODE_OPTIONS="--experimental-require-module --max-old-space-size=1536"
+ENV NODE_OPTIONS="--experimental-require-module --max-old-space-size=4096"
 # Placeholder solo para `prisma generate` durante el build
 ENV DATABASE_URL=postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
@@ -13,7 +13,8 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm run build
+RUN pnpm exec nest build \
+    && pnpm prune --prod
 
 FROM node:24-alpine AS runner
 WORKDIR /app
