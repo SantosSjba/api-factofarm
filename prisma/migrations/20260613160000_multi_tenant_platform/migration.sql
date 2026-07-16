@@ -72,8 +72,9 @@ ALTER TABLE "Establishment" ADD COLUMN "tenantId" TEXT;
 ALTER TABLE "users" ADD COLUMN "tenantId" TEXT;
 
 UPDATE "Establishment" SET "tenantId" = '00000000-0000-4000-8000-000000000001' WHERE "tenantId" IS NULL;
+-- Compare as text: SUPER_ADMIN is added to UserRole in a later migration.
 UPDATE "users" SET "tenantId" = '00000000-0000-4000-8000-000000000001'
-WHERE "tenantId" IS NULL AND "role" <> 'SUPER_ADMIN';
+WHERE "tenantId" IS NULL AND "role"::text <> 'SUPER_ADMIN';
 
 ALTER TABLE "Establishment" ALTER COLUMN "tenantId" SET NOT NULL;
 

@@ -20,7 +20,9 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--experimental-require-module
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+# curl: Coolify HEALTHCHECK lo necesita dentro del contenedor Alpine
+RUN apk add --no-cache curl \
+    && corepack enable && corepack prepare pnpm@10.12.1 --activate
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/.npmrc /app/pnpm-workspace.yaml ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
