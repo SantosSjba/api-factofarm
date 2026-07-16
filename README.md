@@ -230,6 +230,8 @@ El front Angular (`front-factofarm`) suele llamar a esta API en desarrollo desde
 
 ## Despliegue en Coolify (producción)
 
+> Idea general y checklist para otras apps: [`docs/COOLIFY-DOCKER-DEPLOY.md`](./docs/COOLIFY-DOCKER-DEPLOY.md).
+
 La API en producción **no se compila en el VPS** (KVM 1 es limitado). Se construye la imagen Docker en tu Mac, se publica como `latest` en Docker Hub y Coolify solo la descarga y ejecuta.
 
 | Recurso | Valor |
