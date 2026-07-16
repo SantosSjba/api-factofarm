@@ -228,6 +228,86 @@ El front Angular (`front-factofarm`) suele llamar a esta API en desarrollo desde
 
 ---
 
+## Despliegue en Coolify (producción)
+
+La API en producción **no se compila en el VPS** (KVM 1 es limitado). Se construye la imagen Docker en tu Mac, se publica como `latest` en Docker Hub y Coolify solo la descarga y ejecuta.
+
+| Recurso | Valor |
+|---------|--------|
+| Imagen | `santossjba/api-factofarm:latest` |
+| Coolify (proyecto) | FACTO FARM → production → `api-factofarm` |
+| URL | https://api-factofarm.factosysperu.com |
+| Health | https://api-factofarm.factosysperu.com/api/health |
+| Base de datos | `factofarm_db` en `postgresql-db` (FACTOSYS PERU), red interna Coolify |
+
+### Requisitos en tu máquina
+
+- Docker Desktop (build `linux/amd64` + login a Docker Hub como `santossjba`)
+- Acceso a Coolify (`https://factosysperu.cloud`)
+- Para migraciones/seed desde tu Mac: `DATABASE_URL` alcanzable (puerto público del Postgres, p. ej. `IP:5433`). En Coolify la app usa el host **interno** del contenedor Postgres.
+
+### Paso a paso tras un cambio de código
+
+1. **Commit y push** (desde la raíz de `api-factofarm`):
+
+```bash
+git add -A
+git status   # no subir .env ni secretos
+git commit -m "mensaje claro del cambio"
+git push origin main
+```
+
+2. **Migraciones** (solo si cambió `prisma/` o el esquema). Desde tu Mac, con `DATABASE_URL` apuntando a `factofarm_db` pública:
+
+```bash
+export NODE_OPTIONS='--experimental-require-module'
+pnpm exec prisma migrate deploy
+# si hace falta datos demo:
+pnpm exec prisma db seed
+```
+
+Si el historial de migraciones quedó inconsistente en una BD nueva, usa `pnpm exec prisma migrate reset --force` **solo** con consentimiento explícito (borra todos los datos).
+
+3. **Build y push de la imagen** (solo tag `latest`; no crear tags extras):
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t santossjba/api-factofarm:latest \
+  --push .
+```
+
+El `Dockerfile` ya usa un `DATABASE_URL` placeholder solo para `prisma generate` en el build. Las variables reales de runtime viven en Coolify (no se hornean en la imagen).
+
+4. **Redeploy en Coolify**
+
+- Abre **FACTO FARM → production → api-factofarm**
+- Confirma imagen `santossjba/api-factofarm` y tag `latest`
+- **Deploy** / **Force rebuild** (pull de la nueva `latest`)
+- Espera healthcheck verde (`/api/health`)
+
+Variables críticas en Coolify (runtime):
+
+- `DATABASE_URL` → host interno Coolify, DB `factofarm_db` (no la IP pública del Mac)
+- `NODE_ENV=production`, `PORT=3000`, `HOST=0.0.0.0`
+- `JWT_SECRET`, `BILLING_ENCRYPTION_KEY`, `LPDP_SENSITIVE_ENCRYPTION_KEY`
+- `FRONTEND_URL` / `CORS_ORIGINS` → `https://factofarm.factosysperu.com`
+
+5. **Verificar**
+
+```bash
+curl -sS https://api-factofarm.factosysperu.com/api/health
+```
+
+Debe responder `{"status":"ok","database":"connected",...}`.
+
+### Notas
+
+- El entrypoint del contenedor ejecuta `pnpm prisma migrate deploy` y luego arranca Nest. Si una migración falla, el contenedor no queda healthy.
+- Coolify necesita `curl` dentro de la imagen Alpine (ya incluido en el `Dockerfile`) para el healthcheck.
+- No subas `.env` a git. El `.env` local puede usar la IP/puerto público del Postgres; Coolify debe seguir con el hostname interno.
+
+---
+
 ## Licencia
 
 Proyecto privado (**UNLICENSED** en `package.json`). NestJS y dependencias mantienen sus propias licencias.
