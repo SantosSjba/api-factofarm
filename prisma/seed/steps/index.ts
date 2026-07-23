@@ -58,5 +58,5 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
   await runStep('Cajas POS', () => seedCashRegisters(prisma));
   await runStep('Interacciones farmacológicas', () => seedDrugInteractions(prisma));
   await runStep('Fase 6 pharma', () => seedPharmaPhase6(prisma));
-  await runStep('Usuario admin', () => seedAdminUser(prisma));
+  await runStep('Usuarios demo (roles)', () => seedAdminUser(prisma));
 }

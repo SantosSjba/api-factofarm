@@ -71,10 +71,16 @@ export class SalesService {
   ) {}
 
   async findAll(establishmentId: string, query: SaleListQueryDto) {
+    const storage = query.storage ?? 'hot';
+    if (storage === 'archived') {
+      return this.findArchived(establishmentId, query);
+    }
+
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.SaleWhereInput = {
       establishmentId,
       deletedAt: null,
+      ...(storage === 'hot' ? { archivedAt: null } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.sellerId ? { sellerId: query.sellerId } : {}),
       ...(query.estado ? { estado: query.estado } : {}),
@@ -123,6 +129,7 @@ export class SalesService {
           descuentoTotal: true,
           igvTotal: true,
           total: true,
+          archivedAt: true,
           createdAt: true,
           customer: { select: { id: true, nombre: true } },
           seller: { select: { id: true, nombre: true } },
@@ -133,11 +140,44 @@ export class SalesService {
     return buildPaginatedResult(
       rows.map((row) => ({
         ...row,
+        storage: row.archivedAt ? 'archived' : 'hot',
         subtotal: row.subtotal.toString(),
         descuentoTotal: row.descuentoTotal.toString(),
         igvTotal: row.igvTotal.toString(),
         total: row.total.toString(),
       })),
+      total,
+      page,
+      pageSize,
+    );
+  }
+
+  async findArchived(establishmentId: string, query: SaleListQueryDto) {
+    const { page, pageSize, skip, take } = paginationArgs(query);
+    const where: Prisma.ArchivedSaleWhereInput = {
+      establishmentId,
+      ...(query.from || query.to
+        ? {
+            originalCreatedAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.archivedSale.count({ where }),
+      this.prisma.archivedSale.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { originalCreatedAt: 'desc' },
+      }),
+    ]);
+
+    return buildPaginatedResult(
+      rows.map((row) => this.mapArchivedSaleListItem(row)),
       total,
       page,
       pageSize,
@@ -159,8 +199,70 @@ export class SalesService {
         payments: true,
       },
     });
-    if (!sale) throw new NotFoundException('Venta no encontrada');
-    return this.mapSaleDetail(sale);
+    if (sale) {
+      return {
+        ...this.mapSaleDetail(sale),
+        storage: sale.archivedAt ? 'archived' : 'hot',
+        archivedAt: sale.archivedAt,
+      };
+    }
+
+    const archived = await this.prisma.archivedSale.findFirst({
+      where: { id, establishmentId },
+    });
+    if (!archived) throw new NotFoundException('Venta no encontrada');
+    return this.mapArchivedSaleDetail(archived);
+  }
+
+  private mapArchivedSaleListItem(row: {
+    id: string;
+    establishmentId: string;
+    originalCreatedAt: Date;
+    archivedAt: Date;
+    payload: unknown;
+  }) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const customer = payload.customer as { id?: string; nombre?: string } | undefined;
+    const seller = payload.seller as { id?: string; nombre?: string } | undefined;
+    return {
+      id: row.id,
+      documentType: payload.documentType ?? null,
+      serie: payload.serie ?? null,
+      numero: payload.numero ?? null,
+      estado: payload.estado ?? null,
+      subtotal: String(payload.subtotal ?? ''),
+      descuentoTotal: String(payload.descuentoTotal ?? ''),
+      igvTotal: String(payload.igvTotal ?? ''),
+      total: String(payload.total ?? ''),
+      createdAt: row.originalCreatedAt,
+      archivedAt: row.archivedAt,
+      storage: 'archived' as const,
+      customer: customer ? { id: customer.id, nombre: customer.nombre } : null,
+      seller: seller ? { id: seller.id, nombre: seller.nombre } : null,
+    };
+  }
+
+  private mapArchivedSaleDetail(row: {
+    id: string;
+    establishmentId: string;
+    originalCreatedAt: Date;
+    archivedAt: Date;
+    payload: unknown;
+  }) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    return {
+      ...payload,
+      id: row.id,
+      establishmentId: row.establishmentId,
+      createdAt: row.originalCreatedAt,
+      archivedAt: row.archivedAt,
+      storage: 'archived' as const,
+      fromColdStorage: true as const,
+      total: String(payload.total ?? '0'),
+      documentType: payload.documentType ?? null,
+      serie: (payload.serie as string | null | undefined) ?? null,
+      numero: payload.numero ?? null,
+    };
   }
 
   async create(
@@ -517,10 +619,10 @@ export class SalesService {
     const saleDetail = await this.findOne(saleId, actor.establecimientoId);
     this.realtime.emitSaleCompleted(actor.establecimientoId, {
       saleId: saleDetail.id,
-      total: saleDetail.total,
-      documentType: saleDetail.documentType,
-      serie: saleDetail.serie,
-      numero: saleDetail.numero,
+      total: String(saleDetail.total ?? '0'),
+      documentType: String(saleDetail.documentType ?? ''),
+      serie: saleDetail.serie == null ? null : String(saleDetail.serie),
+      numero: saleDetail.numero == null ? null : String(saleDetail.numero),
     });
     this.realtime.emitStockUpdated(actor.establecimientoId, dto.warehouseId);
 

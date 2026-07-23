@@ -1,4 +1,2 @@
-export const demoCajeroCredentials = {
-  email: 'cajero@factofarm.local',
-  passwordPlain: 'Cajero123!',
-} as const;
+/** @deprecated Preferir `demo-users`. Reexport para compatibilidad. */
+export { demoCajeroCredentials } from './demo-users';

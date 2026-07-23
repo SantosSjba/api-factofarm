@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class KardexQueryDto {
   @ApiProperty({ format: 'uuid' })
@@ -21,6 +21,15 @@ export class KardexQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiPropertyOptional({
+    enum: ['hot', 'archived', 'all'],
+    description: 'hot=activo (default), archived=cold storage, all=incluye archivados en hot table',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['hot', 'archived', 'all'])
+  storage?: 'hot' | 'archived' | 'all';
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()

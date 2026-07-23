@@ -323,6 +323,7 @@ model InventoryInboundMovement {
   user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   deletedAt DateTime?
+  archivedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -333,6 +334,8 @@ model InventoryInboundMovement {
   @@index([userId])
   @@index([fechaRegistro])
   @@index([deletedAt])
+  @@index([archivedAt])
+  @@index([warehouseId, archivedAt, fechaRegistro])
 }
 
 model ProductLotStock {

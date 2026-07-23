@@ -142,7 +142,7 @@ pnpm run db:seed
 
 Credenciales de demostración (solo desarrollo; ver `prisma/seed/data/admin-demo.ts`):
 
-- **Correo:** `admin@factofarm.local`
+- **Correo:** `admin@factosysperu.com`
 - **Contraseña:** `Admin123!`
 
 ### 5. Compilar y arrancar la API
@@ -183,7 +183,7 @@ Login (ejemplo):
 POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 
-{ "email": "admin@factofarm.local", "password": "Admin123!" }
+{ "email": "admin@factosysperu.com", "password": "Admin123!" }
 ```
 
 ---
@@ -209,8 +209,8 @@ Content-Type: application/json
 |-----------|-------------|
 | [ROADMAP.md](../ROADMAP.md) | Fases del proyecto y hardening 11.5 |
 | [AUDITORIA-SISTEMA.md](../AUDITORIA-SISTEMA.md) | Hallazgos pre-producción |
-| [docs/GO-LIVE-CHECKLIST.md](../docs/GO-LIVE-CHECKLIST.md) | Checklist operativo farmacia piloto |
-| [docs/LPDP-POLICY.md](../docs/LPDP-POLICY.md) | Política de protección de datos |
+| [docs/COOLIFY-DOCKER-DEPLOY.md](./docs/COOLIFY-DOCKER-DEPLOY.md) | Deploy Docker / Coolify |
+| [docs/DATA-RETENTION-PLAN.md](./docs/DATA-RETENTION-PLAN.md) | Retención, archivado y crecimiento multi-tenant |
 
 ## Tests de integración billing (opcional)
 

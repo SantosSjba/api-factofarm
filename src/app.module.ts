@@ -58,6 +58,7 @@ import { StaffModule } from './modules/staff/staff.module';
 import { ShippingGuidesModule } from './modules/shipping-guides/shipping-guides.module';
 import { PublicModule } from './modules/public/public.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { DataRetentionModule } from './modules/data-retention/data-retention.module';
 
 @Module({
   imports: [
@@ -150,6 +151,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ShippingGuidesModule,
     TenantsModule,
     PublicModule,
+    DataRetentionModule,
   ],
   controllers: [AppController],
   providers: [

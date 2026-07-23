@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import { PaymentMethod, SaleDocumentType, SaleStatus } from '../../../generated/prisma/client';
 
@@ -42,4 +42,13 @@ export class SaleListQueryDto extends PaginationQueryDto {
   @IsString()
   @MaxLength(120)
   paymentReferencia?: string;
+
+  @ApiPropertyOptional({
+    enum: ['hot', 'archived', 'all'],
+    description: 'hot=activo (default), archived=cold storage, all=incluye marcados archivedAt en Sale',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['hot', 'archived', 'all'])
+  storage?: 'hot' | 'archived' | 'all';
 }

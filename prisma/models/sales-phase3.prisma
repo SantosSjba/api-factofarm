@@ -201,6 +201,7 @@ model Sale {
   coberturaConvenio     Decimal          @default(0) @db.Decimal(18, 4)
   copagoPaciente        Decimal          @default(0) @db.Decimal(18, 4)
   deletedAt             DateTime?
+  archivedAt            DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
@@ -238,6 +239,8 @@ model Sale {
   @@index([estado])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([archivedAt])
+  @@index([establishmentId, archivedAt, createdAt])
 }
 
 model SaleItem {

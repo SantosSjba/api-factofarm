@@ -41,6 +41,6 @@ export async function closeE2eApp(app: INestApplication<App>): Promise<void> {
 }
 
 export const DEMO_ADMIN = {
-  email: 'admin@factofarm.local',
+  email: 'admin@factosysperu.com',
   password: 'Admin123!',
 } as const;

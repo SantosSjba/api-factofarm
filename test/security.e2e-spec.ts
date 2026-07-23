@@ -5,7 +5,7 @@ import { createE2eApp, closeE2eApp } from './helpers/e2e-app';
 import { loginAsAdmin } from './helpers/pos-flow';
 
 const DEMO_CAJERO = {
-  email: 'cajero@factofarm.local',
+  email: 'cajero@factosysperu.com',
   password: 'Cajero123!',
 } as const;
 

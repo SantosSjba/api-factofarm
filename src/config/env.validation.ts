@@ -65,6 +65,20 @@ export const envValidationSchema = Joi.object({
   PG_POOL_MAX: Joi.number().integer().min(1).max(100).default(20),
   PG_POOL_IDLE_MS: Joi.number().integer().min(1000).default(30_000),
   PG_POOL_CONNECT_MS: Joi.number().integer().min(1000).default(10_000),
+  /** Días a conservar AuditLog antes de purga (Fase 2 retención). */
+  DATA_RETENTION_AUDIT_DAYS: Joi.number().integer().min(30).max(3650).default(730),
+  /** Permite borrado real de AuditLog (dry-run siempre disponible). */
+  DATA_RETENTION_PURGE_ENABLED: Joi.boolean().default(false),
+  /** Cron del job de retención (formato standard). */
+  DATA_RETENTION_CRON: Joi.string().default('0 3 * * *'),
+  /** Tamaño de lote al borrar AuditLog / archivar. */
+  DATA_RETENTION_BATCH_SIZE: Joi.number().integer().min(100).max(50_000).default(5000),
+  /** Días en hot path antes de copiar a cold storage (ventas/kardex). Default 5 años. */
+  DATA_RETENTION_ARCHIVE_DAYS: Joi.number().integer().min(30).max(7300).default(1825),
+  /** Permite copiar a archive y marcar archivedAt (nunca DELETE de negocio). */
+  DATA_RETENTION_ARCHIVE_ENABLED: Joi.boolean().default(false),
+  /** Cron semanal de archivado (default domingo 04:00). */
+  DATA_RETENTION_ARCHIVE_CRON: Joi.string().default('0 4 * * 0'),
 });
 
 export function parseCorsOrigins(

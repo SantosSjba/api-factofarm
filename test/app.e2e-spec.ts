@@ -29,7 +29,7 @@ describe('FactoFarm API (e2e)', () => {
   it('POST /api/v1/auth/login rejects invalid credentials', () => {
     return request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'no-existe@factofarm.local', password: 'wrong-password-123' })
+      .send({ email: 'no-existe@factosysperu.com', password: 'wrong-password-123' })
       .expect(401);
   });
 

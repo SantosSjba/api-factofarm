@@ -21,7 +21,7 @@ export async function seedTenants(prisma: PrismaClient): Promise<{ demoTenantId:
       status: TenantStatus.ACTIVE,
       maxEstablishments: preset.maxEstablishments,
       maxUsers: preset.maxUsers,
-      contactEmail: 'empresa@factofarm.local',
+      contactEmail: 'empresa@factosysperu.com',
       activatedAt: new Date(),
     },
     select: { id: true },

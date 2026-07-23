@@ -25,7 +25,35 @@ export async function seedEstablishments(
         direccionFiscal: row.direccionFiscal,
         correoContacto: row.correoContacto,
       },
-      select: { id: true },
+      select: { id: true, nombre: true, codigo: true },
+    });
+
+    await prisma.warehouse.upsert({
+      where: {
+        establishmentId_nombre: {
+          establishmentId: establishment.id,
+          nombre: 'Almacén principal',
+        },
+      },
+      update: { deletedAt: null },
+      create: {
+        establishmentId: establishment.id,
+        nombre: 'Almacén principal',
+      },
+    });
+
+    await prisma.productLocation.upsert({
+      where: {
+        establishmentId_nombre: {
+          establishmentId: establishment.id,
+          nombre: 'Anaquel general',
+        },
+      },
+      update: { deletedAt: null },
+      create: {
+        establishmentId: establishment.id,
+        nombre: 'Anaquel general',
+      },
     });
 
     for (const serie of row.series ?? []) {

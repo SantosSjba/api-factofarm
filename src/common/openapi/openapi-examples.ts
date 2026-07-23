@@ -1,7 +1,7 @@
 /** Ejemplos reales (Perú) para documentación OpenAPI / Scalar. */
 export const OPENAPI_EXAMPLES = {
   loginRequest: {
-    email: 'admin@factofarm.local',
+    email: 'admin@factosysperu.com',
     password: 'Admin123!',
   },
   loginResponse: {
@@ -10,7 +10,7 @@ export const OPENAPI_EXAMPLES = {
     user: {
       id: '550e8400-e29b-41d4-a716-446655440000',
       nombre: 'Administrador',
-      email: 'admin@factofarm.local',
+      email: 'admin@factosysperu.com',
       role: 'ADMINISTRADOR',
       establecimientoId: '660e8400-e29b-41d4-a716-446655440001',
       permissionCodes: ['users.read', 'sales.write', 'products.read'],

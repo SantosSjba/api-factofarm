@@ -24,7 +24,7 @@ export const establishmentsData: SeedEstablishmentInput[] = [
     activo: true,
     pais: 'PERU',
     direccionFiscal: 'Empresa - Lima',
-    correoContacto: 'empresa@factofarm.local',
+    correoContacto: 'empresa@factosysperu.com',
     series: [...baseSeries],
   },
   {

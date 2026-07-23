@@ -291,6 +291,11 @@ export class InventoryMovementsService {
 
   async kardex(query: KardexQueryDto, actor: JwtRequestUser) {
     const establishmentId = await this.scope.resolve(actor);
+    const storage = query.storage ?? 'hot';
+    if (storage === 'archived') {
+      return this.kardexArchived(query, establishmentId);
+    }
+
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -301,6 +306,7 @@ export class InventoryMovementsService {
     const where: Prisma.InventoryInboundMovementWhereInput = {
       productId: query.productId,
       deletedAt: null,
+      ...(storage === 'hot' ? { archivedAt: null } : {}),
       warehouse: {
         deletedAt: null,
         establishmentId,
@@ -330,6 +336,7 @@ export class InventoryMovementsService {
           costoUnitario: true,
           codigoLote: true,
           fechaRegistro: true,
+          archivedAt: true,
           referencia: true,
           comentario: true,
           transferReason: { select: { nombre: true } },
@@ -357,6 +364,81 @@ export class InventoryMovementsService {
         referencia: row.referencia,
         comentario: row.comentario,
         usuario: row.user?.nombre ?? null,
+        storage: row.archivedAt ? 'archived' : 'hot',
+        archivedAt: row.archivedAt,
+      };
+    });
+
+    return { ...buildPaginatedResult(items, total, page, pageSize) };
+  }
+
+  async kardexArchived(query: KardexQueryDto, establishmentId: string) {
+    const { page, pageSize, skip, take } = paginationArgs({
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+    const from = query.from ? new Date(query.from) : undefined;
+    const to = query.to ? new Date(query.to) : undefined;
+
+    let warehouseFilter: Prisma.ArchivedInventoryInboundMovementWhereInput;
+    if (query.warehouseId) {
+      warehouseFilter = { warehouseId: query.warehouseId };
+    } else {
+      const warehouseIds = (
+        await this.prisma.warehouse.findMany({
+          where: { establishmentId, deletedAt: null },
+          select: { id: true },
+        })
+      ).map((w) => w.id);
+      if (warehouseIds.length === 0) {
+        return buildPaginatedResult([], 0, page, pageSize);
+      }
+      warehouseFilter = { warehouseId: { in: warehouseIds } };
+    }
+
+    const where: Prisma.ArchivedInventoryInboundMovementWhereInput = {
+      productId: query.productId,
+      ...warehouseFilter,
+      ...(from || to
+        ? {
+            originalFechaRegistro: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.archivedInventoryInboundMovement.count({ where }),
+      this.prisma.archivedInventoryInboundMovement.findMany({
+        where,
+        orderBy: { originalFechaRegistro: 'asc' },
+        skip,
+        take,
+      }),
+    ]);
+
+    const items = rows.map((row) => {
+      const payload = (row.payload ?? {}) as Record<string, unknown>;
+      return {
+        id: row.id,
+        fecha: row.originalFechaRegistro.toISOString(),
+        tipo: payload.movementType ?? null,
+        motivo: null,
+        almacen: null,
+        lote: payload.codigoLote ?? null,
+        cantidad: String(payload.cantidad ?? ''),
+        saldo: null,
+        costoUnitario: payload.costoUnitario != null ? String(payload.costoUnitario) : null,
+        valorLinea: null,
+        referencia: payload.referencia ?? null,
+        comentario: payload.comentario ?? null,
+        usuario: null,
+        storage: 'archived' as const,
+        archivedAt: row.archivedAt,
+        fromColdStorage: true,
+        payload,
       };
     });
 

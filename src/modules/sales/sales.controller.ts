@@ -31,7 +31,11 @@ export class SalesController {
 
   @Get()
   @RequirePermissions('sales.read', 'nav.notas_venta', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Historial de ventas' })
+  @ApiOperation({
+    summary: 'Historial de ventas',
+    description:
+      'storage=hot (default) | archived (cold storage) | all (hot table incluyendo archivedAt)',
+  })
   async findAll(@Query() query: SaleListQueryDto, @CurrentUser() actor: JwtRequestUser) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.findAll(establishmentId, query);

@@ -2,164 +2,131 @@ import type { PrismaClient } from '../../../src/generated/prisma/client';
 import { IdentityDocumentType, UserRole } from '../../../src/generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 import { expandUserPermissionCodes } from '../../../src/common/permissions/nav-permission-expansion';
-import { getDefaultNavCodesForRole } from '../../../src/common/permissions/role-permission-templates';
-import { adminDemoCredentials } from '../data/admin-demo';
-import { demoCajeroCredentials } from '../data/demo-cajero';
-import { superAdminDemoCredentials } from '../data/super-admin-demo';
+import {
+  getDefaultNavCodesForRole,
+  ROLE_LABELS,
+} from '../../../src/common/permissions/role-permission-templates';
+import { demoUsersSeed, type DemoUserSeed } from '../data/demo-users';
 
 const SALT_ROUNDS = 10;
 
-const SUPER_ADMIN_PERMISSION_CODES = expandUserPermissionCodes(
-  getDefaultNavCodesForRole(UserRole.SUPER_ADMIN),
-  UserRole.SUPER_ADMIN,
-);
-
-const CAJERO_PERMISSION_CODES = expandUserPermissionCodes(
-  getDefaultNavCodesForRole(UserRole.CAJERO),
-  UserRole.CAJERO,
-);
-
 export async function seedAdminUser(prisma: PrismaClient): Promise<void> {
-  const estCentral = await prisma.establishment.findFirst({
-    where: { codigo: '0000' },
+  const establishments = await prisma.establishment.findMany({
+    where: { codigo: { in: ['0000', '0001'] } },
+    select: { id: true, codigo: true, tenantId: true },
   });
-  if (!estCentral) {
-    throw new Error('Seed admin: falta establecimiento 0000 (Oficina Principal)');
+  const byCode = new Map(
+    establishments
+      .filter((e): e is { id: string; codigo: string; tenantId: string } => !!e.codigo)
+      .map((e) => [e.codigo, e]),
+  );
+  if (!byCode.get('0000') || !byCode.get('0001')) {
+    throw new Error('Seed usuarios: faltan establecimientos 0000 y/o 0001');
   }
 
-  await seedSuperAdmin(prisma, estCentral.id);
+  console.info('Seed: roles del sistema y usuarios demo (@factosysperu.com)');
+  for (const role of Object.values(UserRole)) {
+    const navCount = getDefaultNavCodesForRole(role).length;
+    console.info(`  · ${ROLE_LABELS[role] ?? role}: ${navCount} ítems de menú por plantilla`);
+  }
 
-  const { email, passwordPlain } = adminDemoCredentials;
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-
-  if (!existing) {
-    const hash = await bcrypt.hash(passwordPlain, SALT_ROUNDS);
-
-    const admin = await prisma.user.create({
-      data: {
-        nombre: 'Administrador',
-        email,
-        passwordHash: hash,
-        role: UserRole.ADMINISTRADOR,
-        tenantId: estCentral.tenantId,
-        establecimientoId: estCentral.id,
-        profile: {
-          create: {
-            tipoDocumento: IdentityDocumentType.DNI,
-            numeroDocumento: '00000000',
-            nombres: 'Admin',
-            apellidos: 'Sistema',
-            cargo: 'Administrador IT',
-            emailCorporativo: email,
-          },
-        },
-      },
-    });
-
-    await syncPermissionCodesToUser(
-      prisma,
-      admin.id,
-      expandUserPermissionCodes(getDefaultNavCodesForRole(UserRole.ADMINISTRADOR), UserRole.ADMINISTRADOR),
-    );
-    console.info('Seed: usuario administrador creado.');
-  } else {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: { establecimientoId: estCentral.id, tenantId: estCentral.tenantId },
-    });
-    await syncPermissionCodesToUser(
-      prisma,
-      existing.id,
-      expandUserPermissionCodes(getDefaultNavCodesForRole(UserRole.ADMINISTRADOR), UserRole.ADMINISTRADOR),
-    );
-  console.info('Seed: usuario administrador ya existía; establecimiento y permisos sincronizados.');
+  for (const demo of demoUsersSeed) {
+    await upsertDemoUser(prisma, demo, byCode);
   }
 
   console.info('Seed completado. Credenciales demo (solo desarrollo):');
-  console.info(`  ${email} / ${passwordPlain}`);
-
-  await seedDemoCajero(prisma);
+  for (const demo of demoUsersSeed) {
+    console.info(`  ${demo.email} / ${demo.passwordPlain}  [${demo.role}]`);
+  }
 }
 
-async function seedDemoCajero(prisma: PrismaClient): Promise<void> {
-  const { email, passwordPlain } = demoCajeroCredentials;
-  const estSucursal = await prisma.establishment.findFirst({ where: { codigo: '0001' } });
-  if (!estSucursal) {
-    console.warn('Seed cajero: falta establecimiento 0001');
+async function upsertDemoUser(
+  prisma: PrismaClient,
+  demo: DemoUserSeed,
+  byCode: Map<string, { id: string; codigo: string; tenantId: string }>,
+): Promise<void> {
+  const est = byCode.get(demo.establishmentCode);
+  if (!est) {
+    throw new Error(`Seed usuarios: establecimiento ${demo.establishmentCode} no encontrado`);
+  }
+
+  const permissionCodes = expandUserPermissionCodes(
+    getDefaultNavCodesForRole(demo.role),
+    demo.role,
+  );
+  const hash = await bcrypt.hash(demo.passwordPlain, SALT_ROUNDS);
+  const tenantId = demo.tenantScoped ? est.tenantId : null;
+
+  const existing = await prisma.user.findUnique({ where: { email: demo.email } });
+
+  if (!existing) {
+    const user = await prisma.user.create({
+      data: {
+        nombre: demo.nombre,
+        email: demo.email,
+        passwordHash: hash,
+        role: demo.role,
+        tenantId,
+        establecimientoId: est.id,
+        ...(demo.profile
+          ? {
+              profile: {
+                create: {
+                  tipoDocumento: IdentityDocumentType.DNI,
+                  numeroDocumento: demo.profile.numeroDocumento,
+                  nombres: demo.profile.nombres,
+                  apellidos: demo.profile.apellidos,
+                  cargo: demo.profile.cargo,
+                  emailCorporativo: demo.email,
+                },
+              },
+            }
+          : {}),
+      },
+    });
+    await syncPermissionCodesToUser(prisma, user.id, permissionCodes);
+    console.info(`  ✓ creado ${demo.email} (${demo.role})`);
     return;
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (!existing) {
-    const hash = await bcrypt.hash(passwordPlain, SALT_ROUNDS);
-    const cajero = await prisma.user.create({
-      data: {
-        nombre: 'Cajero Demo',
-        email,
-        passwordHash: hash,
-        role: UserRole.CAJERO,
-        tenantId: estSucursal.tenantId,
-        establecimientoId: estSucursal.id,
-        profile: {
-          create: {
-            tipoDocumento: IdentityDocumentType.DNI,
-            numeroDocumento: '11111111',
-            nombres: 'Cajero',
-            apellidos: 'Demo',
-            cargo: 'Cajero',
-            emailCorporativo: email,
-          },
-        },
+  await prisma.user.update({
+    where: { id: existing.id },
+    data: {
+      nombre: demo.nombre,
+      passwordHash: hash,
+      role: demo.role,
+      tenantId,
+      establecimientoId: est.id,
+      deletedAt: null,
+    },
+  });
+
+  if (demo.profile) {
+    await prisma.userProfile.upsert({
+      where: { userId: existing.id },
+      update: {
+        numeroDocumento: demo.profile.numeroDocumento,
+        nombres: demo.profile.nombres,
+        apellidos: demo.profile.apellidos,
+        cargo: demo.profile.cargo,
+        emailCorporativo: demo.email,
+      },
+      create: {
+        userId: existing.id,
+        tipoDocumento: IdentityDocumentType.DNI,
+        numeroDocumento: demo.profile.numeroDocumento,
+        nombres: demo.profile.nombres,
+        apellidos: demo.profile.apellidos,
+        cargo: demo.profile.cargo,
+        emailCorporativo: demo.email,
       },
     });
-    await syncPermissionCodesToUser(prisma, cajero.id, CAJERO_PERMISSION_CODES);
-    console.info('Seed: usuario cajero demo creado (sucursal 0001).');
-  } else {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: { establecimientoId: estSucursal.id, tenantId: estSucursal.tenantId, role: UserRole.CAJERO },
-    });
-    await syncPermissionCodesToUser(prisma, existing.id, CAJERO_PERMISSION_CODES);
-    console.info('Seed: cajero demo sincronizado.');
   }
-  console.info(`  ${email} / ${passwordPlain}`);
+
+  await syncPermissionCodesToUser(prisma, existing.id, permissionCodes);
+  console.info(`  ✓ sincronizado ${demo.email} (${demo.role})`);
 }
 
-async function seedSuperAdmin(prisma: PrismaClient, establishmentId: string): Promise<void> {
-  const { email, passwordPlain } = superAdminDemoCredentials;
-  const existing = await prisma.user.findUnique({ where: { email } });
-
-  if (!existing) {
-    const hash = await bcrypt.hash(passwordPlain, SALT_ROUNDS);
-    const user = await prisma.user.create({
-      data: {
-        nombre: 'Super Admin FactoFarm',
-        email,
-        passwordHash: hash,
-        role: UserRole.SUPER_ADMIN,
-        tenantId: null,
-        establecimientoId: establishmentId,
-      },
-    });
-    await syncPermissionCodesToUser(prisma, user.id, SUPER_ADMIN_PERMISSION_CODES);
-    console.info('Seed: super administrador de plataforma creado.');
-  } else {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        role: UserRole.SUPER_ADMIN,
-        tenantId: null,
-        establecimientoId: establishmentId,
-      },
-    });
-    await syncPermissionCodesToUser(prisma, existing.id, SUPER_ADMIN_PERMISSION_CODES);
-    console.info('Seed: super administrador sincronizado.');
-  }
-  console.info(`  ${email} / ${passwordPlain}`);
-}
-
-/** Asigna permisos por código al usuario demo. */
 async function syncPermissionCodesToUser(
   prisma: PrismaClient,
   userId: string,

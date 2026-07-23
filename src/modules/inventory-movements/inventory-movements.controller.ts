@@ -57,7 +57,11 @@ export class InventoryMovementsController {
 
   @Get('kardex')
   @RequirePermissions('inventory.read', 'nav.reporte_kardex', 'nav.kardex_valorizado')
-  @ApiOperation({ summary: 'Kardex valorizado por producto' })
+  @ApiOperation({
+    summary: 'Kardex valorizado por producto',
+    description:
+      'storage=hot (default) | archived (cold storage) | all (incluye archivados en tabla hot)',
+  })
   kardex(@Query() query: KardexQueryDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.kardex(query, actor);
   }
