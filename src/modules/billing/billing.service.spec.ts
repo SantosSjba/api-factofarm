@@ -20,6 +20,7 @@ describe('BillingService', () => {
   const mockProvider = {};
   const nubefactProvider = {};
   const factilizaProvider = {};
+  const apisperuProvider = {};
   const factilizaConsulta = {};
   const realtime = { emitToEstablishment: jest.fn() };
 
@@ -32,6 +33,7 @@ describe('BillingService', () => {
     mockProvider as never,
     nubefactProvider as never,
     factilizaProvider as never,
+    apisperuProvider as never,
     factilizaConsulta as never,
     realtime as never,
   );
@@ -45,11 +47,11 @@ describe('BillingService', () => {
     });
   });
 
-  it('devuelve configuración por defecto en desarrollo', async () => {
+  it('devuelve configuración por defecto (solo notas de venta)', async () => {
     prisma.establishmentBillingConfig.findUnique.mockResolvedValue(null);
     const cfg = await service.getConfig('est-1');
     expect(cfg.provider).toBe(BillingProviderType.MOCK);
-    expect(cfg.autoEmitOnSale).toBe(true);
+    expect(cfg.autoEmitOnSale).toBe(false);
     expect(cfg.capabilities.mockAllowed).toBe(true);
   });
 
@@ -74,18 +76,59 @@ describe('BillingService', () => {
     expect(cfg.capabilities.supportsDailySummary).toBe(false);
   });
 
-  it('rechaza proveedor MOCK en producción', async () => {
+  it('permite MOCK en producción (farmacia sin OSE / solo NV)', async () => {
     config.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : 'secret'));
-    await expect(
-      service.upsertConfig('est-1', { provider: BillingProviderType.MOCK }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    prisma.establishmentBillingConfig.findUnique.mockResolvedValue(null);
+    prisma.establishmentBillingConfig.upsert.mockResolvedValue({ id: 'cfg-1' });
+    const cfg = await service.upsertConfig('est-1', { provider: BillingProviderType.MOCK });
+    expect(prisma.establishmentBillingConfig.upsert).toHaveBeenCalled();
+    expect(cfg.provider).toBe(BillingProviderType.MOCK);
   });
 
-  it('rechaza Bizlinks no implementado en producción', async () => {
+  it('rechaza Bizlinks no implementado', async () => {
     config.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : 'secret'));
     await expect(
       service.upsertConfig('est-1', { provider: BillingProviderType.BIZLINKS }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('no borra el token al actualizar solo RUC', async () => {
+    prisma.establishmentBillingConfig.findUnique
+      .mockResolvedValueOnce({
+        provider: BillingProviderType.FACTILIZA,
+        rucEmisor: '20111111111',
+        razonSocialEmisor: 'OLD',
+        apiUrl: 'https://api.old',
+        consultaApiUrl: null,
+        modoSandbox: true,
+        autoEmitOnSale: true,
+        emitNotaVenta: false,
+        applyDetraccion: false,
+        autoEmitGuiaOnTransfer: true,
+        apiTokenEncrypted: 'keep-me',
+      })
+      .mockResolvedValueOnce({
+        provider: BillingProviderType.FACTILIZA,
+        rucEmisor: '20999999999',
+        razonSocialEmisor: 'OLD',
+        apiUrl: 'https://api.old',
+        consultaApiUrl: null,
+        modoSandbox: true,
+        autoEmitOnSale: true,
+        emitNotaVenta: false,
+        applyDetraccion: false,
+        autoEmitGuiaOnTransfer: true,
+        apiTokenEncrypted: 'keep-me',
+        certificateEncrypted: null,
+      });
+    prisma.establishmentBillingConfig.upsert.mockResolvedValue({ id: 'cfg-1' });
+
+    await service.upsertConfig('est-1', { rucEmisor: '20999999999' });
+
+    const args = prisma.establishmentBillingConfig.upsert.mock.calls[0][0];
+    expect(args.update.apiTokenEncrypted).toBeUndefined();
+    expect(args.update.rucEmisor).toBe('20999999999');
+    expect(args.update.apiUrl).toBe('https://api.old');
   });
 
   it('lista documentos electrónicos paginados', async () => {

@@ -1,7 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
+import { BillingProviderType, SalePdfFormat } from '../../../generated/prisma/client';
 
-/** Actualización del perfil comercial/fiscal del establecimiento activo. */
+/** Actualización del perfil comercial/fiscal + OSE del establecimiento activo. */
 export class UpdatePharmacyProfileDto {
   @ApiPropertyOptional({ description: 'Nombre comercial del local' })
   @IsOptional()
@@ -26,6 +35,56 @@ export class UpdatePharmacyProfileDto {
   @IsString()
   @MaxLength(200)
   razonSocialEmisor?: string;
+
+  @ApiPropertyOptional({
+    enum: BillingProviderType,
+    description: 'MOCK = sin OSE (solo notas de venta). FACTILIZA / NUBEFACT = CPE.',
+  })
+  @IsOptional()
+  @IsEnum(BillingProviderType)
+  billingProvider?: BillingProviderType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  apiUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  consultaApiUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Token API OSE en texto plano; se guarda encriptado' })
+  @IsOptional()
+  @IsString()
+  apiToken?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  modoSandbox?: boolean;
+
+  @ApiPropertyOptional({ description: 'Emitir boleta/factura automáticamente al vender' })
+  @IsOptional()
+  @IsBoolean()
+  autoEmitOnSale?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  emitNotaVenta?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  applyDetraccion?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  autoEmitGuiaOnTransfer?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -89,6 +148,15 @@ export class UpdatePharmacyProfileDto {
   @ValidateIf((_, v) => v !== null)
   @IsUUID()
   logoArchivoId?: string | null;
+
+  @ApiPropertyOptional({
+    enum: SalePdfFormat,
+    description:
+      'Formato del PDF interno (nota de venta / voucher). No cambia el PDF oficial del OSE.',
+  })
+  @IsOptional()
+  @IsEnum(SalePdfFormat)
+  salePdfFormat?: SalePdfFormat;
 
   @ApiPropertyOptional({ description: 'Número de registro DIGEMID del establecimiento' })
   @IsOptional()

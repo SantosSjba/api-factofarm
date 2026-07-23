@@ -7,6 +7,7 @@ import { BillingService } from './billing.service';
 import { MockBillingProvider } from './providers/mock-billing.provider';
 import { NubefactBillingProvider } from './providers/nubefact-billing.provider';
 import { FactilizaBillingProvider } from './providers/factiliza-billing.provider';
+import { ApisperuBillingProvider } from './providers/apisperu-billing.provider';
 import { BillingArtifactService } from './services/billing-artifact.service';
 import { UblBuilderService } from './services/ubl-builder.service';
 
@@ -22,6 +23,7 @@ import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
     MockBillingProvider,
     NubefactBillingProvider,
     FactilizaBillingProvider,
+    ApisperuBillingProvider,
     FactilizaConsultaClient,
   ],
   exports: [BillingService],

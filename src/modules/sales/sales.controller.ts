@@ -7,14 +7,18 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateSaleDto, CreateSaleDebitNoteDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
+import { ConvertSaleToCpeDto } from './dto/convert-sale-to-cpe.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
@@ -91,6 +95,30 @@ export class SalesController {
     return this.service.findOne(id, establishmentId);
   }
 
+  @Get(':id/pdf')
+  @RequirePermissions('sales.read', 'nav.notas_venta', 'nav.punto_venta')
+  @ApiOperation({
+    summary: 'PDF de la venta',
+    description:
+      'Devuelve el PDF del OSE/PSE si existe; si no (nota de venta u OSE sin PDF), genera el PDF en el backend.',
+  })
+  @ApiOkResponse({ description: 'application/pdf' })
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const establishmentId = await this.scope.resolve(actor);
+    const pdf = await this.service.getPdf(id, establishmentId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(pdf.filename)}`,
+    );
+    res.setHeader('X-Factofarm-Pdf-Source', pdf.source);
+    return new StreamableFile(pdf.buffer);
+  }
+
   @Post()
   @RequirePermissions('sales.write', 'nav.punto_venta')
   @ApiOperation({ summary: 'Registrar venta (POS)' })
@@ -129,6 +157,22 @@ export class SalesController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.rejectVoidRequest(requestId, rejectedReason ?? '', actor);
+  }
+
+  @Post(':id/convert-to-cpe')
+  @RequirePermissions('sales.write', 'billing.write', 'nav.notas_venta', 'nav.comprobante_electronico')
+  @ApiOperation({
+    summary: 'Migrar nota de venta a boleta/factura e iniciar emisión SUNAT',
+    description:
+      'Requiere OSE configurado. Cambia serie/número al comprobante electrónico y encola la emisión.',
+  })
+  async convertToCpe(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ConvertSaleToCpeDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.convertToCpe(id, establishmentId, dto.documentType, actor.sub);
   }
 
   @Post(':id/void-request')

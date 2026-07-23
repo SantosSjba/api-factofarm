@@ -20,6 +20,11 @@ function buildService() {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    archivedSale: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
     product: { findMany: jest.fn() },
     warehouse: { findFirst: jest.fn() },
     drugInteraction: { findMany: jest.fn() },
@@ -56,6 +61,8 @@ function buildService() {
     {} as never,
     {} as never,
     {} as never,
+    { build: jest.fn() } as never,
+    { exists: jest.fn(), resolveAbsolutePath: jest.fn() } as never,
   );
   return { service, prisma, audit, inventory, billing, lotAllocation };
 }
@@ -120,6 +127,8 @@ describe('SalesService', () => {
     });
     const detail = await service.findOne('s1', 'est-1');
     expect(detail.id).toBe('s1');
+    expect('items' in detail).toBe(true);
+    if (!('items' in detail)) return;
     expect(detail.items[0].producto).toBe('Producto');
   });
 
@@ -286,6 +295,8 @@ describe('SalesService', () => {
       { reason: 'Error de cobro' },
       { sub: 'u1', establecimientoId: 'est-1', role: UserRole.CAJERO },
     );
+    expect('requestId' in result).toBe(true);
+    if (!('requestId' in result)) return;
     expect(result.requestId).toBe('req-1');
   });
 

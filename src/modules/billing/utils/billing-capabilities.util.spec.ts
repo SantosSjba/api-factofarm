@@ -25,9 +25,17 @@ describe('billing-capabilities.util', () => {
     ] satisfies BillingSpecialDocumentType[]);
   });
 
-  it('MOCK no permitido en producción según nota', () => {
+  it('APIsPERU emite CPE y baja; RC vía panel', () => {
+    const caps = getBillingProviderCapabilities(BillingProviderType.APISPERU, 'production');
+    expect(caps.supportsVoidDocument).toBe(true);
+    expect(caps.supportsDailySummary).toBe(false);
+    expect(caps.notes.join(' ')).toMatch(/Prerrequisito/i);
+  });
+
+  it('MOCK permitido como modo sin OSE (solo notas de venta)', () => {
     const caps = getBillingProviderCapabilities(BillingProviderType.MOCK, 'production');
-    expect(caps.mockAllowed).toBe(false);
+    expect(caps.mockAllowed).toBe(true);
+    expect(caps.notes.join(' ')).toMatch(/nota de venta/i);
   });
 
   it('assertSpecialDocumentSupported lanza en Factiliza', () => {

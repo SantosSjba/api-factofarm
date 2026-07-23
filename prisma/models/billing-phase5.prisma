@@ -2,6 +2,7 @@ enum BillingProviderType {
   MOCK
   NUBEFACT
   FACTILIZA
+  APISPERU
   BIZLINKS
 }
 

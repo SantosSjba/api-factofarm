@@ -14,6 +14,13 @@ enum DocumentSeriesType {
   GUIA_TRANSFERENCIA_ALMACEN
 }
 
+/// Formato del PDF interno de venta/nota (no aplica al PDF oficial del OSE).
+enum SalePdfFormat {
+  TICKET_80
+  TICKET_58
+  A4
+}
+
 /// Establecimiento / sucursal asignada al usuario
 model Establishment {
   id              String   @id @default(uuid())
@@ -36,6 +43,8 @@ model Establishment {
   nombreImpresora String?
   clienteDefault  String?
   logoArchivoId   String?
+  /// Formato PDF generado (nota de venta / voucher interno) por local SaaS
+  salePdfFormat   SalePdfFormat @default(TICKET_80)
   sujetoIgv31556  Boolean  @default(false)
   esHospital      Boolean  @default(false)
   inventoryValuationMethod InventoryValuationMethod @default(PEPS)

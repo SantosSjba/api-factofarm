@@ -206,6 +206,7 @@ export class AuthService {
         establecimientoId: actor.establecimientoId,
         permissionCodes: actor.permissionCodes ?? [],
         supportSession: true,
+        logoUrl: await this.logoUrlForEstablishment(actor.establecimientoId),
       };
     }
 
@@ -219,7 +220,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
     }
-    return this.toAuthUserView(user);
+    return this.toAuthUserView(user, await this.logoUrlForEstablishment(user.establecimientoId));
   }
 
   /**
@@ -407,7 +408,10 @@ export class AuthService {
     if (!refreshed) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
     }
-    return this.toAuthUserView(refreshed);
+    return this.toAuthUserView(
+      refreshed,
+      await this.logoUrlForEstablishment(refreshed.establecimientoId),
+    );
   }
 
   async changePassword(
@@ -572,7 +576,10 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: refreshPlain,
-      user: this.toAuthUserView(user),
+      user: this.toAuthUserView(
+        user,
+        await this.logoUrlForEstablishment(user.establecimientoId),
+      ),
     };
   }
 
@@ -624,20 +631,35 @@ export class AuthService {
         establecimientoId: input.establecimientoId,
         permissionCodes: input.permissionCodes,
         supportSession: true,
+        logoUrl: await this.logoUrlForEstablishment(input.establecimientoId),
       },
     };
   }
 
-  private toAuthUserView(user: {
-    id: string;
-    nombre: string;
-    email: string;
-    role: AuthUserView['role'];
-    tenantId: string | null;
-    establecimientoId: string;
-    tenant?: AuthTenantSnapshot | null;
-    permissions: { permission: { code: string } }[];
-  }): AuthUserView {
+  private async logoUrlForEstablishment(
+    establecimientoId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!establecimientoId) return null;
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establecimientoId, deletedAt: null },
+      select: { logoArchivoId: true },
+    });
+    return row?.logoArchivoId ? `/api/v1/files/${row.logoArchivoId}` : null;
+  }
+
+  private toAuthUserView(
+    user: {
+      id: string;
+      nombre: string;
+      email: string;
+      role: AuthUserView['role'];
+      tenantId: string | null;
+      establecimientoId: string;
+      tenant?: AuthTenantSnapshot | null;
+      permissions: { permission: { code: string } }[];
+    },
+    logoUrl: string | null = null,
+  ): AuthUserView {
     return {
       id: user.id,
       nombre: user.nombre,
@@ -648,6 +670,7 @@ export class AuthService {
       tenantStatus: user.tenant?.status ?? null,
       establecimientoId: user.establecimientoId,
       permissionCodes: this.resolvePermissionCodes(user),
+      logoUrl,
     };
   }
 

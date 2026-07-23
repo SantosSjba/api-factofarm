@@ -42,8 +42,9 @@ export function getBillingProviderCapabilities(
         reason: FACTILIZA_UNSUPPORTED_REASON,
       })),
       notes: [
-        'Factiliza soporta factura, boleta, nota de crédito y guía remitente.',
-        'Resumen diario (RC) y comunicación de baja requieren Nubefact u otro OSE compatible.',
+        'Prerrequisito: cuenta y token ya creados en el panel Factiliza (app.factiliza.com).',
+        'Aquí solo pega URL + Bearer; FactoFarm emite factura/boleta/NC/ND y guía remitente.',
+        'RC diario y comunicación de baja: gestione en Nubefact/APIsPERU o en el panel Factiliza.',
       ],
     };
   }
@@ -55,24 +56,46 @@ export function getBillingProviderCapabilities(
       supportsVoidDocument: true,
       supportedSpecialDocuments: [...FACTILIZA_UNSUPPORTED_SPECIAL],
       unsupportedSpecialDocuments: [],
-      notes: ['Nubefact soporta emisión estándar, RC, baja y comprobantes especiales.'],
+      notes: [
+        'Prerrequisito: en Nubefact, Configuración → API (Integración) ya debe mostrar RUTA y TOKEN del local.',
+        'Aquí pega esa RUTA y TOKEN; FactoFarm emite CPE, RC, baja y comprobantes especiales.',
+      ],
     };
   }
 
+  if (provider === BillingProviderType.APISPERU) {
+    return {
+      mockAllowed: !isProduction,
+      supportsDailySummary: false,
+      supportsVoidDocument: true,
+      supportedSpecialDocuments: [],
+      unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
+        documentType,
+        reason: 'No cableado aún con APIsPERU. Use Nubefact o el panel APIsPERU.',
+      })),
+      notes: [
+        'Prerrequisito: empresa creada en el panel APIsPERU (certificado PEM + usuario SOL) con su token permanente.',
+        'Aquí pega URL (https://facturacion.apisperu.com/api/v1) y ese token; FactoFarm emite factura/boleta/NC/ND y baja.',
+        'RC diario: aún desde el panel APIsPERU.',
+      ],
+    };
+  }
+
+  // MOCK / sin OSE: ventas con nota de venta; sin boleta/factura SUNAT.
   return {
-    mockAllowed: !isProduction,
+    mockAllowed: true,
     supportsDailySummary: !isProduction,
     supportsVoidDocument: !isProduction,
     supportedSpecialDocuments: isProduction ? [] : [...FACTILIZA_UNSUPPORTED_SPECIAL],
-    unsupportedSpecialDocuments: isProduction
-      ? FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
-          documentType,
-          reason: 'Configure Factiliza o Nubefact para emitir comprobantes reales en producción.',
-        }))
-      : [],
-    notes: isProduction
-      ? ['Configure Factiliza o Nubefact para operación fiscal real.']
-      : ['Proveedor MOCK solo para desarrollo y pruebas locales.'],
+    unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
+      documentType,
+      reason:
+        'Configure Factiliza, Nubefact o APIsPERU en Mi farmacia (con credenciales de su panel) para CPE.',
+    })),
+    notes: [
+      'Sin OSE: puede vender con nota de venta (no va a SUNAT).',
+      'Para CPE: primero configure el panel del proveedor, luego pegue URL/token aquí.',
+    ],
   };
 }
 

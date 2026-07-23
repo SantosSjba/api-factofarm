@@ -35,6 +35,8 @@ import { RegulatedPriceService } from '../compliance/services/regulated-price.se
 import { RealtimeService } from '../realtime/realtime.service';
 import { LoyaltyService } from '../marketing/loyalty.service';
 import { PromotionsService } from '../marketing/promotions.service';
+import { LocalDiskFileStorage } from '../files/infrastructure/local-disk-file.storage';
+import { isValidPdfBuffer } from '../billing/utils/pdf-buffer.util';
 import { validateSalePayments } from './utils/payment-validation.util';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
@@ -45,6 +47,8 @@ import {
   VoidSaleDto,
 } from './dto/create-sale.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
+import { SalePdfService } from './services/sale-pdf.service';
+import { readFile } from 'fs/promises';
 
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
   BOLETA: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
@@ -68,6 +72,8 @@ export class SalesService {
     private readonly realtime: RealtimeService,
     private readonly loyalty: LoyaltyService,
     private readonly promotions: PromotionsService,
+    private readonly salePdf: SalePdfService,
+    private readonly fileStorage: LocalDiskFileStorage,
   ) {}
 
   async findAll(establishmentId: string, query: SaleListQueryDto) {
@@ -133,19 +139,38 @@ export class SalesService {
           createdAt: true,
           customer: { select: { id: true, nombre: true } },
           seller: { select: { id: true, nombre: true } },
+          electronicDocument: {
+            select: { sunatStatus: true, id: true, deletedAt: true },
+          },
         },
       }),
     ]);
 
     return buildPaginatedResult(
-      rows.map((row) => ({
-        ...row,
-        storage: row.archivedAt ? 'archived' : 'hot',
-        subtotal: row.subtotal.toString(),
-        descuentoTotal: row.descuentoTotal.toString(),
-        igvTotal: row.igvTotal.toString(),
-        total: row.total.toString(),
-      })),
+      rows.map((row) => {
+        const { electronicDocument, ...rest } = row;
+        const cpe =
+          electronicDocument && !electronicDocument.deletedAt ? electronicDocument : null;
+        return {
+          ...rest,
+          storage: (row.archivedAt ? 'archived' : 'hot') as 'archived' | 'hot',
+          subtotal: rest.subtotal.toString(),
+          descuentoTotal: rest.descuentoTotal.toString(),
+          igvTotal: rest.igvTotal.toString(),
+          total: rest.total.toString(),
+          sunatStatus: cpe?.sunatStatus ?? null,
+          electronicDocumentId: cpe?.id ?? null,
+          canEmitCpe:
+            (rest.documentType === SaleDocumentType.BOLETA ||
+              rest.documentType === SaleDocumentType.FACTURA) &&
+            !cpe,
+          canConvertToCpe:
+            (rest.documentType === SaleDocumentType.NOTA_VENTA ||
+              rest.documentType === SaleDocumentType.TICKET) &&
+            !cpe &&
+            rest.estado === SaleStatus.COMPLETADA,
+        };
+      }),
       total,
       page,
       pageSize,
@@ -214,6 +239,155 @@ export class SalesService {
     return this.mapArchivedSaleDetail(archived);
   }
 
+  /**
+   * PDF de la venta:
+   * - Si hay CPE del OSE/PSE con PDF válido → ese archivo.
+   * - Si no (nota de venta, sin OSE, PDF OSE faltante) → PDF generado en backend.
+   */
+  async getPdf(
+    id: string,
+    establishmentId: string,
+  ): Promise<{ buffer: Buffer; filename: string; source: 'ose' | 'generated' }> {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, establishmentId, deletedAt: null },
+      include: {
+        customer: { select: { nombre: true, numeroDocumento: true } },
+        establishment: {
+          select: {
+            nombre: true,
+            logoArchivoId: true,
+            salePdfFormat: true,
+            telefono: true,
+            direccionComercial: true,
+            direccionFiscal: true,
+            billingConfig: { select: { rucEmisor: true, razonSocialEmisor: true } },
+          },
+        },
+        items: {
+          include: {
+            product: { select: { nombre: true } },
+            lotLines: true,
+          },
+        },
+        payments: true,
+        electronicDocument: {
+          select: {
+            pdfArchivoId: true,
+            serie: true,
+            numero: true,
+            documentType: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+
+    const oseDoc =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const osePdfId = oseDoc?.pdfArchivoId;
+    if (osePdfId) {
+      const archivo = await this.prisma.archivo.findUnique({
+        where: { id: osePdfId },
+        select: { rutaRelativa: true, nombreOriginal: true },
+      });
+      if (archivo && this.fileStorage.exists(archivo.rutaRelativa)) {
+        const buffer = await readFile(this.fileStorage.resolveAbsolutePath(archivo.rutaRelativa));
+        if (isValidPdfBuffer(buffer)) {
+          return {
+            buffer,
+            filename: archivo.nombreOriginal || `${sale.serie ?? 'DOC'}-${sale.numero ?? id}.pdf`,
+            source: 'ose',
+          };
+        }
+      }
+    }
+
+    const docLabels: Record<SaleDocumentType, string> = {
+      NOTA_VENTA: 'NOTA DE VENTA',
+      BOLETA: 'BOLETA DE VENTA',
+      FACTURA: 'FACTURA',
+      TICKET: 'TICKET',
+    };
+    const isElectronic =
+      sale.documentType === SaleDocumentType.BOLETA ||
+      sale.documentType === SaleDocumentType.FACTURA;
+    const footerNote = isElectronic
+      ? oseDoc?.pdfArchivoId
+        ? 'Representación impresa interna. El PDF oficial del OSE no está disponible.'
+        : 'Comprobante interno. Configure OSE en Mi farmacia para el PDF oficial SUNAT.'
+      : 'Nota de venta interna. No es comprobante SUNAT.';
+
+    const logoBuffer = await this.resolveEstablishmentLogoBuffer(
+      sale.establishment.logoArchivoId,
+    );
+    const money = (v: { toString(): string }) => {
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n.toFixed(2) : v.toString();
+    };
+
+    const buffer = await this.salePdf.build({
+      documentLabel: docLabels[sale.documentType] ?? sale.documentType,
+      serie: sale.serie,
+      numero: sale.numero,
+      issuedAt: sale.createdAt,
+      establishmentName:
+        sale.establishment.billingConfig?.razonSocialEmisor?.trim() ||
+        sale.establishment.nombre,
+      rucEmisor: sale.establishment.billingConfig?.rucEmisor ?? null,
+      address:
+        sale.establishment.direccionComercial?.trim() ||
+        sale.establishment.direccionFiscal?.trim() ||
+        null,
+      phone: sale.establishment.telefono?.trim() || null,
+      customerName: sale.customer?.nombre ?? null,
+      customerDoc: sale.customer?.numeroDocumento ?? null,
+      subtotal: money(sale.subtotal),
+      igvTotal: money(sale.igvTotal),
+      descuentoTotal: money(sale.descuentoTotal),
+      total: money(sale.total),
+      payments: sale.payments.map((p) => ({
+        metodo: p.metodo,
+        monto: money(p.monto),
+        referencia: p.referencia,
+      })),
+      lines: sale.items.map((item) => ({
+        descripcion: item.product.nombre,
+        cantidad: item.cantidad.toString(),
+        precioUnitario: money(item.precioUnitario),
+        totalLinea: money(item.totalLinea),
+        lotes: item.lotLines.length
+          ? item.lotLines.map((l) => `${l.codigoLote}×${l.cantidad}`).join(', ')
+          : undefined,
+      })),
+      footerNote,
+      logoBuffer,
+      format: sale.establishment.salePdfFormat,
+    });
+
+    const filename = `${sale.serie ?? 'NV'}-${sale.numero ?? id}.pdf`;
+    return { buffer, filename, source: 'generated' };
+  }
+
+  /** Logo del cliente SaaS (Mi farmacia); si no hay, SalePdfService usa el de FactoFarm. */
+  private async resolveEstablishmentLogoBuffer(
+    logoArchivoId: string | null | undefined,
+  ): Promise<Buffer | null> {
+    if (!logoArchivoId) return null;
+    const archivo = await this.prisma.archivo.findUnique({
+      where: { id: logoArchivoId },
+      select: { rutaRelativa: true },
+    });
+    if (!archivo || !this.fileStorage.exists(archivo.rutaRelativa)) return null;
+    try {
+      return await readFile(this.fileStorage.resolveAbsolutePath(archivo.rutaRelativa));
+    } catch {
+      return null;
+    }
+  }
+
   private mapArchivedSaleListItem(row: {
     id: string;
     establishmentId: string;
@@ -279,6 +453,8 @@ export class SalesService {
         return this.findOne(existing.id, actor.establecimientoId);
       }
     }
+
+    await this.assertDocumentTypeAllowed(actor.establecimientoId, dto.documentType);
 
     const warehouse = await this.prisma.warehouse.findFirst({
       where: {
@@ -1403,6 +1579,109 @@ export class SalesService {
       },
     });
     return agreement ?? null;
+  }
+
+  /**
+   * Sin OSE: solo nota de venta.
+   * Con OSE: boleta/factura/ticket/nota de venta permitidos.
+   */
+  private async assertDocumentTypeAllowed(
+    establishmentId: string,
+    documentType: SaleDocumentType,
+  ) {
+    const needsOse =
+      documentType === SaleDocumentType.BOLETA ||
+      documentType === SaleDocumentType.FACTURA ||
+      documentType === SaleDocumentType.TICKET;
+    if (!needsOse) return;
+    const hasOse = await this.billing.establishmentHasRealOse(establishmentId);
+    if (!hasOse) {
+      throw new BadRequestException(
+        'Sin facturación electrónica configurada solo puede registrar notas de venta. Configure el OSE en Mi farmacia para boletas y facturas.',
+      );
+    }
+  }
+
+  /**
+   * P3: migrar nota de venta (o ticket) a boleta/factura y encolar emisión SUNAT.
+   * Conserva la venta; reasigna serie/número del comprobante electrónico.
+   */
+  async convertToCpe(
+    saleId: string,
+    establishmentId: string,
+    targetType: 'BOLETA' | 'FACTURA',
+    actorId?: string,
+  ) {
+    const nextType =
+      targetType === 'FACTURA' ? SaleDocumentType.FACTURA : SaleDocumentType.BOLETA;
+    const hasOse = await this.billing.establishmentHasRealOse(establishmentId);
+    if (!hasOse) {
+      throw new BadRequestException(
+        'Configure facturación electrónica (OSE) en Mi farmacia antes de migrar a boleta/factura.',
+      );
+    }
+
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, establishmentId, deletedAt: null },
+      include: {
+        customer: { select: { tipoDocumento: true, numeroDocumento: true } },
+        electronicDocument: { select: { id: true, deletedAt: true } },
+      },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.estado !== SaleStatus.COMPLETADA) {
+      throw new BadRequestException('Solo se migran ventas completadas');
+    }
+    if (
+      sale.documentType !== SaleDocumentType.NOTA_VENTA &&
+      sale.documentType !== SaleDocumentType.TICKET
+    ) {
+      throw new BadRequestException(
+        'Solo notas de venta (o tickets) se pueden migrar a boleta/factura',
+      );
+    }
+    if (sale.electronicDocument && !sale.electronicDocument.deletedAt) {
+      throw new BadRequestException('La venta ya tiene un comprobante electrónico');
+    }
+    if (nextType === SaleDocumentType.FACTURA) {
+      if (!sale.customer || sale.customer.tipoDocumento !== 'RUC') {
+        throw new BadRequestException(
+          'Para migrar a factura el cliente debe tener RUC registrado',
+        );
+      }
+    }
+
+    const { serie, numero } = await this.resolveDocumentNumber(
+      establishmentId,
+      nextType,
+    );
+    await this.prisma.sale.update({
+      where: { id: sale.id },
+      data: { documentType: nextType, serie, numero },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'CONVERT_TO_CPE',
+      entity: 'Sale',
+      entityId: sale.id,
+      diff: {
+        from: sale.documentType,
+        to: nextType,
+        serie,
+        numero,
+        previousSerie: sale.serie,
+        previousNumero: sale.numero,
+      },
+    });
+
+    const docId = await this.billing.scheduleEmitFromSale(sale.id, { force: true });
+    if (!docId) {
+      throw new BadRequestException(
+        'Venta migrada, pero no se pudo encolar la emisión SUNAT. Revise credenciales OSE e intente Emitir.',
+      );
+    }
+    await this.billing.processPendingJobs();
+    return this.findOne(sale.id, establishmentId);
   }
 
   private async resolveDocumentNumber(

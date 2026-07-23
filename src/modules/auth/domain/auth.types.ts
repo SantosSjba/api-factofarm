@@ -24,6 +24,8 @@ export type AuthUserView = {
   establecimientoId: string;
   permissionCodes: string[];
   supportSession?: boolean;
+  /** Logo del establecimiento activo (`/api/v1/files/:id`), si existe. */
+  logoUrl?: string | null;
 };
 
 export type AuthTokensView = {

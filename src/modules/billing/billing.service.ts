@@ -26,10 +26,13 @@ import type { EmitDocumentInput, IBillingProvider } from './domain/billing-provi
 import { MockBillingProvider } from './providers/mock-billing.provider';
 import { NubefactBillingProvider } from './providers/nubefact-billing.provider';
 import { FactilizaBillingProvider } from './providers/factiliza-billing.provider';
+import { ApisperuBillingProvider } from './providers/apisperu-billing.provider';
 import { BillingArtifactService } from './services/billing-artifact.service';
 import { UblBuilderService } from './services/ubl-builder.service';
 import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
 import { getBillingProviderCapabilities } from './utils/billing-capabilities.util';
+import { hasRealOseConfigured } from './utils/ose-config.util';
+import { isValidPdfBuffer } from './utils/pdf-buffer.util';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   BillingDocumentListQueryDto,
@@ -61,6 +64,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     private readonly mockProvider: MockBillingProvider,
     private readonly nubefactProvider: NubefactBillingProvider,
     private readonly factilizaProvider: FactilizaBillingProvider,
+    private readonly apisperuProvider: ApisperuBillingProvider,
     private readonly factilizaConsulta: FactilizaConsultaClient,
     private readonly realtime: RealtimeService,
   ) {}
@@ -89,8 +93,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   async getConfig(establishmentId: string) {
     const nodeEnv = this.config.get<string>('NODE_ENV');
-    const defaultProvider =
-      nodeEnv === 'production' ? BillingProviderType.FACTILIZA : BillingProviderType.MOCK;
+    /** Sin fila: operar solo con notas de venta hasta que el cliente configure un OSE. */
+    const defaultProvider = BillingProviderType.MOCK;
     const row = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
     });
@@ -100,7 +104,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       return {
         provider: defaultProvider,
         modoSandbox: nodeEnv !== 'production',
-        autoEmitOnSale: true,
+        autoEmitOnSale: false,
         emitNotaVenta: false,
         applyDetraccion: false,
         autoEmitGuiaOnTransfer: true,
@@ -128,32 +132,61 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   async upsertConfig(establishmentId: string, dto: UpsertBillingConfigDto, actorId?: string) {
     const nodeEnv = this.config.get<string>('NODE_ENV');
-    const provider = dto.provider ?? (nodeEnv === 'production' ? BillingProviderType.FACTILIZA : BillingProviderType.MOCK);
-    if (nodeEnv === 'production') {
-      if (provider === BillingProviderType.MOCK) {
-        throw new BadRequestException(
-          'El proveedor MOCK no está permitido en producción. Use Factiliza o Nubefact.',
-        );
-      }
-      if (provider === BillingProviderType.BIZLINKS) {
-        throw new BadRequestException('El proveedor Bizlinks aún no está implementado.');
-      }
+    const existing = await this.prisma.establishmentBillingConfig.findUnique({
+      where: { establishmentId },
+    });
+    const provider =
+      dto.provider ?? existing?.provider ?? BillingProviderType.MOCK;
+
+    // MOCK = sin OSE: el local puede vender con nota de venta; boleta/factura requieren OSE real.
+    if (provider === BillingProviderType.BIZLINKS) {
+      throw new BadRequestException(
+        'El proveedor Bizlinks aún no está disponible. Use Factiliza o Nubefact.',
+      );
     }
+    if (
+      nodeEnv === 'production' &&
+      provider !== BillingProviderType.MOCK &&
+      provider !== BillingProviderType.FACTILIZA &&
+      provider !== BillingProviderType.NUBEFACT &&
+      provider !== BillingProviderType.APISPERU
+    ) {
+      throw new BadRequestException('Proveedor de facturación no soportado.');
+    }
+
+    const withoutOse = provider === BillingProviderType.MOCK;
+    const pickText = (incoming: string | undefined, current: string | null | undefined) => {
+      if (incoming === undefined) return current ?? null;
+      const trimmed = incoming.trim();
+      return trimmed || null;
+    };
+    const pickBool = (incoming: boolean | undefined, current: boolean | undefined, fallback: boolean) => {
+      if (incoming !== undefined) return incoming;
+      if (current !== undefined) return current;
+      return fallback;
+    };
 
     const data: Prisma.EstablishmentBillingConfigUpsertArgs['create'] = {
       establishmentId,
       provider,
-      rucEmisor: dto.rucEmisor?.trim() || null,
-      razonSocialEmisor: dto.razonSocialEmisor?.trim() || null,
-      apiUrl: dto.apiUrl?.trim() || null,
-      modoSandbox: dto.modoSandbox ?? true,
-      autoEmitOnSale: dto.autoEmitOnSale ?? true,
-      consultaApiUrl: dto.consultaApiUrl?.trim() || null,
-      emitNotaVenta: dto.emitNotaVenta ?? false,
-      applyDetraccion: dto.applyDetraccion ?? false,
-      autoEmitGuiaOnTransfer: dto.autoEmitGuiaOnTransfer ?? true,
+      rucEmisor: pickText(dto.rucEmisor, existing?.rucEmisor),
+      razonSocialEmisor: pickText(dto.razonSocialEmisor, existing?.razonSocialEmisor),
+      apiUrl: pickText(dto.apiUrl, existing?.apiUrl),
+      consultaApiUrl: pickText(dto.consultaApiUrl, existing?.consultaApiUrl),
+      modoSandbox: pickBool(dto.modoSandbox, existing?.modoSandbox, true),
+      autoEmitOnSale: withoutOse
+        ? false
+        : pickBool(dto.autoEmitOnSale, existing?.autoEmitOnSale, true),
+      emitNotaVenta: pickBool(dto.emitNotaVenta, existing?.emitNotaVenta, false),
+      applyDetraccion: withoutOse
+        ? false
+        : pickBool(dto.applyDetraccion, existing?.applyDetraccion, false),
+      autoEmitGuiaOnTransfer: withoutOse
+        ? false
+        : pickBool(dto.autoEmitGuiaOnTransfer, existing?.autoEmitGuiaOnTransfer, true),
     };
 
+    // Solo toca secretos si el cliente los envía (evita borrar token al guardar RUC).
     if (dto.apiToken !== undefined) {
       data.apiTokenEncrypted = dto.apiToken
         ? encryptBillingSecret(dto.apiToken, this.encryptionKey())
@@ -262,7 +295,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       : null;
   }
 
-  async scheduleEmitFromSale(saleId: string) {
+  /**
+   * Encola emisión CPE desde una venta.
+   * - Automático (force=false): respeta `autoEmitOnSale`.
+   * - Manual (force=true): emite aunque auto esté apagado (flujo “registrar → emitir después”).
+   */
+  async scheduleEmitFromSale(saleId: string, options?: { force?: boolean }) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, deletedAt: null },
       include: {
@@ -292,7 +330,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       EMITABLE_SALE_TYPES.has(sale.documentType) ||
       (sale.documentType === SaleDocumentType.NOTA_VENTA && config?.emitNotaVenta);
     if (!emitable) return null;
-    if (config && !config.autoEmitOnSale) return null;
+    if (!options?.force && config && !config.autoEmitOnSale) return null;
+
+    // Sin OSE real: no encola CPE. La venta/nota de venta queda registrada en ventas.
+    if (!hasRealOseConfigured(config)) return null;
 
     const existing = await this.prisma.electronicDocument.findFirst({
       where: { saleId: sale.id, deletedAt: null },
@@ -579,13 +620,34 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   async emitFromSale(saleId: string, establishmentId: string) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, establishmentId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, documentType: true },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    const docId = await this.scheduleEmitFromSale(saleId);
-    if (!docId) throw new BadRequestException('Esta venta no requiere CPE electrónico');
+    if (
+      sale.documentType !== SaleDocumentType.BOLETA &&
+      sale.documentType !== SaleDocumentType.FACTURA
+    ) {
+      throw new BadRequestException(
+        'Solo boletas y facturas se emiten a SUNAT. Si es nota de venta, migre primero a boleta o factura.',
+      );
+    }
+    const docId = await this.scheduleEmitFromSale(saleId, { force: true });
+    if (!docId) {
+      throw new BadRequestException(
+        'No se pudo emitir. Verifique OSE en Mi farmacia (proveedor + token) y que la venta no tenga ya un CPE.',
+      );
+    }
     await this.processPendingJobs();
     return this.getDocument(docId, establishmentId);
+  }
+
+  /** True si el establecimiento puede emitir boleta/factura SUNAT. */
+  async establishmentHasRealOse(establishmentId: string): Promise<boolean> {
+    const config = await this.prisma.establishmentBillingConfig.findUnique({
+      where: { establishmentId },
+      select: { provider: true, apiTokenEncrypted: true },
+    });
+    return hasRealOseConfigured(config);
   }
 
   async retryDocument(id: string, establishmentId: string, actorId?: string) {
@@ -999,11 +1061,19 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       'application/xml',
       result.xmlContent,
     );
-    const pdfId = await this.artifacts.saveBuffer(
-      `${doc.serie}-${doc.numero}.pdf`,
-      'application/pdf',
-      result.pdfContent,
-    );
+    // Solo persistir PDF real del OSE/PSE; placeholders de texto no se guardan como .pdf.
+    const pdfId = isValidPdfBuffer(result.pdfContent)
+      ? await this.artifacts.saveBuffer(
+          `${doc.serie}-${doc.numero}.pdf`,
+          'application/pdf',
+          result.pdfContent,
+        )
+      : null;
+    if (!pdfId) {
+      this.logger.warn(
+        `PDF no válido del proveedor para ${doc.serie}-${doc.numero}; use GET /sales/:id/pdf (generado) o reintente.`,
+      );
+    }
     const cdrId = await this.artifacts.saveBuffer(
       `${doc.serie}-${doc.numero}-cdr.txt`,
       'text/plain',
@@ -1078,9 +1148,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       where: { establishmentId },
       select: { provider: true },
     });
-    const provider =
-      config?.provider ??
-      (nodeEnv === 'production' ? BillingProviderType.FACTILIZA : BillingProviderType.MOCK);
+    const provider = config?.provider ?? BillingProviderType.MOCK;
     return getBillingProviderCapabilities(provider, nodeEnv);
   }
 
@@ -1090,32 +1158,39 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       where: { establishmentId },
     });
 
-    if (nodeEnv === 'production') {
-      if (!config || config.provider === BillingProviderType.MOCK) {
-        throw new BadRequestException(
-          'Facturación electrónica: en producción debe configurar un proveedor OSE (Factiliza o Nubefact) con credenciales válidas.',
-        );
-      }
-      if (!config.apiTokenEncrypted?.trim()) {
-        throw new BadRequestException(
-          'Facturación electrónica: configure el token API del proveedor OSE antes de emitir comprobantes.',
-        );
-      }
+    if (!config || config.provider === BillingProviderType.MOCK) {
+      throw new BadRequestException(
+        'No hay proveedor OSE configurado. En Mi farmacia elija Factiliza, Nubefact o APIsPERU e ingrese el token, o use Nota de venta.',
+      );
+    }
+    if (config.provider === BillingProviderType.BIZLINKS) {
+      throw new BadRequestException(
+        'Bizlinks aún no está disponible. Configure Factiliza, Nubefact o APIsPERU.',
+      );
+    }
+    if (!config.apiTokenEncrypted?.trim()) {
+      throw new BadRequestException(
+        'Configure el token API del proveedor OSE en Mi farmacia antes de emitir boletas/facturas.',
+      );
     }
 
-    if (config?.provider === BillingProviderType.FACTILIZA) {
-      const token = config.apiTokenEncrypted
-        ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())
-        : null;
+    const token = decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey());
+    const emisor = {
+      ruc: config.rucEmisor?.trim() || '',
+      razonSocial: config.razonSocialEmisor?.trim() || '',
+    };
+
+    if (config.provider === BillingProviderType.FACTILIZA) {
       this.factilizaProvider.setCredentials(config.apiUrl, token);
       return this.factilizaProvider;
     }
-    if (config?.provider === BillingProviderType.NUBEFACT) {
-      const token = config.apiTokenEncrypted
-        ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())
-        : null;
+    if (config.provider === BillingProviderType.NUBEFACT) {
       this.nubefactProvider.setCredentials(config.apiUrl, token);
       return this.nubefactProvider;
+    }
+    if (config.provider === BillingProviderType.APISPERU) {
+      this.apisperuProvider.setCredentials(config.apiUrl, token, emisor);
+      return this.apisperuProvider;
     }
     return this.mockProvider;
   }

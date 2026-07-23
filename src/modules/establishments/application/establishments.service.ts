@@ -89,6 +89,7 @@ const selectEstablishment = {
   nombreImpresora: true,
   clienteDefault: true,
   logoArchivoId: true,
+  salePdfFormat: true,
   sujetoIgv31556: true,
   esHospital: true,
   inventoryValuationMethod: true,
@@ -501,6 +502,10 @@ export class EstablishmentsService {
 
     const billing = await this.billing.getConfig(establishmentId);
     const { tenant, ...establishment } = row;
+    const electronicEnabled =
+      billing.provider === 'FACTILIZA' ||
+      billing.provider === 'NUBEFACT' ||
+      billing.provider === 'APISPERU';
 
     return {
       establishmentId: establishment.id,
@@ -524,10 +529,36 @@ export class EstablishmentsService {
       logoUrl: establishment.logoArchivoId
         ? `/api/v1/files/${establishment.logoArchivoId}`
         : null,
+      salePdfFormat: establishment.salePdfFormat,
+      salePdfFormatOptions: [
+        { value: 'TICKET_80', label: 'Ticket 80 mm (impresora térmica)' },
+        { value: 'TICKET_58', label: 'Ticket 58 mm (impresora térmica)' },
+        { value: 'A4', label: 'Hoja A4 (impresora normal)' },
+      ],
       rucEmisor: billing.rucEmisor ?? tenant.ruc ?? null,
       razonSocialEmisor: billing.razonSocialEmisor ?? tenant.nombre ?? null,
       billingProvider: billing.provider,
+      apiUrl: billing.apiUrl ?? null,
+      consultaApiUrl: billing.consultaApiUrl ?? null,
+      modoSandbox: billing.modoSandbox,
+      autoEmitOnSale: billing.autoEmitOnSale,
+      emitNotaVenta: billing.emitNotaVenta,
+      applyDetraccion: billing.applyDetraccion,
+      autoEmitGuiaOnTransfer: billing.autoEmitGuiaOnTransfer,
       hasOseCredentials: !!(billing.hasApiToken || billing.hasCertificate),
+      electronicInvoicingEnabled: electronicEnabled && !!(billing.hasApiToken || billing.hasCertificate),
+      billingCapabilities: billing.capabilities ?? null,
+      billingProviderOptions: [
+        {
+          value: 'MOCK',
+          label: 'Sin facturación electrónica (solo notas de venta)',
+          available: true,
+        },
+        { value: 'FACTILIZA', label: 'Factiliza', available: true },
+        { value: 'NUBEFACT', label: 'Nubefact', available: true },
+        { value: 'APISPERU', label: 'APIsPERU', available: true },
+        { value: 'BIZLINKS', label: 'Bizlinks (próximamente)', available: false },
+      ],
     };
   }
 
@@ -568,7 +599,11 @@ export class EstablishmentsService {
       establishmentPatch.numeroRegistroDigemid = dto.numeroRegistroDigemid ?? undefined;
     }
 
-    if (Object.keys(establishmentPatch).length > 0 || dto.logoArchivoId === null) {
+    if (
+      Object.keys(establishmentPatch).length > 0 ||
+      dto.logoArchivoId === null ||
+      dto.salePdfFormat !== undefined
+    ) {
       const data = this.mapEstablishmentUpdateInput(establishmentPatch);
       if (dto.logoArchivoId === null) {
         data.logoArchivoId = null;
@@ -579,6 +614,9 @@ export class EstablishmentsService {
       if (dto.departmentId === null) data.departmentId = null;
       if (dto.provinceId === null) data.provinceId = null;
       if (dto.districtId === null) data.districtId = null;
+      if (dto.salePdfFormat !== undefined) {
+        data.salePdfFormat = dto.salePdfFormat;
+      }
 
       await this.prisma.establishment.update({
         where: { id: establishmentId },
@@ -586,34 +624,44 @@ export class EstablishmentsService {
       });
     }
 
-    if (dto.rucEmisor !== undefined || dto.razonSocialEmisor !== undefined) {
-      const rucEmisor =
-        dto.rucEmisor !== undefined ? dto.rucEmisor.trim() || null : undefined;
-      const razonSocialEmisor =
-        dto.razonSocialEmisor !== undefined
-          ? dto.razonSocialEmisor.trim() || null
-          : undefined;
+    const billingTouched =
+      dto.rucEmisor !== undefined ||
+      dto.razonSocialEmisor !== undefined ||
+      dto.billingProvider !== undefined ||
+      dto.apiUrl !== undefined ||
+      dto.consultaApiUrl !== undefined ||
+      dto.apiToken !== undefined ||
+      dto.modoSandbox !== undefined ||
+      dto.autoEmitOnSale !== undefined ||
+      dto.emitNotaVenta !== undefined ||
+      dto.applyDetraccion !== undefined ||
+      dto.autoEmitGuiaOnTransfer !== undefined;
 
-      // Solo toca campos fiscales; no altera proveedor/token OSE.
-      await this.prisma.establishmentBillingConfig.upsert({
-        where: { establishmentId },
-        create: {
-          establishmentId,
-          rucEmisor: rucEmisor ?? null,
-          razonSocialEmisor: razonSocialEmisor ?? null,
+    if (billingTouched) {
+      await this.billing.upsertConfig(
+        establishmentId,
+        {
+          provider: dto.billingProvider,
+          rucEmisor: dto.rucEmisor,
+          razonSocialEmisor: dto.razonSocialEmisor,
+          apiUrl: dto.apiUrl,
+          consultaApiUrl: dto.consultaApiUrl,
+          apiToken: dto.apiToken,
+          modoSandbox: dto.modoSandbox,
+          autoEmitOnSale: dto.autoEmitOnSale,
+          emitNotaVenta: dto.emitNotaVenta,
+          applyDetraccion: dto.applyDetraccion,
+          autoEmitGuiaOnTransfer: dto.autoEmitGuiaOnTransfer,
         },
-        update: {
-          ...(rucEmisor !== undefined ? { rucEmisor } : {}),
-          ...(razonSocialEmisor !== undefined ? { razonSocialEmisor } : {}),
-        },
-      });
+        actor.sub,
+      );
 
-      // Sincroniza RUC comercial del tenant SaaS cuando el cliente lo actualiza.
-      if (actor.tenantId && rucEmisor) {
+      const ruc = dto.rucEmisor?.trim();
+      if (actor.tenantId && ruc) {
         await this.prisma.tenant
           .update({
             where: { id: actor.tenantId },
-            data: { ruc: rucEmisor },
+            data: { ruc },
           })
           .catch(() => undefined);
       }
