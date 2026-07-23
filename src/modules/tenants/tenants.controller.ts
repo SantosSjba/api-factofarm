@@ -23,6 +23,7 @@ import {
 import { ComplaintListQueryDto, UpdateComplaintDto } from './dto/complaint.dto';
 import { ComplaintsService } from './complaints.service';
 import { TenantsService } from './tenants.service';
+import { AuthService } from '../auth/application/auth.service';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
@@ -31,6 +32,7 @@ export class TenantsController {
   constructor(
     private readonly tenants: TenantsService,
     private readonly complaints: ComplaintsService,
+    private readonly auth: AuthService,
   ) {}
 
   @Get()
@@ -146,6 +148,18 @@ export class TenantsController {
   @ApiOperation({ summary: 'Suspender cliente' })
   suspend(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
     return this.tenants.suspend(id, actor.sub);
+  }
+
+  @Post(':id/enter-panel')
+  @RequirePermissions('tenants.read', 'nav.platform_clientes')
+  @ApiOperation({
+    summary: 'Generar acceso de soporte al panel del cliente (abrir en nueva pestaña)',
+  })
+  enterPanel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.auth.createTenantPanelHandoff(actor, id);
   }
 
   @Post(':id/provision')

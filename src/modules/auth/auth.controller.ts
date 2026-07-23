@@ -87,11 +87,22 @@ export class AuthController {
     return this.authService.logout(dto.refreshToken);
   }
 
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('exchange-panel-handoff')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Canjear código de acceso al panel de un cliente SaaS (sesión de soporte)',
+  })
+  exchangePanelHandoff(@Body() body: { code?: string }) {
+    return this.authService.exchangePanelHandoff(body.code ?? '');
+  }
+
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Perfil del usuario autenticado' })
   me(@CurrentUser() user: JwtRequestUser) {
-    return this.authService.me(user.sub);
+    return this.authService.me(user);
   }
 
   @Patch('me')

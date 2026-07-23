@@ -1,0 +1,15 @@
+/// Código de un solo uso para que SUPER_ADMIN abra el panel de un tenant en otra pestaña.
+model PlatformPanelHandoff {
+  id              String    @id @default(uuid())
+  codeHash        String    @unique
+  actorUserId     String
+  tenantId        String
+  establishmentId String
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@index([tenantId])
+  @@index([actorUserId])
+}
