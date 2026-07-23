@@ -52,4 +52,25 @@ export class DashboardController {
   getCashier(@CurrentUser() actor: JwtRequestUser) {
     return this.dashboard.getCashierDashboard(actor);
   }
+
+  @Get('warehouse')
+  @RequirePermissions('nav.dashboard_admin', 'nav.inventario_movimientos')
+  @ApiOperation({ summary: 'Dashboard almacenero' })
+  getWarehouse(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getWarehouseDashboard(actor);
+  }
+
+  @Get('accountant')
+  @RequirePermissions('nav.dashboard_admin', 'nav.cuentas_pagar', 'nav.cuentas_cobrar')
+  @ApiOperation({ summary: 'Dashboard contador / finanzas' })
+  getAccountant(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getAccountantDashboard(actor);
+  }
+
+  @Get('platform')
+  @RequirePermissions('tenants.read', 'nav.platform_dashboard')
+  @ApiOperation({ summary: 'Dashboard operador plataforma FactoFarm' })
+  getPlatform(@CurrentUser() actor: JwtRequestUser) {
+    return this.dashboard.getPlatformDashboard(actor);
+  }
 }

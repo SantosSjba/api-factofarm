@@ -93,6 +93,7 @@ const FULL_ACCESS_ROLES: ReadonlySet<UserRole> = new Set([
 ]);
 
 const PLATFORM_ONLY_NAV = new Set([
+  'nav.platform_dashboard',
   'nav.platform_clientes',
   'nav.platform_leads',
   'nav.platform_reclamaciones',

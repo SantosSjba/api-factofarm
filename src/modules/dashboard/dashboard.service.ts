@@ -50,7 +50,7 @@ export class DashboardService {
   private tenantIdForDashboard(actor: JwtRequestUser): string {
     const scope = actorFromJwt(actor);
     if (isPlatformAdmin(scope.role)) {
-      throw new ForbiddenException('Use la consola de plataforma (/platform/clientes)');
+      throw new ForbiddenException('Use la consola de plataforma (/platform/dashboard)');
     }
     return requireTenantId(scope);
   }
@@ -389,6 +389,300 @@ export class DashboardService {
             montoApertura: openSession.montoApertura.toString(),
           }
         : null,
+    };
+  }
+
+  async getWarehouseDashboard(actor: JwtRequestUser) {
+    const tenantId = this.tenantIdForDashboard(actor);
+    const establishmentId = await this.establishmentScope.resolveScoped(actor);
+    const timeZone = await this.resolveActorTimeZone(actor);
+    const now = new Date();
+    const { start: startOfDay } = dayBoundsInTimeZone(now, timeZone);
+    const in30 = new Date(now);
+    in30.setDate(in30.getDate() + 30);
+
+    const warehouseFilter = {
+      establishmentId,
+      deletedAt: null as null,
+    };
+
+    const [
+      stockRows,
+      lotesVencidos,
+      porVencer30,
+      ajustesPendientes,
+      transferenciasEnTransito,
+      ordenesPendientesRecepcion,
+      recepcionesHoy,
+      zonasFrioSinLogHoy,
+    ] = await Promise.all([
+      this.prisma.productWarehouseStock.findMany({
+        where: {
+          product: { tenantId, deletedAt: null, habilitado: true },
+          warehouse: warehouseFilter,
+        },
+        select: { cantidad: true, product: { select: { stockMinimo: true } } },
+      }),
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { lt: now },
+          product: { tenantId },
+          warehouse: warehouseFilter,
+        },
+      }),
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { gte: now, lte: in30 },
+          product: { tenantId },
+          warehouse: warehouseFilter,
+        },
+      }),
+      this.prisma.inventoryPendingAdjustment.count({
+        where: {
+          deletedAt: null,
+          estado: 'PENDIENTE',
+          warehouse: warehouseFilter,
+        },
+      }),
+      this.prisma.inventoryStockTransfer.count({
+        where: {
+          deletedAt: null,
+          estado: 'EN_TRANSITO',
+          OR: [
+            { fromWarehouse: warehouseFilter },
+            { toWarehouse: warehouseFilter },
+          ],
+        },
+      }),
+      this.prisma.purchaseOrder.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: ['APROBADA', 'ENVIADA', 'PARCIALMENTE_RECIBIDA'] },
+        },
+      }),
+      this.prisma.goodsReceipt.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          fechaRecepcion: { gte: startOfDay },
+        },
+      }),
+      this.prisma.warehouseZone.count({
+        where: {
+          deletedAt: null,
+          activo: true,
+          tipo: 'REFRIGERADO',
+          warehouse: warehouseFilter,
+          temperatureLogs: { none: { fecha: { gte: startOfDay } } },
+        },
+      }),
+    ]);
+
+    const stockBajo = stockRows.filter((row) =>
+      row.cantidad.lessThan(row.product.stockMinimo),
+    ).length;
+
+    return {
+      stockBajo,
+      lotesVencidos,
+      porVencer30,
+      ajustesPendientes,
+      transferenciasEnTransito,
+      ordenesPendientesRecepcion,
+      recepcionesHoy,
+      zonasFrioSinLogHoy,
+    };
+  }
+
+  async getAccountantDashboard(actor: JwtRequestUser) {
+    this.tenantIdForDashboard(actor);
+    const establishmentId = await this.establishmentScope.resolveScoped(actor);
+
+    const openPayableStatuses = ['PENDIENTE', 'PARCIAL', 'VENCIDA'] as Array<
+      'PENDIENTE' | 'PARCIAL' | 'VENCIDA'
+    >;
+    const openReceivableStatuses = ['PENDIENTE', 'PARCIAL', 'VENCIDA'] as Array<
+      'PENDIENTE' | 'PARCIAL' | 'VENCIDA'
+    >;
+
+    const [
+      cpePendientes,
+      cpeObservados,
+      cpeRechazados,
+      jobsFallidos,
+      jobsPendientes,
+      cxpAbiertas,
+      cxpVencidas,
+      cxpSaldo,
+      cxcAbiertas,
+      cxcVencidas,
+      cxcSaldo,
+    ] = await Promise.all([
+      this.prisma.electronicDocument.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          sunatStatus: { in: ['PENDIENTE', 'ENVIANDO'] },
+        },
+      }),
+      this.prisma.electronicDocument.count({
+        where: { establishmentId, deletedAt: null, sunatStatus: 'OBSERVADO' },
+      }),
+      this.prisma.electronicDocument.count({
+        where: { establishmentId, deletedAt: null, sunatStatus: 'RECHAZADO' },
+      }),
+      this.prisma.billingJob.count({
+        where: {
+          status: 'FALLIDO',
+          electronicDocument: { establishmentId, deletedAt: null },
+        },
+      }),
+      this.prisma.billingJob.count({
+        where: {
+          status: { in: ['PENDIENTE', 'PROCESANDO'] },
+          electronicDocument: { establishmentId, deletedAt: null },
+        },
+      }),
+      this.prisma.accountPayable.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: openPayableStatuses },
+        },
+      }),
+      this.prisma.accountPayable.count({
+        where: { establishmentId, deletedAt: null, estado: 'VENCIDA' },
+      }),
+      this.prisma.accountPayable.aggregate({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: openPayableStatuses },
+        },
+        _sum: { saldo: true },
+      }),
+      this.prisma.accountReceivable.count({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: openReceivableStatuses },
+        },
+      }),
+      this.prisma.accountReceivable.count({
+        where: { establishmentId, deletedAt: null, estado: 'VENCIDA' },
+      }),
+      this.prisma.accountReceivable.aggregate({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: openReceivableStatuses },
+        },
+        _sum: { saldo: true },
+      }),
+    ]);
+
+    return {
+      cpePendientes,
+      cpeObservados,
+      cpeRechazados,
+      jobsFallidos,
+      jobsPendientes,
+      cxpAbiertas,
+      cxpVencidas,
+      cxpSaldo: (cxpSaldo._sum?.saldo ?? new Prisma.Decimal(0)).toString(),
+      cxcAbiertas,
+      cxcVencidas,
+      cxcSaldo: (cxcSaldo._sum?.saldo ?? new Prisma.Decimal(0)).toString(),
+    };
+  }
+
+  async getPlatformDashboard(actor: JwtRequestUser) {
+    if (!isPlatformAdmin(actor.role)) {
+      throw new ForbiddenException('Solo operadores de plataforma');
+    }
+
+    const since7d = new Date();
+    since7d.setDate(since7d.getDate() - 7);
+    const since30d = new Date();
+    since30d.setDate(since30d.getDate() - 30);
+
+    const [
+      tenantsPending,
+      tenantsTrial,
+      tenantsActive,
+      tenantsSuspended,
+      leadsNuevos,
+      reclamacionesAbiertas,
+      reclamaciones7d,
+      tenantsActivados30d,
+      establecimientosActivos,
+      usuariosCliente,
+      recentTenants,
+    ] = await Promise.all([
+      this.prisma.tenant.count({ where: { deletedAt: null, status: 'PENDING' } }),
+      this.prisma.tenant.count({ where: { deletedAt: null, status: 'TRIAL' } }),
+      this.prisma.tenant.count({ where: { deletedAt: null, status: 'ACTIVE' } }),
+      this.prisma.tenant.count({ where: { deletedAt: null, status: 'SUSPENDED' } }),
+      this.prisma.tenantLead.count({ where: { status: 'NEW' } }),
+      this.prisma.complaint.count({
+        where: { status: { in: ['PENDING', 'IN_REVIEW'] } },
+      }),
+      this.prisma.complaint.count({ where: { createdAt: { gte: since7d } } }),
+      this.prisma.tenant.count({
+        where: {
+          deletedAt: null,
+          activatedAt: { gte: since30d },
+        },
+      }),
+      this.prisma.establishment.count({
+        where: { deletedAt: null, activo: true },
+      }),
+      this.prisma.user.count({
+        where: { deletedAt: null, role: { not: 'SUPER_ADMIN' } },
+      }),
+      this.prisma.tenant.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: {
+          id: true,
+          nombre: true,
+          slug: true,
+          plan: true,
+          status: true,
+          createdAt: true,
+          activatedAt: true,
+        },
+      }),
+    ]);
+
+    return {
+      tenants: {
+        pending: tenantsPending,
+        trial: tenantsTrial,
+        active: tenantsActive,
+        suspended: tenantsSuspended,
+      },
+      leadsNuevos,
+      reclamacionesAbiertas,
+      reclamaciones7d,
+      tenantsActivados30d,
+      establecimientosActivos,
+      usuariosCliente,
+      recentTenants: recentTenants.map((t) => ({
+        id: t.id,
+        nombre: t.nombre,
+        slug: t.slug,
+        plan: t.plan,
+        status: t.status,
+        createdAt: t.createdAt.toISOString(),
+        activatedAt: t.activatedAt?.toISOString() ?? null,
+      })),
     };
   }
 }

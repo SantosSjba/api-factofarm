@@ -91,6 +91,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     label: 'Plataforma FactoFarm',
     sortOrder: 0,
     children: [
+      { code: 'nav.platform_dashboard', label: 'Dashboard plataforma', sortOrder: 0 },
       { code: 'nav.platform_clientes', label: 'Clientes SaaS', sortOrder: 1 },
       { code: 'nav.platform_leads', label: 'Leads comerciales', sortOrder: 2 },
       { code: 'nav.platform_reclamaciones', label: 'Libro de reclamaciones', sortOrder: 3 },
@@ -100,7 +101,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     code: 'nav.dashboard',
     label: 'Dashboard',
     sortOrder: 1,
-    children: [{ code: 'nav.dashboard_admin', label: 'Dashboard Admin', sortOrder: 1 }],
+    children: [{ code: 'nav.dashboard_admin', label: 'Mi panel', sortOrder: 1 }],
   },
   {
     code: 'nav.usuarios_series',
