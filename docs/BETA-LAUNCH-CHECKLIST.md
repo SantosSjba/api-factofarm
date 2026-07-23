@@ -28,12 +28,12 @@ Leyenda: `[x]` hecho en código/docs · `[ ]` pendiente operativo (Coolify / neg
 
 | # | Ítem | Estado | Notas |
 |---|------|--------|-------|
-| A1 | SMTP + `SALES_CONTACT_EMAIL` + `COMPLAINTS_EMAIL` | `[ ]` | Sin SMTP no llegan leads ni reset de contraseña |
-| A2 | `JWT_SECRET` (≥32) en prod | `[ ]` | Coolify API |
-| A3 | `LPDP_SENSITIVE_ENCRYPTION_KEY` (≥32) | `[ ]` | Obligatoria en prod (Joi) |
-| A4 | `BILLING_ENCRYPTION_KEY` (≥32) | `[~]` | Ahora exigida en prod por validación |
-| A5 | `FRONTEND_URL` / `CORS_ORIGINS` → front HTTPS | `[ ]` | `https://factofarm.factosysperu.com` |
-| A6 | Datos legales reales (`COMPANY_*` + `NG_APP_COMPANY_*`) | `[x]` | Cargados en código/env local; replicar en Coolify |
+| A1 | SMTP + `SALES_CONTACT_EMAIL` + `COMPLAINTS_EMAIL` | `[~]` | Correos de contacto seteados en Coolify; falta confirmar `SMTP_*` host/user/pass |
+| A2 | `JWT_SECRET` (≥32) en prod | `[~]` | No tocado en este deploy (asumir ya existía si API healthy) |
+| A3 | `LPDP_SENSITIVE_ENCRYPTION_KEY` (≥32) | `[~]` | No tocado; verificar en Coolify si API arrancó en prod |
+| A4 | `BILLING_ENCRYPTION_KEY` (≥32) | `[~]` | Verificar en Coolify (ahora requerida al boot) |
+| A5 | `FRONTEND_URL` / `CORS_ORIGINS` → front HTTPS | `[x]` | Actualizado en Coolify API |
+| A6 | Datos legales reales (`COMPANY_*` + `NG_APP_COMPANY_*`) | `[x]` | Coolify API + horneado en imagen front |
 | A7 | **Nunca** `prisma db seed` en DB de producción | `[~]` | Advertencia en deploy docs |
 | A8 | Documentos legales empaquetados en imagen Docker | `[x]` | `docs/` + path fix |
 | A9 | CPE SUNAT solo con OSE prod + `modoSandbox=false` | `[ ]` | Beta default = nota de venta / MOCK |

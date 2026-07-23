@@ -8,12 +8,13 @@ uploads
 .env
 .env.*
 *.md
+!docs/
+!docs/**
 *.tsbuildinfo
 .DS_Store
 .vscode
 .idea
 test
-docs
 Dockerfile
 docker-compose.yml
 .dockerignore
