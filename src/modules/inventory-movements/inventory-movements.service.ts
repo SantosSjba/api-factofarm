@@ -750,12 +750,14 @@ export class InventoryMovementsService {
     delta: Prisma.Decimal;
     reason: string;
     userId: string;
+    tx?: Prisma.TransactionClient;
   }) {
     if (input.delta.isZero()) return;
 
     const isInbound = input.delta.greaterThan(0);
     const reasonCode = isInbound ? ADJUST_IN_CODE : ADJUST_OUT_CODE;
-    const transferReason = await this.prisma.inventoryTransferReason.findFirst({
+    const db = input.tx ?? this.prisma;
+    const transferReason = await db.inventoryTransferReason.findFirst({
       where: { codigo: reasonCode, deletedAt: null, activo: true },
       select: { id: true },
     });
@@ -765,7 +767,7 @@ export class InventoryMovementsService {
 
     const amount = input.delta.abs();
 
-    await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.inventoryInboundMovement.create({
         data: {
           productId: input.productId,
@@ -846,7 +848,13 @@ export class InventoryMovementsService {
           cantidad: next,
         },
       });
-    });
+    };
+
+    if (input.tx) {
+      await run(input.tx);
+      return;
+    }
+    await this.prisma.$transaction(run);
   }
 
   async createInboundMovement(dto: CreateInboundMovementDto, actorId?: string) {
@@ -1013,7 +1021,11 @@ export class InventoryMovementsService {
     };
   }
 
-  async dispatchSaleStock(dto: DispatchSaleStockDto, actorId: string) {
+  async dispatchSaleStock(
+    dto: DispatchSaleStockDto,
+    actorId: string,
+    tx?: Prisma.TransactionClient,
+  ) {
     const previewDto: SaleLotAllocationPreviewDto = {
       productId: dto.productId,
       warehouseId: dto.warehouseId,
@@ -1021,14 +1033,25 @@ export class InventoryMovementsService {
       mode: dto.mode,
       manualLots: dto.manualLots,
     };
-    const { lines } = await this.resolveSaleLotAllocation(previewDto);
+    const { lines, manejaLotes } = await this.resolveSaleLotAllocation(previewDto);
 
-    const transferReason = await this.prisma.inventoryTransferReason.findFirst({
+    const db = tx ?? this.prisma;
+    const transferReason = await db.inventoryTransferReason.findFirst({
       where: { codigo: SALE_OUT_CODE, deletedAt: null, activo: true },
       select: { id: true },
     });
     if (!transferReason) {
       throw new BadRequestException(`Motivo de venta no configurado (${SALE_OUT_CODE})`);
+    }
+
+    const totalQuantity = new Prisma.Decimal(dto.quantity);
+    if (totalQuantity.lessThanOrEqualTo(0)) {
+      throw new BadRequestException('La cantidad a descontar del stock debe ser mayor a cero');
+    }
+    if (manejaLotes && lines.length === 0) {
+      throw new BadRequestException(
+        'El producto maneja lotes y no se pudo asignar stock vendible. Revise lotes/vencimientos.',
+      );
     }
 
     await this.executeOutboundWithLotLines({
@@ -1039,10 +1062,13 @@ export class InventoryMovementsService {
         codigoLote: line.codigoLote,
         cantidad: new Prisma.Decimal(line.cantidad),
       })),
+      // Productos sin manejaLotes no generan líneas de lote; totalQuantity es el descuento real.
+      totalQuantity,
       fechaRegistro: new Date(),
       reference: dto.reference ?? null,
       comment: dto.comment ?? null,
       userId: actorId,
+      tx,
     });
 
     return {
@@ -1098,41 +1124,43 @@ export class InventoryMovementsService {
 
     let lotLines: { codigoLote: string; cantidad: Prisma.Decimal }[] = [];
 
-    if (dto.lotCode?.trim()) {
-      const lot = await this.prisma.productLotStock.findFirst({
-        where: {
-          productId: product.id,
-          warehouseId: warehouse.id,
-          codigoLote: dto.lotCode.trim(),
-          deletedAt: null,
-        },
-        select: { id: true, stock: true, fechaVencimiento: true, codigoLote: true },
-      });
-      if (!lot) {
-        throw new BadRequestException('No existe el lote indicado en el almacén seleccionado');
-      }
-      this.lotAllocation.assertLotSellable(
-        lot.fechaVencimiento,
-        policy.blockExpiredProductSales,
-        lot.codigoLote,
-      );
-      if (lot.stock.lessThan(amount)) {
-        throw new BadRequestException('Stock insuficiente en el lote indicado');
-      }
-      lotLines = [{ codigoLote: lot.codigoLote, cantidad: amount }];
-    } else {
-      const eligibleLots = await this.lotAllocation.listEligibleLots(
-        product.id,
-        warehouse.id,
-        policy,
-      );
-      if (eligibleLots.length > 0) {
+    if (product.manejaLotes) {
+      if (dto.lotCode?.trim()) {
+        const lot = await this.prisma.productLotStock.findFirst({
+          where: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+            codigoLote: dto.lotCode.trim(),
+            deletedAt: null,
+          },
+          select: { id: true, stock: true, fechaVencimiento: true, codigoLote: true },
+        });
+        if (!lot) {
+          throw new BadRequestException('No existe el lote indicado en el almacén seleccionado');
+        }
+        this.lotAllocation.assertLotSellable(
+          lot.fechaVencimiento,
+          policy.blockExpiredProductSales,
+          lot.codigoLote,
+        );
+        if (lot.stock.lessThan(amount)) {
+          throw new BadRequestException('Stock insuficiente en el lote indicado');
+        }
+        lotLines = [{ codigoLote: lot.codigoLote, cantidad: amount }];
+      } else {
+        const eligibleLots = await this.lotAllocation.listEligibleLots(
+          product.id,
+          warehouse.id,
+          policy,
+        );
         const planned = this.lotAllocation.planAutoAllocation(eligibleLots, amount);
         lotLines = planned.map((line) => ({
           codigoLote: line.codigoLote,
           cantidad: new Prisma.Decimal(line.cantidad),
         }));
       }
+    } else if (dto.lotCode?.trim()) {
+      throw new BadRequestException('Este producto no maneja lotes; no indique código de lote');
     }
 
     await this.executeOutboundWithLotLines({
@@ -1181,7 +1209,7 @@ export class InventoryMovementsService {
     const quantity = new Prisma.Decimal(dto.quantity);
 
     if (!product.manejaLotes) {
-      return { policy, lines: [] as LotAllocationLine[] };
+      return { policy, lines: [] as LotAllocationLine[], manejaLotes: false };
     }
 
     const eligible = await this.lotAllocation.listEligibleLots(
@@ -1209,7 +1237,7 @@ export class InventoryMovementsService {
       lines = this.lotAllocation.planAutoAllocation(eligible, quantity);
     }
 
-    return { policy, lines };
+    return { policy, lines, manejaLotes: true };
   }
 
   private async executeOutboundWithLotLines(input: {
@@ -1217,31 +1245,31 @@ export class InventoryMovementsService {
     warehouseId: string;
     transferReasonId: string;
     lines: { codigoLote: string; cantidad: Prisma.Decimal }[];
-    totalQuantity?: Prisma.Decimal;
+    /** Obligatorio: evita salidas silenciosas de 0 cuando no hay líneas de lote. */
+    totalQuantity: Prisma.Decimal;
     fechaRegistro: Date;
     reference?: string | null;
     comment?: string | null;
     userId?: string | null;
+    tx?: Prisma.TransactionClient;
   }) {
-    const total =
-      input.totalQuantity ??
-      input.lines.reduce((acc, line) => acc.plus(line.cantidad), new Prisma.Decimal(0));
-
-    const currentStock = await this.prisma.productWarehouseStock.findUnique({
-      where: {
-        productId_warehouseId: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-        },
-      },
-      select: { cantidad: true },
-    });
-    const current = currentStock?.cantidad ?? new Prisma.Decimal(0);
-    if (current.lessThan(total)) {
-      throw new BadRequestException('Stock insuficiente para realizar la salida');
+    const total = input.totalQuantity;
+    if (total.lessThanOrEqualTo(0)) {
+      throw new BadRequestException('La cantidad de salida de inventario debe ser mayor a cero');
+    }
+    if (input.lines.length > 0) {
+      const linesSum = input.lines.reduce(
+        (acc, line) => acc.plus(line.cantidad),
+        new Prisma.Decimal(0),
+      );
+      if (!linesSum.equals(total)) {
+        throw new BadRequestException(
+          'La suma de cantidades por lote no coincide con la cantidad total de salida',
+        );
+      }
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       if (input.lines.length === 0) {
         await tx.inventoryInboundMovement.create({
           data: {
@@ -1273,40 +1301,40 @@ export class InventoryMovementsService {
             },
           });
 
-          const existingLot = await tx.productLotStock.findFirst({
+          const lotUpdated = await tx.productLotStock.updateMany({
             where: {
               productId: input.productId,
               warehouseId: input.warehouseId,
               codigoLote: line.codigoLote,
               deletedAt: null,
+              stock: { gte: line.cantidad },
             },
-            select: { id: true, stock: true },
+            data: { stock: { decrement: line.cantidad } },
           });
-          if (!existingLot || existingLot.stock.lessThan(line.cantidad)) {
+          if (lotUpdated.count !== 1) {
             throw new BadRequestException(`Stock insuficiente en el lote ${line.codigoLote}`);
           }
-          await tx.productLotStock.update({
-            where: { id: existingLot.id },
-            data: { stock: existingLot.stock.minus(line.cantidad) },
-          });
         }
       }
 
-      await tx.productWarehouseStock.upsert({
+      const warehouseUpdated = await tx.productWarehouseStock.updateMany({
         where: {
-          productId_warehouseId: {
-            productId: input.productId,
-            warehouseId: input.warehouseId,
-          },
-        },
-        update: { cantidad: current.minus(total) },
-        create: {
           productId: input.productId,
           warehouseId: input.warehouseId,
-          cantidad: new Prisma.Decimal(0),
+          cantidad: { gte: total },
         },
+        data: { cantidad: { decrement: total } },
       });
-    });
+      if (warehouseUpdated.count !== 1) {
+        throw new BadRequestException('Stock insuficiente para realizar la salida');
+      }
+    };
+
+    if (input.tx) {
+      await run(input.tx);
+      return;
+    }
+    await this.prisma.$transaction(run);
   }
 
   async importLots(dto: ImportInventoryFileDto, file: Express.Multer.File) {

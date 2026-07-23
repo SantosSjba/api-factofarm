@@ -240,8 +240,9 @@ export class SalesService {
       },
     });
     if (sale) {
+      const previousReturns = sale.returns ?? [];
       const previouslyReturned = new Map<string, Prisma.Decimal>();
-      for (const ret of sale.returns) {
+      for (const ret of previousReturns) {
         for (const ri of ret.items) {
           const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
           previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
@@ -259,7 +260,7 @@ export class SalesService {
         documentType: sale.documentType,
         estado: sale.estado,
         archivedAt: sale.archivedAt,
-        hasReturns: sale.returns.length > 0,
+        hasReturns: previousReturns.length > 0,
         hasActiveCpe: !!cpe,
         sunatStatus: cpe?.sunatStatus ?? null,
         hasRemainingQty: hasRemaining,
@@ -670,28 +671,30 @@ export class SalesService {
       dto.serie,
     );
 
-    const stockAllocations: Array<{
-      index: number;
-      asignacion: { codigoLote: string; cantidad: string }[];
-    }> = [];
-    for (let i = 0; i < pricedItems.length; i++) {
-      const priced = pricedItems[i];
-      const dispatch = await this.inventory.dispatchSaleStock(
-        {
-          productId: priced.productId,
-          warehouseId: dto.warehouseId,
-          quantity: Number(priced.cantidad.toString()),
-          mode: priced.lotAllocationMode ?? SaleLotAllocationMode.AUTO,
-          manualLots: priced.manualLots,
-          reference: `${serie}-${numero}`,
-          comment: 'Reserva previa venta POS',
-        },
-        actor.sub,
-      );
-      stockAllocations.push({ index: i, asignacion: dispatch.asignacion ?? [] });
-    }
-
     const saleId = await this.prisma.$transaction(async (tx) => {
+      // Stock + venta en la misma transacción: evita descuentos huérfanos si falla el create.
+      const stockAllocations: Array<{
+        index: number;
+        asignacion: { codigoLote: string; cantidad: string }[];
+      }> = [];
+      for (let i = 0; i < pricedItems.length; i++) {
+        const priced = pricedItems[i];
+        const dispatch = await this.inventory.dispatchSaleStock(
+          {
+            productId: priced.productId,
+            warehouseId: dto.warehouseId,
+            quantity: Number(priced.cantidad.toString()),
+            mode: priced.lotAllocationMode ?? SaleLotAllocationMode.AUTO,
+            manualLots: priced.manualLots,
+            reference: `${serie}-${numero}`,
+            comment: 'Salida por venta POS',
+          },
+          actor.sub,
+          tx,
+        );
+        stockAllocations.push({ index: i, asignacion: dispatch.asignacion ?? [] });
+      }
+
       const sale = await tx.sale.create({
         data: {
           establishmentId: actor.establecimientoId,
@@ -986,6 +989,19 @@ export class SalesService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.sale.updateMany({
+        where: { id, estado: SaleStatus.COMPLETADA },
+        data: {
+          estado: SaleStatus.ANULADA,
+          voidReason: dto.reason.trim(),
+          voidedById: actor.sub,
+          voidedAt: new Date(),
+        },
+      });
+      if (locked.count !== 1) {
+        throw new BadRequestException('La venta ya no está disponible para anular');
+      }
+
       for (const item of sale.items) {
         const delta = item.cantidad;
         if (item.lotLines.length > 0) {
@@ -997,6 +1013,7 @@ export class SalesService {
               delta: lot.cantidad,
               reason: `Anulación venta ${sale.serie}-${sale.numero}: ${dto.reason}`,
               userId: actor.sub,
+              tx,
             });
           }
         } else {
@@ -1007,19 +1024,10 @@ export class SalesService {
             delta,
             reason: `Anulación venta ${sale.serie}-${sale.numero}`,
             userId: actor.sub,
+            tx,
           });
         }
       }
-
-      await tx.sale.update({
-        where: { id },
-        data: {
-          estado: SaleStatus.ANULADA,
-          voidReason: dto.reason.trim(),
-          voidedById: actor.sub,
-          voidedAt: new Date(),
-        },
-      });
 
       if (sale.cashSessionId) {
         await tx.cashMovement.create({
@@ -1040,6 +1048,8 @@ export class SalesService {
       entity: 'Sale',
       entityId: id,
     });
+
+    this.realtime.emitStockUpdated(actor.establecimientoId, sale.warehouseId);
 
     await this.billing
       .voidFromSale(id, actor.establecimientoId, dto.reason.trim(), actor.sub)
@@ -1154,6 +1164,8 @@ export class SalesService {
       throw new ForbiddenException('Otro usuario debe autorizar la anulación');
     }
 
+    // Anular primero (atómico con stock); solo si OK marcar solicitud aprobada.
+    const result = await this.voidSale(request.saleId, { reason: request.reason }, actor);
     await this.prisma.saleVoidRequest.update({
       where: { id: requestId },
       data: {
@@ -1162,8 +1174,7 @@ export class SalesService {
         resolvedAt: new Date(),
       },
     });
-
-    return this.voidSale(request.saleId, { reason: request.reason }, actor);
+    return result;
   }
 
   async rejectVoidRequest(
@@ -1204,7 +1215,7 @@ export class SalesService {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
       include: {
-        items: true,
+        items: { include: { lotLines: true } },
         electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
         returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
       },
@@ -1215,8 +1226,9 @@ export class SalesService {
       sale.electronicDocument && !sale.electronicDocument.deletedAt
         ? sale.electronicDocument
         : null;
+    const previousReturns = sale.returns ?? [];
     const previouslyReturned = new Map<string, Prisma.Decimal>();
-    for (const ret of sale.returns) {
+    for (const ret of previousReturns) {
       for (const ri of ret.items) {
         const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
         previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
@@ -1231,7 +1243,7 @@ export class SalesService {
       documentType: sale.documentType,
       estado: sale.estado,
       archivedAt: sale.archivedAt,
-      hasReturns: sale.returns.length > 0,
+      hasReturns: previousReturns.length > 0,
       hasActiveCpe: !!cpe,
       sunatStatus: cpe?.sunatStatus ?? null,
       hasRemainingQty: hasRemaining,
@@ -1254,6 +1266,13 @@ export class SalesService {
       );
     }
 
+    const returnLines: Array<{
+      saleItemId: string;
+      quantity: Prisma.Decimal;
+      productId: string;
+      lotRestores: Array<{ lotCode: string | null; qty: Prisma.Decimal }>;
+    }> = [];
+
     for (const line of dto.items) {
       const item = sale.items.find((row) => row.id === line.saleItemId);
       if (!item) throw new BadRequestException('Ítem de venta no válido');
@@ -1267,42 +1286,93 @@ export class SalesService {
       }
       remainingByItem.set(item.id, remaining.minus(qty));
       totalDevuelto = totalDevuelto.plus(item.totalLinea.times(qty).div(item.cantidad));
-      await this.inventory.executeAdjustmentDelta({
+
+      const lotRestores: Array<{ lotCode: string | null; qty: Prisma.Decimal }> = [];
+      const explicitLot = line.lotCode?.trim() || null;
+      if (item.lotLines.length > 0) {
+        if (explicitLot) {
+          const soldLot = item.lotLines.find((l) => l.codigoLote === explicitLot);
+          if (!soldLot) {
+            throw new BadRequestException(
+              `El lote ${explicitLot} no corresponde a la venta del ítem`,
+            );
+          }
+          lotRestores.push({ lotCode: explicitLot, qty });
+        } else {
+          // Repone proporcionalmente desde los lotes vendidos (evita drift almacén/lote).
+          let left = qty;
+          for (const soldLot of item.lotLines) {
+            if (left.lte(0)) break;
+            const take = Prisma.Decimal.min(soldLot.cantidad, left);
+            if (take.lte(0)) continue;
+            lotRestores.push({ lotCode: soldLot.codigoLote, qty: take });
+            left = left.minus(take);
+          }
+          if (left.gt(0)) {
+            throw new BadRequestException(
+              'No se pudo asignar la devolución a los lotes originales de la venta',
+            );
+          }
+        }
+      } else {
+        lotRestores.push({ lotCode: null, qty });
+      }
+
+      returnLines.push({
+        saleItemId: item.id,
+        quantity: qty,
         productId: item.productId,
-        warehouseId: sale.warehouseId,
-        lotCode: line.lotCode?.trim() || null,
-        delta: qty,
-        reason: `Devolución venta ${sale.serie}-${sale.numero}`,
-        userId: actor.sub,
+        lotRestores,
       });
     }
-
-    const saleReturn = await this.prisma.saleReturn.create({
-      data: {
-        saleId,
-        userId: actor.sub,
-        motivo: dto.motivo.trim(),
-        totalDevuelto,
-        items: {
-          create: dto.items.map((line) => ({
-            saleItemId: line.saleItemId,
-            cantidad: new Prisma.Decimal(line.quantity),
-            codigoLote: line.lotCode?.trim() || null,
-          })),
-        },
-      },
-    });
 
     const allItemsFullyReturned = sale.items.every((item) => {
       const left = remainingByItem.get(item.id) ?? new Prisma.Decimal(0);
       return left.lte(0);
     });
-    await this.prisma.sale.update({
-      where: { id: saleId },
-      data: {
-        estado: allItemsFullyReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
-      },
+
+    const saleReturn = await this.prisma.$transaction(async (tx) => {
+      for (const line of returnLines) {
+        for (const restore of line.lotRestores) {
+          await this.inventory.executeAdjustmentDelta({
+            productId: line.productId,
+            warehouseId: sale.warehouseId,
+            lotCode: restore.lotCode,
+            delta: restore.qty,
+            reason: `Devolución venta ${sale.serie}-${sale.numero}`,
+            userId: actor.sub,
+            tx,
+          });
+        }
+      }
+
+      const created = await tx.saleReturn.create({
+        data: {
+          saleId,
+          userId: actor.sub,
+          motivo: dto.motivo.trim(),
+          totalDevuelto,
+          items: {
+            create: returnLines.map((line) => ({
+              saleItemId: line.saleItemId,
+              cantidad: line.quantity,
+              codigoLote: line.lotRestores.length === 1 ? line.lotRestores[0].lotCode : null,
+            })),
+          },
+        },
+      });
+
+      await tx.sale.update({
+        where: { id: saleId },
+        data: {
+          estado: allItemsFullyReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
+        },
+      });
+
+      return created;
     });
+
+    this.realtime.emitStockUpdated(actor.establecimientoId, sale.warehouseId);
 
     if (sale.cashSessionId) {
       await this.prisma.cashMovement.create({

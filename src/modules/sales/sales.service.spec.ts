@@ -19,6 +19,7 @@ function buildService() {
       findMany: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     archivedSale: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -48,6 +49,7 @@ function buildService() {
     scheduleEmitFromReturn: jest.fn().mockResolvedValue('doc-nc'),
     scheduleDebitNoteFromSale: jest.fn().mockResolvedValue('doc-nd'),
   };
+  const realtime = { emitStockUpdated: jest.fn(), emitSaleCompleted: jest.fn() };
   const service = new SalesService(
     prisma as never,
     audit as never,
@@ -58,13 +60,13 @@ function buildService() {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    realtime as never,
     {} as never,
     {} as never,
     { build: jest.fn() } as never,
     { exists: jest.fn(), resolveAbsolutePath: jest.fn() } as never,
   );
-  return { service, prisma, audit, inventory, billing, lotAllocation };
+  return { service, prisma, audit, inventory, billing, lotAllocation, realtime };
 }
 
 describe('SalesService', () => {
@@ -78,6 +80,7 @@ describe('SalesService', () => {
         serie: 'B001',
         numero: '00000001',
         estado: SaleStatus.COMPLETADA,
+        archivedAt: null,
         subtotal: new Prisma.Decimal(8.47),
         descuentoTotal: new Prisma.Decimal(0),
         igvTotal: new Prisma.Decimal(1.53),
@@ -86,6 +89,8 @@ describe('SalesService', () => {
         customer: { nombre: 'Cliente' },
         seller: { nombre: 'Cajero' },
         payments: [{ metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) }],
+        electronicDocument: null,
+        _count: { returns: 0 },
       },
     ]);
     const result = await service.findAll('est-1', { page: 1, pageSize: 10 });
@@ -226,6 +231,10 @@ describe('SalesService', () => {
       warehouseId: 'w1',
       cashSessionId: null,
       total: new Prisma.Decimal(10),
+      archivedAt: null,
+      documentType: 'BOLETA',
+      _count: { returns: 0 },
+      electronicDocument: null,
     });
     await expect(
       service.voidSale(
@@ -237,7 +246,7 @@ describe('SalesService', () => {
   });
 
   it('anula venta completada y revierte stock', async () => {
-    const { service, prisma, inventory, billing } = buildService();
+    const { service, prisma, inventory, billing, realtime } = buildService();
     prisma.sale.findFirst.mockResolvedValue({
       id: 's1',
       estado: SaleStatus.COMPLETADA,
@@ -255,16 +264,21 @@ describe('SalesService', () => {
       warehouseId: 'w1',
       cashSessionId: null,
       total: new Prisma.Decimal(10),
+      archivedAt: null,
+      documentType: 'BOLETA',
+      _count: { returns: 0 },
+      electronicDocument: null,
     });
-    prisma.sale.update.mockResolvedValue({});
     const result = await service.voidSale(
       's1',
       { reason: 'Error de caja' },
       { sub: 'u1', establecimientoId: 'est-1', role: UserRole.ADMINISTRADOR },
     );
     expect(result.ok).toBe(true);
+    expect(prisma.sale.updateMany).toHaveBeenCalled();
     expect(inventory.executeAdjustmentDelta).toHaveBeenCalled();
     expect(billing.voidFromSale).toHaveBeenCalled();
+    expect(realtime.emitStockUpdated).toHaveBeenCalledWith('est-1', 'w1');
   });
 
   it('sincroniza lote offline reportando errores por fila', async () => {
@@ -329,20 +343,25 @@ describe('SalesService', () => {
   });
 
   it('registra devolución parcial de venta', async () => {
-    const { service, prisma, inventory } = buildService();
+    const { service, prisma, inventory, realtime } = buildService();
     prisma.sale.findFirst.mockResolvedValue({
       id: 's1',
       estado: SaleStatus.COMPLETADA,
+      documentType: 'BOLETA',
+      archivedAt: null,
       warehouseId: 'w1',
       cashSessionId: null,
       serie: 'B001',
       numero: '1',
+      electronicDocument: null,
+      returns: [],
       items: [
         {
           id: 'si1',
           productId: 'p1',
           cantidad: new Prisma.Decimal(2),
           totalLinea: new Prisma.Decimal(20),
+          lotLines: [],
         },
       ],
     });
@@ -355,6 +374,7 @@ describe('SalesService', () => {
     );
     expect(result.saleReturnId).toBe('ret-1');
     expect(inventory.executeAdjustmentDelta).toHaveBeenCalled();
+    expect(realtime.emitStockUpdated).toHaveBeenCalledWith('est-1', 'w1');
   });
 
   it('expone catálogo POS con stock vendible', async () => {

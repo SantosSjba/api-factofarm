@@ -2,5 +2,5 @@
 ALTER TABLE "tenants"
 ADD COLUMN IF NOT EXISTS "defaultTimeZone" VARCHAR(64) NOT NULL DEFAULT 'America/Lima';
 
-ALTER TABLE "establishments"
+ALTER TABLE "Establishment"
 ADD COLUMN IF NOT EXISTS "timeZone" VARCHAR(64) NOT NULL DEFAULT 'America/Lima';

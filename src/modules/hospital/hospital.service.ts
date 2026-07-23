@@ -197,27 +197,33 @@ export class HospitalService {
     }
 
     const ref = `HOSP-${consumption.hospitalArea.codigo}-${consumption.id.slice(0, 8)}`;
-    for (const item of consumption.items) {
-      await this.inventory.dispatchSaleStock(
-        {
-          productId: item.productId,
-          warehouseId: consumption.warehouseId,
-          quantity: Number(item.cantidad.toString()),
-          mode: SaleLotAllocationMode.AUTO,
-          reference: ref,
-          comment: `Consumo interno área ${consumption.hospitalArea.codigo}`,
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.hospitalInternalConsumption.updateMany({
+        where: { id, estado: HospitalConsumptionStatus.SOLICITADO },
+        data: {
+          estado: HospitalConsumptionStatus.DISPENSADO,
+          dispensadoPorId: userId,
+          dispensadoAt: new Date(),
         },
-        userId,
-      );
-    }
+      });
+      if (locked.count !== 1) {
+        throw new BadRequestException('La solicitud ya fue procesada');
+      }
 
-    await this.prisma.hospitalInternalConsumption.update({
-      where: { id },
-      data: {
-        estado: HospitalConsumptionStatus.DISPENSADO,
-        dispensadoPorId: userId,
-        dispensadoAt: new Date(),
-      },
+      for (const item of consumption.items) {
+        await this.inventory.dispatchSaleStock(
+          {
+            productId: item.productId,
+            warehouseId: consumption.warehouseId,
+            quantity: Number(item.cantidad.toString()),
+            mode: SaleLotAllocationMode.AUTO,
+            reference: ref,
+            comment: `Consumo interno área ${consumption.hospitalArea.codigo}`,
+          },
+          userId,
+          tx,
+        );
+      }
     });
 
     await this.audit.log({
