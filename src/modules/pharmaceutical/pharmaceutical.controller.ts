@@ -27,6 +27,7 @@ import {
   SalesAnalyticsQueryDto,
   ShrinkageExpiryQueryDto,
 } from './dto/pharmaceutical.dto';
+import { formatDateYmdInTimeZone, normalizeTimeZone } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 
@@ -72,7 +73,7 @@ export class PharmaceuticalController {
       establishmentId,
       query.warehouseId,
       query.expiryDaysAhead ?? 90,
-      { from: query.from ? new Date(query.from) : undefined, to: query.to ? new Date(query.to) : undefined },
+      { from: query.from, to: query.to },
     );
   }
 
@@ -83,7 +84,7 @@ export class PharmaceuticalController {
     return this.service.profitabilityReport(
       establishmentId,
       query.groupBy ?? 'product',
-      { from: query.from ? new Date(query.from) : undefined, to: query.to ? new Date(query.to) : undefined },
+      { from: query.from, to: query.to },
     );
   }
 
@@ -94,7 +95,7 @@ export class PharmaceuticalController {
     return this.service.salesAnalyticsReport(
       establishmentId,
       query.groupBy ?? 'seller',
-      { from: query.from ? new Date(query.from) : undefined, to: query.to ? new Date(query.to) : undefined },
+      { from: query.from, to: query.to },
       query.warehouseId,
     );
   }
@@ -103,18 +104,21 @@ export class PharmaceuticalController {
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'nav.reportes_panel')
   async dispensationByMedico(@CurrentUser() actor: JwtRequestUser, @Query() query: PharmaReportQueryDto) {
     return this.service.dispensationByMedicoReport(await this.scope.resolve(actor), {
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
+      from: query.from,
+      to: query.to,
     });
   }
 
   @Get('reports/controlled-monthly')
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_psicotropicos')
   async controlledMonthly(@CurrentUser() actor: JwtRequestUser, @Query() query: ControlledMonthlyQueryDto) {
-    const now = new Date();
-    const year = query.year ?? now.getUTCFullYear();
-    const month = query.month ?? now.getUTCMonth() + 1;
-    return this.service.monthlyControlledReport(await this.scope.resolve(actor), year, month);
+    const establishmentId = await this.scope.resolve(actor);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const todayYmd = formatDateYmdInTimeZone(new Date(), tz);
+    const [y, m] = todayYmd.split('-').map(Number);
+    const year = query.year ?? y;
+    const month = query.month ?? m;
+    return this.service.monthlyControlledReport(establishmentId, year, month);
   }
 
   @Post('reports/controlled-ledger/export')
@@ -159,33 +163,7 @@ export class PharmaceuticalController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    const establishmentId = await this.scope.resolve(actor);
-    return this.prisma.controlledSubstanceLedgerEntry.findMany({
-      where: {
-        establishmentId,
-        ...(productId ? { productId } : {}),
-        ...(from || to
-          ? {
-              fecha: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lt: new Date(to) } : {}),
-              },
-            }
-          : {}),
-      },
-      orderBy: { fecha: 'desc' },
-      take: 200,
-      include: {
-        product: {
-          select: {
-            nombre: true,
-            codigoInterno: true,
-            controlledSubstanceCategory: { select: { codigo: true, nombre: true, schedule: true } },
-          },
-        },
-        user: { select: { nombre: true } },
-      },
-    });
+    return this.service.listControlledLedger(await this.scope.resolve(actor), productId, from, to);
   }
 
   @Get('controlled-categories')
@@ -324,5 +302,13 @@ export class PharmaceuticalController {
   @RequirePermissions('pharmaceutical.read', 'nav.reportes_panel')
   async anonymizedStats(@CurrentUser() actor: JwtRequestUser) {
     return this.service.anonymizedSalesStats(await this.scope.resolve(actor));
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

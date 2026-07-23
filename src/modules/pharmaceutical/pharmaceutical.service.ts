@@ -4,10 +4,18 @@ import {
   InventoryMovementType,
   Prisma,
 } from '../../generated/prisma/client';
+import {
+  dateRangeBoundsInTimeZone,
+  formatDateYmdInTimeZone,
+  formatHourInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 
-type DateRange = { from?: Date; to?: Date };
+type DateRangeInput = { from?: string; to?: string };
+type DateRange = { from?: Date; to?: Date; timeZone?: string };
 
 @Injectable()
 export class PharmaceuticalService {
@@ -109,8 +117,9 @@ export class PharmaceuticalService {
   }
 
   async monthlyControlledReport(establishmentId: string, year: number, month: number) {
-    const start = new Date(Date.UTC(year, month - 1, 1));
-    const end = new Date(Date.UTC(year, month, 1));
+    const tz = await this.resolveTimeZone(establishmentId);
+    const yearMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+    const { start, end } = monthBoundsInTimeZone(yearMonth, tz);
 
     const entries = await this.prisma.controlledSubstanceLedgerEntry.findMany({
       where: { establishmentId, fecha: { gte: start, lt: end } },
@@ -193,10 +202,10 @@ export class PharmaceuticalService {
     establishmentId: string,
     warehouseId?: string,
     expiryDaysAhead = 90,
-    range?: DateRange,
+    range?: DateRangeInput,
   ) {
     const warehouseIds = await this.resolveWarehouseIds(establishmentId, warehouseId);
-    const dateFilter = this.buildDateFilter(range);
+    const dateFilter = await this.buildDateFilter(establishmentId, range);
 
     const shrinkageMovements = await this.prisma.inventoryInboundMovement.findMany({
       where: {
@@ -278,9 +287,9 @@ export class PharmaceuticalService {
   async profitabilityReport(
     establishmentId: string,
     groupBy: 'product' | 'category' | 'laboratory' = 'product',
-    range?: DateRange,
+    range?: DateRangeInput,
   ) {
-    const dateFilter = this.buildDateFilter(range);
+    const dateFilter = await this.buildDateFilter(establishmentId, range);
     const saleItems = await this.prisma.saleItem.findMany({
       where: {
         sale: {
@@ -351,10 +360,12 @@ export class PharmaceuticalService {
   async salesAnalyticsReport(
     establishmentId: string,
     groupBy: 'seller' | 'warehouse' | 'hour' | 'day' = 'seller',
-    range?: DateRange,
+    range?: DateRangeInput,
     warehouseId?: string,
   ) {
-    const dateFilter = this.buildDateFilter(range);
+    const parsed = await this.parseRange(establishmentId, range?.from, range?.to);
+    const dateFilter = this.buildDateFilterFromParsed(parsed);
+    const tz = parsed.timeZone ?? (await this.resolveTimeZone(establishmentId));
     const sales = await this.prisma.sale.findMany({
       where: {
         establishmentId,
@@ -382,10 +393,10 @@ export class PharmaceuticalService {
         key = sale.warehouse.id;
         label = sale.warehouse.nombre;
       } else if (groupBy === 'hour') {
-        key = String(d.getHours()).padStart(2, '0');
+        key = formatHourInTimeZone(d, tz);
         label = `${key}:00`;
       } else if (groupBy === 'day') {
-        key = d.toISOString().slice(0, 10);
+        key = formatDateYmdInTimeZone(d, tz);
         label = key;
       } else {
         key = sale.seller.id;
@@ -403,8 +414,8 @@ export class PharmaceuticalService {
       .sort((a, b) => Number(b.ventas) - Number(a.ventas));
   }
 
-  async dispensationByMedicoReport(establishmentId: string, range?: DateRange) {
-    const dateFilter = this.buildDateFilter(range);
+  async dispensationByMedicoReport(establishmentId: string, range?: DateRangeInput) {
+    const dateFilter = await this.buildDateFilter(establishmentId, range);
     const sales = await this.prisma.sale.findMany({
       where: {
         establishmentId,
@@ -466,12 +477,47 @@ export class PharmaceuticalService {
       .sort((a, b) => Number(b.total) - Number(a.total));
   }
 
+  async listControlledLedger(
+    establishmentId: string,
+    productId?: string,
+    from?: string,
+    to?: string,
+  ) {
+    const range = await this.parseRange(establishmentId, from, to);
+    return this.prisma.controlledSubstanceLedgerEntry.findMany({
+      where: {
+        establishmentId,
+        ...(productId ? { productId } : {}),
+        ...(range.from || range.to
+          ? {
+              fecha: {
+                ...(range.from ? { gte: range.from } : {}),
+                ...(range.to ? { lt: range.to } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: { fecha: 'desc' },
+      take: 200,
+      include: {
+        product: {
+          select: {
+            nombre: true,
+            codigoInterno: true,
+            controlledSubstanceCategory: { select: { codigo: true, nombre: true, schedule: true } },
+          },
+        },
+        user: { select: { nombre: true } },
+      },
+    });
+  }
+
   async buildControlledLedgerExportBuffer(
     establishmentId: string,
     from?: string,
     to?: string,
   ) {
-    const range = this.parseRange(from, to);
+    const range = await this.parseRange(establishmentId, from, to);
     const entries = await this.prisma.controlledSubstanceLedgerEntry.findMany({
       where: {
         establishmentId,
@@ -715,7 +761,15 @@ export class PharmaceuticalService {
     return rows.map((r) => r.id);
   }
 
-  private buildDateFilter(range?: DateRange): Prisma.DateTimeFilter | undefined {
+  private async buildDateFilter(
+    establishmentId: string,
+    range?: DateRangeInput,
+  ): Promise<Prisma.DateTimeFilter | undefined> {
+    const parsed = await this.parseRange(establishmentId, range?.from, range?.to);
+    return this.buildDateFilterFromParsed(parsed);
+  }
+
+  private buildDateFilterFromParsed(range?: DateRange): Prisma.DateTimeFilter | undefined {
     if (!range?.from && !range?.to) return undefined;
     return {
       ...(range.from ? { gte: range.from } : {}),
@@ -723,11 +777,33 @@ export class PharmaceuticalService {
     };
   }
 
-  private parseRange(from?: string, to?: string): DateRange {
-    return {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
-    };
+  private async parseRange(
+    establishmentId: string,
+    from?: string,
+    to?: string,
+  ): Promise<DateRange> {
+    if (!from && !to) return {};
+    const tz = await this.resolveTimeZone(establishmentId);
+    const fromYmd = from?.trim();
+    const toYmd = to?.trim();
+    if (fromYmd && toYmd) {
+      const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+      return { from: start, to: end, timeZone: tz };
+    }
+    if (fromYmd) {
+      const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
+      return { from: start, timeZone: tz };
+    }
+    const { end } = dateRangeBoundsInTimeZone(toYmd!, toYmd!, tz);
+    return { to: end, timeZone: tz };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 
   private toXlsxBuffer(rows: Record<string, string>[], sheetName: string) {

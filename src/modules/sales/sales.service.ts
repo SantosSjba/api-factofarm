@@ -48,6 +48,10 @@ import {
 } from './dto/create-sale.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalePdfService } from './services/sale-pdf.service';
+import {
+  dateRangeBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
 import { readFile } from 'fs/promises';
 import { SunatDocumentStatus } from '../../generated/prisma/client';
@@ -85,6 +89,11 @@ export class SalesService {
     }
 
     const { page, pageSize, skip, take } = paginationArgs(query);
+    const createdAtRange = await this.createdAtRangeFilter(
+      establishmentId,
+      query.from,
+      query.to,
+    );
     const where: Prisma.SaleWhereInput = {
       establishmentId,
       deletedAt: null,
@@ -93,14 +102,7 @@ export class SalesService {
       ...(query.sellerId ? { sellerId: query.sellerId } : {}),
       ...(query.estado ? { estado: query.estado } : {}),
       ...(query.documentType ? { documentType: query.documentType } : {}),
-      ...(query.from || query.to
-        ? {
-            createdAt: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(query.to) } : {}),
-            },
-          }
-        : {}),
+      ...(createdAtRange ? { createdAt: createdAtRange } : {}),
       ...(query.paymentMetodo || query.paymentReferencia?.trim()
         ? {
             payments: {
@@ -190,16 +192,14 @@ export class SalesService {
 
   async findArchived(establishmentId: string, query: SaleListQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
+    const createdAtRange = await this.createdAtRangeFilter(
+      establishmentId,
+      query.from,
+      query.to,
+    );
     const where: Prisma.ArchivedSaleWhereInput = {
       establishmentId,
-      ...(query.from || query.to
-        ? {
-            originalCreatedAt: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(query.to) } : {}),
-            },
-          }
-        : {}),
+      ...(createdAtRange ? { originalCreatedAt: createdAtRange } : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -319,6 +319,7 @@ export class SalesService {
             nombre: true,
             logoArchivoId: true,
             salePdfFormat: true,
+            timeZone: true,
             telefono: true,
             direccionComercial: true,
             direccionFiscal: true,
@@ -395,6 +396,7 @@ export class SalesService {
       serie: sale.serie,
       numero: sale.numero,
       issuedAt: sale.createdAt,
+      timeZone: normalizeTimeZone(sale.establishment.timeZone),
       establishmentName:
         sale.establishment.billingConfig?.razonSocialEmisor?.trim() ||
         sale.establishment.nombre,
@@ -431,6 +433,30 @@ export class SalesService {
 
     const filename = `${sale.serie ?? 'NV'}-${sale.numero ?? id}.pdf`;
     return { buffer, filename, source: 'generated' };
+  }
+
+  private async resolveEstablishmentTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
+  }
+
+  private async createdAtRangeFilter(
+    establishmentId: string,
+    from?: string,
+    to?: string,
+  ): Promise<{ gte?: Date; lt?: Date } | undefined> {
+    if (!from && !to) return undefined;
+    const tz = await this.resolveEstablishmentTimeZone(establishmentId);
+    const fromYmd = from?.trim() || to!.trim();
+    const toYmd = to?.trim() || from!.trim();
+    const bounds = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+    return {
+      ...(from ? { gte: bounds.start } : {}),
+      ...(to ? { lt: bounds.end } : {}),
+    };
   }
 
   /** Logo del cliente SaaS (Mi farmacia); si no hay, SalePdfService usa el de FactoFarm. */

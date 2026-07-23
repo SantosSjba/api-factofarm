@@ -8,6 +8,10 @@ import {
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import {
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../../common/utils/timezone.util';
 import { BillingService } from '../../billing/billing.service';
 import { CreateTaxWithholdingDto } from '../dto/compliance.dto';
 
@@ -68,7 +72,7 @@ export class TaxWithholdingService implements OnModuleInit {
     kind: TaxWithholdingKind,
     period?: string,
   ) {
-    const dateFilter = this.periodFilter(period);
+    const dateFilter = await this.periodFilter(establishmentId, period);
     return this.prisma.taxWithholdingRecord.findMany({
       where: {
         establishmentId,
@@ -131,7 +135,7 @@ export class TaxWithholdingService implements OnModuleInit {
       return { synced: 0, message: 'Detracción no habilitada en configuración de facturación' };
     }
 
-    const dateFilter = this.periodFilter(period);
+    const dateFilter = await this.periodFilter(establishmentId, period);
     const rate = await this.prisma.sunatWithholdingRate.findUnique({
       where: { codigo: DETRACCION_RATE_CODE },
     });
@@ -301,14 +305,23 @@ export class TaxWithholdingService implements OnModuleInit {
     return record;
   }
 
-  private periodFilter(period?: string): Prisma.DateTimeFilter | undefined {
+  private async periodFilter(
+    establishmentId: string,
+    period?: string,
+  ): Promise<Prisma.DateTimeFilter | undefined> {
     if (!period?.trim()) return undefined;
     const match = /^(\d{4})-(\d{2})$/.exec(period.trim());
     if (!match) throw new BadRequestException('Periodo inválido. Use YYYY-MM');
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 1);
-    return { gte: from, lt: to };
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start, end } = monthBoundsInTimeZone(period.trim(), tz);
+    return { gte: start, lt: end };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

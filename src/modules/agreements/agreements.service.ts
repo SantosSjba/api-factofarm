@@ -10,6 +10,11 @@ import {
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
+import {
+  dateRangeBoundsInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AgreementListQueryDto,
@@ -201,11 +206,18 @@ export class AgreementsService {
 
   async getSettlement(id: string, establishmentId: string, query: AgreementSettlementQueryDto) {
     await this.ensureExists(id, establishmentId);
-    const from = new Date(query.from);
-    const to = new Date(query.to);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    const fromYmd = query.from?.trim();
+    const toYmd = query.to?.trim();
+    if (
+      !fromYmd ||
+      !toYmd ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(fromYmd) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(toYmd)
+    ) {
       throw new BadRequestException('Rango de fechas inválido');
     }
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
 
     const sales = await this.prisma.sale.findMany({
       where: {
@@ -213,7 +225,7 @@ export class AgreementsService {
         agreementId: id,
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
       },
       select: {
         id: true,
@@ -268,9 +280,8 @@ export class AgreementsService {
     if (!/^\d{4}-\d{2}$/.test(periodo)) {
       throw new BadRequestException('Periodo debe ser YYYY-MM');
     }
-    const [year, month] = periodo.split('-').map(Number);
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 0, 23, 59, 59, 999);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = monthBoundsInTimeZone(periodo, tz);
 
     const existing = await this.prisma.agreementBillingStatement.findUnique({
       where: { agreementId_periodo: { agreementId: id, periodo } },
@@ -285,7 +296,7 @@ export class AgreementsService {
         agreementId: id,
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
       },
       select: {
         id: true,
@@ -404,5 +415,13 @@ export class AgreementsService {
     });
     if (!row) throw new NotFoundException('Convenio no encontrado');
     return row;
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

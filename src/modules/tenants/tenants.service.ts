@@ -27,6 +27,7 @@ import {
   resolveTenantEnabledModules,
   slugifyTenantName,
 } from '../../common/tenants/tenant-plan.util';
+import { normalizeTimeZone } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type {
   ConvertTenantLeadDto,
@@ -52,6 +53,7 @@ const tenantSelect = {
   contactPhone: true,
   notes: true,
   enabledModules: true,
+  defaultTimeZone: true,
   activatedAt: true,
   suspendedAt: true,
   createdAt: true,
@@ -264,6 +266,7 @@ export class TenantsService {
           codigo: dto.establishmentCodigo?.trim() || null,
           activo: true,
           correoContacto: email,
+          timeZone: normalizeTimeZone(tenant.defaultTimeZone),
         },
         select: { id: true, nombre: true, codigo: true },
       });

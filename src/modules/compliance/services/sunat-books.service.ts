@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  formatDateYmdInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../../common/utils/timezone.util';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -8,9 +13,8 @@ export class SunatBooksService {
   constructor(private readonly prisma: PrismaService) {}
 
   async buildSalesRegisterBuffer(establishmentId: string, period: string) {
-    const { year, month } = this.parsePeriod(period);
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 1);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = monthBoundsInTimeZone(period, tz);
 
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -41,8 +45,8 @@ export class SunatBooksService {
         PERIODO: period.replace('-', ''),
         RUC: ruc,
         CORRELATIVO: String(idx + 1).padStart(5, '0'),
-        FECHA_EMISION: sale.createdAt.toISOString().slice(0, 10),
-        FECHA_VENCIMIENTO: sale.createdAt.toISOString().slice(0, 10),
+        FECHA_EMISION: formatDateYmdInTimeZone(sale.createdAt, tz),
+        FECHA_VENCIMIENTO: formatDateYmdInTimeZone(sale.createdAt, tz),
         TIPO_COMPROBANTE: docTipo,
         SERIE: sale.serie ?? '',
         NUMERO: sale.numero ?? '',
@@ -63,6 +67,7 @@ export class SunatBooksService {
   }
 
   async buildInventoryRegisterBuffer(establishmentId: string, period: string) {
+    const tz = await this.resolveTimeZone(establishmentId);
     const stocks = await this.prisma.productLotStock.findMany({
       where: {
         warehouse: { establishmentId, deletedAt: null },
@@ -108,7 +113,9 @@ export class SunatBooksService {
       VALOR_TOTAL: row.costoUnitario
         ? row.stock.mul(row.costoUnitario).toDecimalPlaces(4).toString()
         : '0',
-      FECHA_VENCIMIENTO: row.fechaVencimiento?.toISOString().slice(0, 10) ?? '',
+      FECHA_VENCIMIENTO: row.fechaVencimiento
+        ? formatDateYmdInTimeZone(row.fechaVencimiento, tz)
+        : '',
     }));
 
     return this.toXlsxBuffer(rows, 'Registro-Inventario', `Registro-Inventario-${period}.xlsx`);
@@ -143,6 +150,14 @@ export class SunatBooksService {
     const month = Number(match[2]);
     if (month < 1 || month > 12) throw new Error('Mes inválido');
     return { year, month };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 
   private toXlsxBuffer(

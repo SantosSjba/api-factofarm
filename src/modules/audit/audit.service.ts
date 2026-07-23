@@ -7,6 +7,11 @@ import {
 } from '../../common/dto/cursor-pagination.dto';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  dateRangeBoundsInTimeZone,
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { AuditLogExportQueryDto, AuditLogQueryDto } from './dto/audit-log.dto';
 import * as XLSX from 'xlsx';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -29,7 +34,7 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: AuditLogQueryDto, actor: JwtRequestUser) {
-    const where = this.buildWhere(query, actor);
+    const where = await this.buildWhere(query, actor);
 
     if (query.cursor) {
       return this.findAllCursor(where, query);
@@ -91,24 +96,49 @@ export class AuditService {
     };
   }
 
-  private buildWhere(
+  private async buildWhere(
     query: AuditLogExportQueryDto | AuditLogQueryDto,
     actor: JwtRequestUser,
-  ): Prisma.AuditLogWhereInput {
+  ): Promise<Prisma.AuditLogWhereInput> {
+    const dateFilter = await this.dateFilterForActor(actor, query.from, query.to);
     return {
       ...tenantWhere(actorFromJwt(actor)),
       ...(query.entity ? { entity: query.entity } : {}),
       ...('action' in query && query.action ? { action: query.action } : {}),
       ...('userId' in query && query.userId ? { userId: query.userId } : {}),
-      ...(query.from || query.to
-        ? {
-            createdAt: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lt: new Date(query.to) } : {}),
-            },
-          }
-        : {}),
+      ...(dateFilter ? { createdAt: dateFilter } : {}),
     };
+  }
+
+  private async dateFilterForActor(
+    actor: JwtRequestUser,
+    from?: string,
+    to?: string,
+  ): Promise<{ gte?: Date; lt?: Date } | undefined> {
+    if (!from && !to) return undefined;
+    const tz = actor.establecimientoId
+      ? await this.resolveTimeZone(actor.establecimientoId)
+      : DEFAULT_TIME_ZONE;
+    const fromYmd = from?.trim();
+    const toYmd = to?.trim();
+    if (fromYmd && toYmd) {
+      const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+      return { gte: start, lt: end };
+    }
+    if (fromYmd) {
+      const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
+      return { gte: start };
+    }
+    const { end } = dateRangeBoundsInTimeZone(toYmd!, toYmd!, tz);
+    return { lt: end };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 
   private mapRow(r: AuditLogRow) {
@@ -128,7 +158,7 @@ export class AuditService {
   async buildExportBuffer(query: AuditLogExportQueryDto, actor: JwtRequestUser) {
     const limit = query.limit ?? 5000;
     const rows = await this.prisma.auditLog.findMany({
-      where: this.buildWhere(query, actor),
+      where: await this.buildWhere(query, actor),
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });

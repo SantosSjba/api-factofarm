@@ -158,6 +158,16 @@ export class UpdatePharmacyProfileDto {
   @IsEnum(SalePdfFormat)
   salePdfFormat?: SalePdfFormat;
 
+  @ApiPropertyOptional({
+    description:
+      'Zona horaria IANA del local (ej. America/Lima). Afecta reportes, dashboard y PDFs.',
+    example: 'America/Lima',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timeZone?: string;
+
   @ApiPropertyOptional({ description: 'Número de registro DIGEMID del establecimiento' })
   @IsOptional()
   @IsString()

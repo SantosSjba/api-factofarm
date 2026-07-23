@@ -11,6 +11,10 @@ import {
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
+import {
+  formatDateYmdInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
@@ -418,7 +422,8 @@ export class DeliveryOrdersService {
   }
 
   private async nextNumber(establishmentId: string): Promise<string> {
-    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const tz = await this.resolveTimeZone(establishmentId);
+    const day = formatDateYmdInTimeZone(new Date(), tz).replace(/-/g, '');
     const prefix = `D${day}`;
     const last = await this.prisma.deliveryOrder.findFirst({
       where: { establishmentId, numero: { startsWith: prefix } },
@@ -427,6 +432,14 @@ export class DeliveryOrdersService {
     });
     const seq = (Number.parseInt(last?.numero?.slice(prefix.length) ?? '0', 10) || 0) + 1;
     return `${prefix}${String(seq).padStart(4, '0')}`;
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 
   private mapDetail(row: {

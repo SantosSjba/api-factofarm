@@ -187,7 +187,7 @@ export class ApisperuBillingProvider implements IBillingProvider {
     const subtotal = roundMoney(input.subtotal);
     const igv = roundMoney(input.igvTotal);
     const total = roundMoney(input.total);
-    const fecha = peruEmissionDate(input.fechaEmision);
+    const fecha = peruEmissionDate(input.fechaEmision, input.timeZone);
     const correlativo = input.numero.replace(/^0+/, '') || input.numero;
 
     return {
@@ -229,7 +229,7 @@ export class ApisperuBillingProvider implements IBillingProvider {
     const subtotal = roundMoney(input.subtotal);
     const igv = roundMoney(input.igvTotal);
     const total = roundMoney(input.total);
-    const fecha = peruEmissionDate(input.fechaEmision);
+    const fecha = peruEmissionDate(input.fechaEmision, input.timeZone);
     const motivoCod =
       input.documentType === 'NOTA_DEBITO'
         ? (input.debitNoteReasonCode ?? '02')

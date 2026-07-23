@@ -22,6 +22,11 @@ import {
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { decryptBillingSecret, encryptBillingSecret } from '../../common/utils/billing-crypto.util';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  dateRangeBoundsInTimeZone,
+  formatDateYmdInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { EmitDocumentInput, IBillingProvider } from './domain/billing-provider.port';
 import { MockBillingProvider } from './providers/mock-billing.provider';
@@ -794,14 +799,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           'Resumen diario de boletas (RC) no disponible con Factiliza. Configure Nubefact.',
       );
     }
-    const dayStart = new Date(`${dto.fecha}T00:00:00.000Z`);
-    const dayEnd = new Date(`${dto.fecha}T23:59:59.999Z`);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: dayStart, end: dayEnd } = dateRangeBoundsInTimeZone(
+      dto.fecha,
+      dto.fecha,
+      tz,
+    );
     const docs = await this.prisma.electronicDocument.findMany({
       where: {
         establishmentId,
         documentType: ElectronicDocumentType.BOLETA,
         sunatStatus: SunatDocumentStatus.ACEPTADO,
-        emittedAt: { gte: dayStart, lte: dayEnd },
+        emittedAt: { gte: dayStart, lt: dayEnd },
         deletedAt: null,
       },
       select: { id: true },
@@ -952,6 +961,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     }));
 
     const fechaEmision = new Date().toISOString();
+    const timeZone = await this.resolveTimeZone(doc.establishmentId);
     const customerAddress = await this.resolveCustomerAddress(doc);
     let ublXml: string;
     let relatedDocument: EmitDocumentInput['relatedDocument'];
@@ -1040,6 +1050,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       serie: doc.serie,
       numero: doc.numero,
       fechaEmision,
+      timeZone,
       moneda: doc.moneda,
       subtotal: doc.subtotal.toString(),
       igvTotal: doc.igvTotal.toString(),
@@ -1527,7 +1538,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       LIQUIDACION_COMPRA: '04',
     };
     const tipoDoc = tipoDocMap[doc.documentType] ?? '03';
-    const fecha = (doc.emittedAt ?? doc.createdAt).toISOString().slice(0, 10);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const fecha = formatDateYmdInTimeZone(doc.emittedAt ?? doc.createdAt, tz);
     const cpe = await this.factilizaConsulta.queryCpeStatus(config.consultaApiUrl, token, {
       rucEmisor: config.rucEmisor,
       tipoDoc,
@@ -1886,5 +1898,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       destinatarioNumDoc: emisorRuc,
       destinatarioRazonSocial: toEst.nombre || emisorRazon,
     };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

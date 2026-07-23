@@ -36,6 +36,8 @@ model Tenant {
   notes             String?
   /// Módulos `nav.*` habilitados para el cliente. Null = preset del plan.
   enabledModules    Json?
+  /// Zona horaria IANA por defecto del cliente SaaS (heredan establecimientos nuevos).
+  defaultTimeZone   String       @default("America/Lima") @db.VarChar(64)
   activatedAt       DateTime?
   suspendedAt       DateTime?
   deletedAt         DateTime?

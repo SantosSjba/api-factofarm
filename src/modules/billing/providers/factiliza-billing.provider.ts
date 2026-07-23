@@ -174,7 +174,7 @@ export class FactilizaBillingProvider implements IBillingProvider {
     const subtotal = roundMoney(input.subtotal);
     const igv = roundMoney(input.igvTotal);
     const total = roundMoney(input.total);
-    const fecha = peruEmissionDate(input.fechaEmision);
+    const fecha = peruEmissionDate(input.fechaEmision, input.timeZone);
 
     return {
       tipo_Operacion: '0101',
@@ -226,7 +226,7 @@ export class FactilizaBillingProvider implements IBillingProvider {
 
   private buildDespatchBody(input: EmitDocumentInput): Record<string, unknown> {
     const d = input.despatch!;
-    const fecha = peruEmissionDate(input.fechaEmision);
+    const fecha = peruEmissionDate(input.fechaEmision, input.timeZone);
     return {
       serie: input.serie,
       correlativo: input.numero.replace(/^0+/, '') || input.numero,
@@ -262,7 +262,7 @@ export class FactilizaBillingProvider implements IBillingProvider {
     const subtotal = roundMoney(input.subtotal);
     const igv = roundMoney(input.igvTotal);
     const total = roundMoney(input.total);
-    const fecha = peruEmissionDate(input.fechaEmision);
+    const fecha = peruEmissionDate(input.fechaEmision, input.timeZone);
     const motivoCod =
       input.documentType === 'NOTA_DEBITO'
         ? (input.debitNoteReasonCode ?? '02')

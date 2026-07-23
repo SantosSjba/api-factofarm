@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../common/services/email.service';
+import {
+  DEFAULT_TIME_ZONE,
+  formatDateYmdInTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ComplaintKind, ComplaintRequestDto } from './dto/complaint-request.dto';
 
@@ -88,11 +92,8 @@ export class PublicComplaintsService {
   }
 
   private buildRegistrationNumber(): string {
-    const date = new Date();
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(date.getUTCDate()).padStart(2, '0');
+    const ymd = formatDateYmdInTimeZone(new Date(), DEFAULT_TIME_ZONE).replace(/-/g, '');
     const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
-    return `LR-${y}${m}${d}-${suffix}`;
+    return `LR-${ymd}-${suffix}`;
   }
 }

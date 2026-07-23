@@ -15,6 +15,11 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
+import {
+  dateRangeBoundsInTimeZone,
+  dayBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
@@ -302,8 +307,7 @@ export class InventoryMovementsService {
       page: query.page,
       pageSize: query.pageSize,
     });
-    const from = query.from ? new Date(query.from) : undefined;
-    const to = query.to ? new Date(query.to) : undefined;
+    const dateFilter = await this.kardexDateFilter(establishmentId, query.from, query.to);
 
     const where: Prisma.InventoryInboundMovementWhereInput = {
       productId: query.productId,
@@ -314,14 +318,7 @@ export class InventoryMovementsService {
         establishmentId,
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
       },
-      ...(from || to
-        ? {
-            fechaRegistro: {
-              ...(from ? { gte: from } : {}),
-              ...(to ? { lte: to } : {}),
-            },
-          }
-        : {}),
+      ...(dateFilter ? { fechaRegistro: dateFilter } : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -379,8 +376,7 @@ export class InventoryMovementsService {
       page: query.page,
       pageSize: query.pageSize,
     });
-    const from = query.from ? new Date(query.from) : undefined;
-    const to = query.to ? new Date(query.to) : undefined;
+    const dateFilter = await this.kardexDateFilter(establishmentId, query.from, query.to);
 
     let warehouseFilter: Prisma.ArchivedInventoryInboundMovementWhereInput;
     if (query.warehouseId) {
@@ -401,14 +397,7 @@ export class InventoryMovementsService {
     const where: Prisma.ArchivedInventoryInboundMovementWhereInput = {
       productId: query.productId,
       ...warehouseFilter,
-      ...(from || to
-        ? {
-            originalFechaRegistro: {
-              ...(from ? { gte: from } : {}),
-              ...(to ? { lte: to } : {}),
-            },
-          }
-        : {}),
+      ...(dateFilter ? { originalFechaRegistro: dateFilter } : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -449,7 +438,9 @@ export class InventoryMovementsService {
 
   async alerts(actor: JwtRequestUser) {
     const establishmentId = await this.scope.resolve(actor);
+    const tz = await this.resolveTimeZone(establishmentId);
     const now = new Date();
+    const { start: todayStart } = dayBoundsInTimeZone(now, tz);
     const in30 = new Date(now);
     in30.setDate(in30.getDate() + 30);
     const in60 = new Date(now);
@@ -499,7 +490,7 @@ export class InventoryMovementsService {
             warehouse: { establishmentId },
             temperatureLogs: {
               none: {
-                fecha: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
+                fecha: { gte: todayStart },
               },
             },
           },
@@ -1681,5 +1672,34 @@ export class InventoryMovementsService {
     }
     if (text.includes('/')) return new Date(c, b - 1, a);
     return new Date(a, b - 1, c);
+  }
+
+  private async kardexDateFilter(
+    establishmentId: string,
+    from?: string,
+    to?: string,
+  ): Promise<{ gte?: Date; lt?: Date } | undefined> {
+    if (!from && !to) return undefined;
+    const tz = await this.resolveTimeZone(establishmentId);
+    const fromYmd = from?.trim();
+    const toYmd = to?.trim();
+    if (fromYmd && toYmd) {
+      const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+      return { gte: start, lt: end };
+    }
+    if (fromYmd) {
+      const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
+      return { gte: start };
+    }
+    const { end } = dateRangeBoundsInTimeZone(toYmd!, toYmd!, tz);
+    return { lt: end };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

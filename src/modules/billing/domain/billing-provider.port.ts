@@ -6,6 +6,8 @@ export type EmitDocumentInput = {
   serie: string;
   numero: string;
   fechaEmision: string;
+  /** Zona IANA del establecimiento (emisión CPE). */
+  timeZone?: string;
   moneda: string;
   subtotal: string;
   igvTotal: string;

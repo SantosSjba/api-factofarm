@@ -15,6 +15,10 @@ import { getDefaultNavCodesForRole } from '../../../common/permissions/role-perm
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EmailService } from '../../../common/services/email.service';
+import {
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRole, TenantStatus, TenantPlan } from '../../../generated/prisma/client';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
@@ -207,6 +211,7 @@ export class AuthService {
         permissionCodes: actor.permissionCodes ?? [],
         supportSession: true,
         logoUrl: await this.logoUrlForEstablishment(actor.establecimientoId),
+        timeZone: await this.timeZoneForEstablishment(actor.establecimientoId),
       };
     }
 
@@ -220,7 +225,12 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
     }
-    return this.toAuthUserView(user, await this.logoUrlForEstablishment(user.establecimientoId));
+    const __estId = user.establecimientoId;
+    return this.toAuthUserView(
+      user,
+      await this.logoUrlForEstablishment(__estId),
+      await this.timeZoneForEstablishment(__estId),
+    );
   }
 
   /**
@@ -411,6 +421,7 @@ export class AuthService {
     return this.toAuthUserView(
       refreshed,
       await this.logoUrlForEstablishment(refreshed.establecimientoId),
+      await this.timeZoneForEstablishment(refreshed.establecimientoId),
     );
   }
 
@@ -579,6 +590,7 @@ export class AuthService {
       user: this.toAuthUserView(
         user,
         await this.logoUrlForEstablishment(user.establecimientoId),
+        await this.timeZoneForEstablishment(user.establecimientoId),
       ),
     };
   }
@@ -632,6 +644,7 @@ export class AuthService {
         permissionCodes: input.permissionCodes,
         supportSession: true,
         logoUrl: await this.logoUrlForEstablishment(input.establecimientoId),
+        timeZone: await this.timeZoneForEstablishment(input.establecimientoId),
       },
     };
   }
@@ -647,6 +660,17 @@ export class AuthService {
     return row?.logoArchivoId ? `/api/v1/files/${row.logoArchivoId}` : null;
   }
 
+  private async timeZoneForEstablishment(
+    establecimientoId: string | null | undefined,
+  ): Promise<string> {
+    if (!establecimientoId) return DEFAULT_TIME_ZONE;
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establecimientoId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
+  }
+
   private toAuthUserView(
     user: {
       id: string;
@@ -659,6 +683,7 @@ export class AuthService {
       permissions: { permission: { code: string } }[];
     },
     logoUrl: string | null = null,
+    timeZone = DEFAULT_TIME_ZONE,
   ): AuthUserView {
     return {
       id: user.id,
@@ -671,6 +696,7 @@ export class AuthService {
       establecimientoId: user.establecimientoId,
       permissionCodes: this.resolvePermissionCodes(user),
       logoUrl,
+      timeZone,
     };
   }
 

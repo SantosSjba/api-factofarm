@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma, UserLeaveStatus } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  dateRangeBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AttendanceListQueryDto,
@@ -139,11 +143,13 @@ export class StaffService {
   }
 
   async getProductivityReport(establishmentId: string, query: StaffProductivityQueryDto) {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    const fromYmd = this.toYmd(query.from);
+    const toYmd = this.toYmd(query.to);
+    if (!fromYmd || !toYmd) {
       throw new BadRequestException('Rango de fechas inválido');
     }
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
 
     const sellers = await this.prisma.user.findMany({
       where: { establecimientoId: establishmentId, deletedAt: null },
@@ -158,7 +164,7 @@ export class StaffService {
             sellerId: seller.id,
             deletedAt: null,
             estado: 'COMPLETADA',
-            createdAt: { gte: from, lte: to },
+            createdAt: { gte: from, lt: to },
           },
           _sum: { total: true },
           _count: true,
@@ -188,11 +194,14 @@ export class StaffService {
 
   async createLeave(userId: string, establishmentId: string, dto: CreateLeaveDto, actorId: string) {
     await this.ensureUserInEstablishment(userId, establishmentId);
-    const fromDate = new Date(dto.fromDate);
-    const toDate = new Date(dto.toDate);
-    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    const fromYmd = this.toYmd(dto.fromDate);
+    const toYmd = this.toYmd(dto.toDate);
+    if (!fromYmd || !toYmd) {
       throw new BadRequestException('Fechas inválidas');
     }
+    const tz = await this.resolveTimeZone(establishmentId);
+    const fromDate = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz).start;
+    const toDate = dateRangeBoundsInTimeZone(toYmd, toYmd, tz).start;
 
     const row = await this.prisma.userLeave.create({
       data: {
@@ -254,5 +263,18 @@ export class StaffService {
       select: { id: true },
     });
     if (!user) throw new NotFoundException('Usuario no encontrado en esta sucursal');
+  }
+
+  private toYmd(value?: string): string | null {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(value?.trim() ?? '');
+    return m?.[1] ?? null;
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

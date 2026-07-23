@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductSerialStatus } from '../../generated/prisma/client';
 import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  DEFAULT_TIME_ZONE,
+  formatDateYmdInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -113,10 +118,13 @@ export class SeriesService {
 
   async buildExportBuffer(query: SeriesListQueryDto, actor: JwtRequestUser) {
     const data = await this.list({ ...query, page: 1, pageSize: 100000 }, actor);
+    const tz = actor.establecimientoId
+      ? await this.resolveTimeZone(actor.establecimientoId)
+      : DEFAULT_TIME_ZONE;
     const rows = data.items.map((x) => ({
       Serie: x.serie,
       Producto: x.product.nombre,
-      Fecha: this.formatDate(x.fecha),
+      Fecha: this.formatDate(x.fecha, tz),
       Estado: x.estado,
       Vendido: x.vendido ? 'SI' : 'NO',
     }));
@@ -135,11 +143,18 @@ export class SeriesService {
     return null;
   }
 
-  private formatDate(date: Date): string {
-    if (!(date instanceof Date)) throw new BadRequestException('Fecha inválida');
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  private formatDate(date: Date, timeZone: string): string {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Fecha inválida');
+    }
+    return formatDateYmdInTimeZone(date, timeZone);
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

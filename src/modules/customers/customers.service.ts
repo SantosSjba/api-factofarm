@@ -4,6 +4,10 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
+import {
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LpdpService } from '../compliance/services/lpdp.service';
 import { CreateCustomerZoneDto } from './dto/create-customer-zone.dto';
@@ -621,16 +625,19 @@ export class CustomersService {
     };
     if (dto.sellerId) where.vendedorAsignadoId = dto.sellerId;
 
+    const tz = actor?.establecimientoId
+      ? await this.resolveTimeZone(actor.establecimientoId)
+      : normalizeTimeZone(undefined);
     const period = dto.period ?? 'all';
     if (period === 'month' && dto.month) {
-      const range = this.parseMonth(dto.month);
+      const range = this.parseMonth(dto.month, tz);
       if (range) {
         where.createdAt = { gte: range.start, lt: range.end };
       }
     }
     if (period === 'between-months' && dto.fromMonth && dto.toMonth) {
-      const fromRange = this.parseMonth(dto.fromMonth);
-      const toRange = this.parseMonth(dto.toMonth);
+      const fromRange = this.parseMonth(dto.fromMonth, tz);
+      const toRange = this.parseMonth(dto.toMonth, tz);
       if (fromRange && toRange) {
         where.createdAt = { gte: fromRange.start, lt: toRange.end };
       }
@@ -672,15 +679,23 @@ export class CustomersService {
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 
-  private parseMonth(value: string): { start: Date; end: Date } | null {
+  private parseMonth(value: string, timeZone: string): { start: Date; end: Date } | null {
     const m = /^(\d{2})\/(\d{4})$/.exec(value.trim());
     if (!m) return null;
     const month = Number(m[1]);
     const year = Number(m[2]);
     if (!Number.isFinite(month) || !Number.isFinite(year) || month < 1 || month > 12) return null;
-    const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
-    const end = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+    const yearMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+    const { start, end } = monthBoundsInTimeZone(yearMonth, timeZone);
     return { start, end };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 
   private toCreateInput(dto: CreateCustomerDto): Omit<Prisma.CustomerUncheckedCreateInput, 'tenantId'> {

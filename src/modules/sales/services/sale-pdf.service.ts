@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import PDFDocument from 'pdfkit';
+import { normalizeTimeZone } from '../../../common/utils/timezone.util';
 
 export type SalePdfFormatOption = 'TICKET_80' | 'TICKET_58' | 'A4';
 
@@ -20,6 +21,8 @@ export type SalePdfInput = {
   serie: string | null;
   numero: string | null;
   issuedAt: Date;
+  /** Zona IANA del establecimiento (default America/Lima). */
+  timeZone?: string;
   establishmentName: string;
   rucEmisor: string | null;
   address?: string | null;
@@ -140,7 +143,11 @@ export class SalePdfService {
         .font('Helvetica')
         .fontSize(fontSize)
         .fillColor('#333333')
-        .text(input.issuedAt.toLocaleString('es-PE', { timeZone: 'America/Lima' }), {
+        .text(
+          input.issuedAt.toLocaleString('es-PE', {
+            timeZone: normalizeTimeZone(input.timeZone),
+          }),
+          {
           width: contentWidth,
           align: 'center',
         })
@@ -292,7 +299,11 @@ export class SalePdfService {
       doc
         .fontSize(9)
         .fillColor('#444444')
-        .text(input.issuedAt.toLocaleString('es-PE', { timeZone: 'America/Lima' }), {
+        .text(
+          input.issuedAt.toLocaleString('es-PE', {
+            timeZone: normalizeTimeZone(input.timeZone),
+          }),
+          {
           align: 'center',
         });
       doc.fillColor('#000000');

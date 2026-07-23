@@ -30,6 +30,8 @@ model Establishment {
   codigo          String?  @unique
   activo          Boolean  @default(true)
   pais            String   @default("PERU")
+  /// Zona horaria IANA del local (calendario de negocio, PDFs, reportes). Default Perú.
+  timeZone        String   @default("America/Lima") @db.VarChar(64)
   departmentId    String?
   provinceId      String?
   districtId      String?

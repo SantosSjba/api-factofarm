@@ -1,3 +1,8 @@
+import {
+  DEFAULT_TIME_ZONE,
+  formatIsoOffsetInTimeZone,
+} from '../../../common/utils/timezone.util';
+
 const UNIDADES = [
   '',
   'UNO',
@@ -95,11 +100,9 @@ export function mapFactilizaAfectadoTipo(documentType: 'FACTURA' | 'BOLETA'): st
   return documentType === 'FACTURA' ? '01' : '03';
 }
 
-export function peruEmissionDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  const offsetMs = -5 * 60 * 60 * 1000;
-  const local = new Date(date.getTime() + offsetMs);
-  return local.toISOString().replace('Z', '-05:00');
+/** Fecha/hora de emisión CPE con offset (compat: nombre histórico). */
+export function peruEmissionDate(isoDate: string, timeZone = DEFAULT_TIME_ZONE): string {
+  return formatIsoOffsetInTimeZone(isoDate, timeZone);
 }
 
 export function roundMoney(value: string | number): number {

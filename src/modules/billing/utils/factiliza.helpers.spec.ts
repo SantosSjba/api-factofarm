@@ -27,7 +27,12 @@ describe('factiliza.helpers', () => {
 
   it('formatea fecha de emisión en zona Perú', () => {
     const formatted = peruEmissionDate('2026-07-09T15:00:00.000Z');
-    expect(formatted).toMatch(/-05:00$/);
+    expect(formatted).toBe('2026-07-09T10:00:00.000-05:00');
+  });
+
+  it('acepta zona horaria opcional', () => {
+    const formatted = peruEmissionDate('2026-07-09T15:00:00.000Z', 'UTC');
+    expect(formatted).toBe('2026-07-09T15:00:00.000+00:00');
   });
 
   it('redondea montos a dos decimales', () => {

@@ -13,6 +13,11 @@ import {
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
+import {
+  formatDateYmdInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateGoodsReceiptDto,
@@ -903,17 +908,21 @@ export class PurchasesService {
   }
 
   private async nextPurchaseOrderNumber(establishmentId: string) {
-    const year = new Date().getFullYear();
+    const tz = await this.resolveTimeZone(establishmentId);
+    const year = Number(formatDateYmdInTimeZone(new Date(), tz).slice(0, 4));
+    const { start: yearStart } = monthBoundsInTimeZone(`${year}-01`, tz);
     const count = await this.prisma.purchaseOrder.count({
-      where: { establishmentId, createdAt: { gte: new Date(`${year}-01-01`) } },
+      where: { establishmentId, createdAt: { gte: yearStart } },
     });
     return `OC-${year}-${String(count + 1).padStart(5, '0')}`;
   }
 
   private async nextGoodsReceiptNumber(establishmentId: string) {
-    const year = new Date().getFullYear();
+    const tz = await this.resolveTimeZone(establishmentId);
+    const year = Number(formatDateYmdInTimeZone(new Date(), tz).slice(0, 4));
+    const { start: yearStart } = monthBoundsInTimeZone(`${year}-01`, tz);
     const count = await this.prisma.goodsReceipt.count({
-      where: { establishmentId, createdAt: { gte: new Date(`${year}-01-01`) } },
+      where: { establishmentId, createdAt: { gte: yearStart } },
     });
     return `GR-${year}-${String(count + 1).padStart(5, '0')}`;
   }
@@ -993,5 +1002,13 @@ export class PurchasesService {
         referenciaDoc: g.referenciaDoc,
       })),
     };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

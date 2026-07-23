@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  formatDateYmdInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../../common/utils/timezone.util';
 
 type PleBook = '14.1' | '8.1' | '13.1';
 
@@ -9,23 +14,21 @@ export class PleService {
   constructor(private readonly prisma: PrismaService) {}
 
   async buildTxt(establishmentId: string, period: string, book: PleBook) {
-    const { year, month } = this.parsePeriod(period);
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 1);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = monthBoundsInTimeZone(period, tz);
 
     if (book === '14.1') {
-      return this.buildSalesBook(establishmentId, from, to, period, book);
+      return this.buildSalesBook(establishmentId, from, to, period, book, tz);
     }
     if (book === '8.1') {
-      return this.buildPurchasesBook(establishmentId, from, to, period, book);
+      return this.buildPurchasesBook(establishmentId, from, to, period, book, tz);
     }
-    return this.buildInventoryBook(establishmentId, from, to, period, book);
+    return this.buildInventoryBook(establishmentId, from, to, period, book, tz);
   }
 
   async accountantSummary(establishmentId: string, period: string) {
-    const { year, month } = this.parsePeriod(period);
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 1);
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start: from, end: to } = monthBoundsInTimeZone(period, tz);
 
     const sales = await this.prisma.sale.aggregate({
       where: {
@@ -96,6 +99,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
+  timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -139,7 +143,7 @@ export class PleService {
         sale.documentType,
         sale.serie ?? '',
         sale.numero ?? '',
-        sale.createdAt.toISOString().slice(0, 10),
+        formatDateYmdInTimeZone(sale.createdAt, timeZone),
         sale.customer?.numeroDocumento ?? '',
         sale.customer?.nombre ?? 'CLIENTE VARIOS',
         sale.subtotal.toString(),
@@ -162,6 +166,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
+  timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -204,7 +209,7 @@ export class PleService {
         ruc,
         row.purchaseOrder?.supplier?.numeroDocumento ?? '',
         row.purchaseOrder?.supplier?.razonSocial ?? '',
-        row.createdAt.toISOString().slice(0, 10),
+        formatDateYmdInTimeZone(row.createdAt, timeZone),
         row.purchaseOrder?.total?.toString() ?? '0',
         row.numero ?? row.id.slice(0, 8),
         String(idx + 1),
@@ -224,6 +229,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
+  timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -268,7 +274,9 @@ export class PleService {
         row.warehouse.nombre,
         row.stock.toString(),
         row.costoUnitario?.toString() ?? '0',
-        row.fechaVencimiento?.toISOString().slice(0, 10) ?? '',
+        row.fechaVencimiento
+          ? formatDateYmdInTimeZone(row.fechaVencimiento, timeZone)
+          : '',
         String(idx + 1),
       ].join('|'),
     );
@@ -289,6 +297,14 @@ export class PleService {
     const month = Number(match[2]);
     if (month < 1 || month > 12) throw new Error('Mes inválido');
     return { year, month };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }
 

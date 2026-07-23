@@ -4,6 +4,12 @@ import { buildPaginatedResult, paginationArgs } from '../../common/dto/paginatio
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  dateRangeBoundsInTimeZone,
+  formatDateYmdInTimeZone,
+  monthBoundsInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
+import {
   AccountingExportQueryDto,
   BankMovementListQueryDto,
   CreateBankAccountDto,
@@ -23,14 +29,14 @@ export class FinanceService {
   ) {}
 
   async getCashFlow(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to } = this.parseRange(query);
+    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
 
     const salesAgg = await this.prisma.sale.aggregate({
       where: {
         establishmentId,
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
       },
       _sum: { total: true },
       _count: true,
@@ -40,7 +46,7 @@ export class FinanceService {
       where: {
         establishmentId,
         deletedAt: null,
-        fechaEmision: { gte: from, lte: to },
+        fechaEmision: { gte: from, lt: to },
       },
       _sum: { montoTotal: true },
       _count: true,
@@ -48,7 +54,7 @@ export class FinanceService {
 
     const apPayments = await this.prisma.accountPayablePayment.aggregate({
       where: {
-        fechaPago: { gte: from, lte: to },
+        fechaPago: { gte: from, lt: to },
         accountPayable: { establishmentId, deletedAt: null },
       },
       _sum: { monto: true },
@@ -57,7 +63,7 @@ export class FinanceService {
 
     const arPayments = await this.prisma.accountReceivablePayment.aggregate({
       where: {
-        pagadoAt: { gte: from, lte: to },
+        pagadoAt: { gte: from, lt: to },
         accountReceivable: { establishmentId, deletedAt: null },
       },
       _sum: { monto: true },
@@ -66,7 +72,7 @@ export class FinanceService {
 
     const cashMovements = await this.prisma.cashMovement.aggregate({
       where: {
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
         cashSession: { cashRegister: { establishmentId } },
       },
       _sum: { monto: true },
@@ -106,7 +112,7 @@ export class FinanceService {
   }
 
   async getMarginReport(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to } = this.parseRange(query);
+    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
 
     const saleItems = await this.prisma.saleItem.findMany({
       where: {
@@ -114,7 +120,7 @@ export class FinanceService {
           establishmentId,
           deletedAt: null,
           estado: 'COMPLETADA',
-          createdAt: { gte: from, lte: to },
+          createdAt: { gte: from, lt: to },
         },
       },
       select: {
@@ -174,14 +180,14 @@ export class FinanceService {
   }
 
   async exportAccounting(establishmentId: string, query: AccountingExportQueryDto) {
-    const { from, to } = this.parseRange(query);
+    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
 
     const sales = await this.prisma.sale.findMany({
       where: {
         establishmentId,
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
       },
       select: {
         createdAt: true,
@@ -200,7 +206,7 @@ export class FinanceService {
       where: {
         establishmentId,
         deletedAt: null,
-        fechaEmision: { gte: from, lte: to },
+        fechaEmision: { gte: from, lt: to },
       },
       select: {
         fechaEmision: true,
@@ -218,7 +224,7 @@ export class FinanceService {
         lines.push(
           [
             'VENTA',
-            s.createdAt.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(s.createdAt, timeZone),
             s.serie ?? '',
             s.numero ?? '',
             s.customer?.numeroDocumento ?? '',
@@ -233,7 +239,7 @@ export class FinanceService {
         lines.push(
           [
             'COMPRA',
-            p.fechaEmision.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(p.fechaEmision, timeZone),
             '',
             p.numeroDocumento ?? '',
             p.supplier?.numeroDocumento ?? '',
@@ -250,7 +256,7 @@ export class FinanceService {
         lines.push(
           [
             'V',
-            s.createdAt.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(s.createdAt, timeZone),
             `${s.serie ?? ''}-${s.numero ?? ''}`,
             s.customer?.numeroDocumento ?? '',
             s.subtotal.toString(),
@@ -263,7 +269,7 @@ export class FinanceService {
         lines.push(
           [
             'C',
-            p.fechaEmision.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(p.fechaEmision, timeZone),
             p.numeroDocumento ?? '',
             p.supplier?.numeroDocumento ?? '',
             p.montoTotal.toString(),
@@ -278,7 +284,7 @@ export class FinanceService {
         lines.push(
           [
             'VENTA',
-            s.createdAt.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(s.createdAt, timeZone),
             `${s.serie ?? ''}-${s.numero ?? ''}`,
             s.customer?.numeroDocumento ?? '',
             s.subtotal.toString(),
@@ -291,7 +297,7 @@ export class FinanceService {
         lines.push(
           [
             'COMPRA',
-            p.fechaEmision.toISOString().slice(0, 10),
+            formatDateYmdInTimeZone(p.fechaEmision, timeZone),
             p.numeroDocumento ?? '',
             p.supplier?.numeroDocumento ?? '',
             p.montoTotal.toString(),
@@ -304,7 +310,7 @@ export class FinanceService {
 
     const ext = query.format === 'excel' ? 'csv' : query.format;
     return {
-      filename: `contable-${query.format}-${from.toISOString().slice(0, 10)}-${to.toISOString().slice(0, 10)}.${ext}`,
+      filename: `contable-${query.format}-${query.from}-${query.to}.${ext}`,
       content: lines.join('\n'),
       mimeType: 'text/csv; charset=utf-8',
     };
@@ -468,16 +474,17 @@ export class FinanceService {
       where: { establishmentId, anio: query.anio },
       orderBy: { mes: 'asc' },
     });
+    const tz = await this.resolveTimeZone(establishmentId);
 
     const rows = await Promise.all(
       budgets.map(async (b) => {
-        const from = new Date(query.anio, b.mes - 1, 1);
-        const to = new Date(query.anio, b.mes, 0, 23, 59, 59, 999);
+        const yearMonth = `${query.anio}-${String(b.mes).padStart(2, '0')}`;
+        const { start: from, end: to } = monthBoundsInTimeZone(yearMonth, tz);
         const actual = await this.prisma.accountPayable.aggregate({
           where: {
             establishmentId,
             deletedAt: null,
-            fechaEmision: { gte: from, lte: to },
+            fechaEmision: { gte: from, lt: to },
           },
           _sum: { montoTotal: true },
         });
@@ -500,7 +507,7 @@ export class FinanceService {
   }
 
   async getPaymentsByMethod(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to } = this.parseRange(query);
+    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
 
     const salePayments = await this.prisma.payment.findMany({
       where: {
@@ -508,7 +515,7 @@ export class FinanceService {
           establishmentId,
           deletedAt: null,
           estado: 'COMPLETADA',
-          createdAt: { gte: from, lte: to },
+          createdAt: { gte: from, lt: to },
         },
       },
       select: { metodo: true, monto: true },
@@ -516,7 +523,7 @@ export class FinanceService {
 
     const arPayments = await this.prisma.accountReceivablePayment.findMany({
       where: {
-        pagadoAt: { gte: from, lte: to },
+        pagadoAt: { gte: from, lt: to },
         accountReceivable: { establishmentId, deletedAt: null },
       },
       select: { metodoPago: true, monto: true },
@@ -524,7 +531,7 @@ export class FinanceService {
 
     const apPayments = await this.prisma.accountPayablePayment.findMany({
       where: {
-        fechaPago: { gte: from, lte: to },
+        fechaPago: { gte: from, lt: to },
         accountPayable: { establishmentId, deletedAt: null },
       },
       select: { metodo: true, monto: true },
@@ -532,7 +539,7 @@ export class FinanceService {
 
     const cashMovements = await this.prisma.cashMovement.findMany({
       where: {
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
         cashSession: { cashRegister: { establishmentId } },
       },
       select: { tipo: true, metodoPago: true, monto: true },
@@ -594,12 +601,22 @@ export class FinanceService {
 
   async getRecentPayments(establishmentId: string, query: RecentPaymentsQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
-    const from = query.from ? new Date(query.from) : undefined;
-    const to = query.to ? new Date(query.to) : undefined;
-    const dateFilter =
-      from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())
-        ? { gte: from, lte: to }
-        : undefined;
+    let dateFilter: { gte?: Date; lt?: Date } | undefined;
+    if (query.from || query.to) {
+      const tz = await this.resolveTimeZone(establishmentId);
+      const fromYmd = query.from?.trim();
+      const toYmd = query.to?.trim();
+      if (fromYmd && toYmd) {
+        const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+        dateFilter = { gte: start, lt: end };
+      } else if (fromYmd) {
+        const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
+        dateFilter = { gte: start };
+      } else if (toYmd) {
+        const { end } = dateRangeBoundsInTimeZone(toYmd, toYmd, tz);
+        dateFilter = { lt: end };
+      }
+    }
 
     type Entry = {
       id: string;
@@ -726,7 +743,7 @@ export class FinanceService {
   }
 
   async getGeneralLedger(establishmentId: string, query: GeneralLedgerQueryDto) {
-    const { from, to } = this.parseRange(query);
+    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
     const { page, pageSize, skip, take } = paginationArgs(query);
 
     type LedgerRow = {
@@ -746,7 +763,7 @@ export class FinanceService {
         establishmentId,
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: from, lte: to },
+        createdAt: { gte: from, lt: to },
       },
       select: {
         id: true,
@@ -774,7 +791,7 @@ export class FinanceService {
       where: {
         establishmentId,
         deletedAt: null,
-        fechaEmision: { gte: from, lte: to },
+        fechaEmision: { gte: from, lt: to },
       },
       select: {
         id: true,
@@ -799,7 +816,7 @@ export class FinanceService {
 
     const bankMovements = await this.prisma.bankMovement.findMany({
       where: {
-        movimientoAt: { gte: from, lte: to },
+        movimientoAt: { gte: from, lt: to },
         bankAccount: { establishmentId, deletedAt: null },
       },
       select: {
@@ -850,12 +867,22 @@ export class FinanceService {
     };
   }
 
-  private parseRange(query: FinancePeriodQueryDto) {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
+  }
+
+  private async parseRange(establishmentId: string, query: FinancePeriodQueryDto) {
+    const fromYmd = query.from?.trim();
+    const toYmd = query.to?.trim();
+    if (!fromYmd || !toYmd || !/^\d{4}-\d{2}-\d{2}$/.test(fromYmd) || !/^\d{4}-\d{2}-\d{2}$/.test(toYmd)) {
       throw new BadRequestException('Rango de fechas inválido');
     }
-    return { from, to };
+    const tz = await this.resolveTimeZone(establishmentId);
+    const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+    return { from: start, to: end, timeZone: tz };
   }
 }

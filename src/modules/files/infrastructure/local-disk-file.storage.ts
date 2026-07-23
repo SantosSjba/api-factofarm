@@ -5,6 +5,10 @@ import { mkdir, writeFile } from 'fs/promises';
 import { dirname, extname, join, resolve } from 'path';
 import { randomUUID } from 'crypto';
 import type { Express } from 'express';
+import {
+  DEFAULT_TIME_ZONE,
+  formatDateYmdInTimeZone,
+} from '../../../common/utils/timezone.util';
 
 @Injectable()
 export class LocalDiskFileStorage {
@@ -25,8 +29,8 @@ export class LocalDiskFileStorage {
     buffer: Buffer,
     originalName: string,
   ): Promise<{ id: string; rutaRelativa: string; ext: string }> {
-    const now = new Date();
-    const yearMonth = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const ymd = formatDateYmdInTimeZone(new Date(), DEFAULT_TIME_ZONE);
+    const yearMonth = `${ymd.slice(0, 4)}/${ymd.slice(5, 7)}`;
     const ext = extname(originalName) || '';
     const id = randomUUID();
     const fileName = `${id}${ext}`;

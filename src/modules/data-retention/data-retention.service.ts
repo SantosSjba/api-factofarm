@@ -8,6 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
+import {
+  dateRangeBoundsInTimeZone,
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import type { ArchiveListQueryDto } from './dto/archive-list-query.dto';
@@ -389,16 +394,10 @@ export class DataRetentionService {
 
   async listArchivedSales(query: ArchiveListQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
+    const dateFilter = await this.archiveDateFilter(query);
     const where: Prisma.ArchivedSaleWhereInput = {
       ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
-      ...(query.from || query.to
-        ? {
-            originalCreatedAt: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(query.to) } : {}),
-            },
-          }
-        : {}),
+      ...(dateFilter ? { originalCreatedAt: dateFilter } : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -447,17 +446,11 @@ export class DataRetentionService {
 
   async listArchivedKardex(query: ArchiveListQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
+    const dateFilter = await this.archiveDateFilter(query);
     const where: Prisma.ArchivedInventoryInboundMovementWhereInput = {
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
       ...(query.productId ? { productId: query.productId } : {}),
-      ...(query.from || query.to
-        ? {
-            originalFechaRegistro: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(query.to) } : {}),
-            },
-          }
-        : {}),
+      ...(dateFilter ? { originalFechaRegistro: dateFilter } : {}),
     };
 
     if (query.establishmentId && !query.warehouseId) {
@@ -612,5 +605,34 @@ export class DataRetentionService {
         finishedAt: new Date(),
       },
     });
+  }
+
+  private async archiveDateFilter(
+    query: ArchiveListQueryDto,
+  ): Promise<{ gte?: Date; lt?: Date } | undefined> {
+    if (!query.from && !query.to) return undefined;
+    const tz = query.establishmentId
+      ? await this.resolveTimeZone(query.establishmentId)
+      : DEFAULT_TIME_ZONE;
+    const fromYmd = query.from?.trim();
+    const toYmd = query.to?.trim();
+    if (fromYmd && toYmd) {
+      const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+      return { gte: start, lt: end };
+    }
+    if (fromYmd) {
+      const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
+      return { gte: start };
+    }
+    const { end } = dateRangeBoundsInTimeZone(toYmd!, toYmd!, tz);
+    return { lt: end };
+  }
+
+  private async resolveTimeZone(establishmentId: string): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
   }
 }

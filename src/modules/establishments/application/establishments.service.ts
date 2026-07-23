@@ -1,4 +1,10 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DocumentSeriesType, Prisma } from '../../../generated/prisma/client';
 import {
   buildPaginatedResult,
@@ -8,6 +14,12 @@ import { CacheService } from '../../../common/cache/cache.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import {
+  DEFAULT_TIME_ZONE,
+  isValidTimeZone,
+  listCommonTimeZones,
+  normalizeTimeZone,
+} from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { BillingService } from '../../billing/billing.service';
 import { TenantsService } from '../../tenants/tenants.service';
@@ -77,6 +89,7 @@ const selectEstablishment = {
   codigo: true,
   activo: true,
   pais: true,
+  timeZone: true,
   departmentId: true,
   provinceId: true,
   districtId: true,
@@ -183,12 +196,17 @@ export class EstablishmentsService {
     const tenantId = this.resolveTenantIdForCreate(dto, actor);
     const tenant = await this.tenants.findOne(tenantId);
     await this.tenants.assertEstablishmentQuota(tenantId, tenant.maxEstablishments);
+    const tenantTz = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { defaultTimeZone: true },
+    });
 
     try {
       const created = await this.prisma.establishment.create({
         data: {
           ...this.mapEstablishmentCreateInput(dto),
           tenantId,
+          timeZone: normalizeTimeZone(tenantTz?.defaultTimeZone ?? DEFAULT_TIME_ZONE),
         },
         select: selectEstablishment,
       });
@@ -539,6 +557,8 @@ export class EstablishmentsService {
         { value: 'TICKET_58', label: 'Ticket 58 mm (impresora térmica)' },
         { value: 'A4', label: 'Hoja A4 (impresora normal)' },
       ],
+      timeZone: normalizeTimeZone(establishment.timeZone),
+      timeZoneOptions: listCommonTimeZones(),
       rucEmisor: billing.rucEmisor ?? tenant.ruc ?? null,
       razonSocialEmisor: billing.razonSocialEmisor ?? tenant.nombre ?? null,
       billingProvider: billing.provider,
@@ -606,7 +626,8 @@ export class EstablishmentsService {
     if (
       Object.keys(establishmentPatch).length > 0 ||
       dto.logoArchivoId === null ||
-      dto.salePdfFormat !== undefined
+      dto.salePdfFormat !== undefined ||
+      dto.timeZone !== undefined
     ) {
       const data = this.mapEstablishmentUpdateInput(establishmentPatch);
       if (dto.logoArchivoId === null) {
@@ -620,6 +641,15 @@ export class EstablishmentsService {
       if (dto.districtId === null) data.districtId = null;
       if (dto.salePdfFormat !== undefined) {
         data.salePdfFormat = dto.salePdfFormat;
+      }
+      if (dto.timeZone !== undefined) {
+        const tz = dto.timeZone.trim();
+        if (!isValidTimeZone(tz)) {
+          throw new BadRequestException(
+            'Zona horaria inválida. Use un identificador IANA (ej. America/Lima).',
+          );
+        }
+        data.timeZone = tz;
       }
 
       await this.prisma.establishment.update({

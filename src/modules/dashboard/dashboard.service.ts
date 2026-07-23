@@ -3,6 +3,11 @@ import { Prisma } from '../../generated/prisma/client';
 import { actorFromJwt, requireTenantId } from '../../common/scoping/tenant-scope.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
+import {
+  dayBoundsInTimeZone,
+  formatDateYmdInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -50,16 +55,25 @@ export class DashboardService {
     return requireTenantId(scope);
   }
 
+  private async resolveActorTimeZone(actor: JwtRequestUser): Promise<string> {
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: actor.establecimientoId, deletedAt: null },
+      select: { timeZone: true },
+    });
+    return normalizeTimeZone(row?.timeZone);
+  }
+
   async getStats(actor: JwtRequestUser): Promise<DashboardStats> {
     const tenantId = this.tenantIdForDashboard(actor);
     const now = new Date();
+    const timeZone = await this.resolveActorTimeZone(actor);
+    const { start: startOfDay } = dayBoundsInTimeZone(now, timeZone);
     const in30 = new Date(now);
     in30.setDate(in30.getDate() + 30);
     const in60 = new Date(now);
     in60.setDate(in60.getDate() + 60);
     const in90 = new Date(now);
     in90.setDate(in90.getDate() + 90);
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const [
       usersActive,
@@ -214,29 +228,37 @@ export class DashboardService {
 
   async getSalesTrend(actor: JwtRequestUser, periodDays = 14): Promise<SalesTrend> {
     const tenantId = this.tenantIdForDashboard(actor);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const start = new Date(today);
-    start.setDate(start.getDate() - (periodDays - 1));
+    const timeZone = await this.resolveActorTimeZone(actor);
+    const { end: endExclusive, ymd: todayYmd } = dayBoundsInTimeZone(new Date(), timeZone);
+    const [ty, tm, td] = todayYmd.split('-').map(Number);
+    const firstDayUtc = new Date(Date.UTC(ty, tm - 1, td - (periodDays - 1)));
+    const firstYmd = `${firstDayUtc.getUTCFullYear()}-${String(firstDayUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDayUtc.getUTCDate()).padStart(2, '0')}`;
+    const { start } = dayBoundsInTimeZone(
+      new Date(`${firstYmd}T12:00:00.000Z`),
+      timeZone,
+    );
 
     const sales = await this.prisma.sale.findMany({
       where: {
         deletedAt: null,
         estado: 'COMPLETADA',
-        createdAt: { gte: start },
+        createdAt: { gte: start, lt: endExclusive },
         establishment: { tenantId },
       },
       select: { createdAt: true, total: true },
     });
 
     const buckets = new Map<string, { total: Prisma.Decimal; count: number }>();
+    // Build calendar days by walking ymd strings in timezone
+    let cursor = formatDateYmdInTimeZone(start, timeZone);
     for (let i = 0; i < periodDays; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      buckets.set(d.toISOString().slice(0, 10), { total: new Prisma.Decimal(0), count: 0 });
+      buckets.set(cursor, { total: new Prisma.Decimal(0), count: 0 });
+      const [y, m, d] = cursor.split('-').map(Number);
+      const next = new Date(Date.UTC(y, m - 1, d + 1));
+      cursor = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
     }
     for (const sale of sales) {
-      const key = sale.createdAt.toISOString().slice(0, 10);
+      const key = formatDateYmdInTimeZone(sale.createdAt, timeZone);
       const bucket = buckets.get(key);
       if (!bucket) continue;
       bucket.total = bucket.total.plus(sale.total);
@@ -255,10 +277,9 @@ export class DashboardService {
 
   async getManagerDashboard(actor: JwtRequestUser) {
     const establishmentId = await this.establishmentScope.resolveScoped(actor);
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const startOfWeek = new Date(startOfDay);
-    startOfWeek.setDate(startOfWeek.getDate() - 7);
+    const timeZone = await this.resolveActorTimeZone(actor);
+    const { start: startOfDay } = dayBoundsInTimeZone(new Date(), timeZone);
+    const startOfWeek = new Date(startOfDay.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const [salesToday, salesWeek, pendingVoids, openSessions, staffPresent] = await Promise.all([
       this.prisma.sale.aggregate({
@@ -332,8 +353,8 @@ export class DashboardService {
 
   async getCashierDashboard(actor: JwtRequestUser) {
     const establishmentId = await this.establishmentScope.resolveScoped(actor);
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const timeZone = await this.resolveActorTimeZone(actor);
+    const { start: startOfDay } = dayBoundsInTimeZone(new Date(), timeZone);
 
     const [mySales, openSession] = await Promise.all([
       this.prisma.sale.aggregate({
