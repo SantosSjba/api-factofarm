@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
@@ -20,6 +21,7 @@ export class UnitsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto) {
@@ -81,6 +83,7 @@ export class UnitsService {
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Unidad no encontrada');
+    await this.integrity.assertCanDeleteUnit(id);
     await this.prisma.unitOfMeasure.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'UnitOfMeasure', entityId: id });
   }

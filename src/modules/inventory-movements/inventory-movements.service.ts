@@ -12,6 +12,7 @@ import {
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -52,6 +53,7 @@ export class InventoryMovementsService {
     private readonly lotAllocation: InventoryLotAllocationService,
     private readonly audit: AuditLogService,
     private readonly scope: EstablishmentScopeService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
@@ -1352,16 +1354,20 @@ export class InventoryMovementsService {
 
         const existing = await this.prisma.productLotStock.findFirst({
           where: { productId: product.id, warehouseId: warehouse.id, codigoLote, deletedAt: null },
-          select: { id: true },
+          select: { id: true, stock: true },
         });
 
         if (existing) {
+          // No sobrescribir stock de lote existente (rompe kardex). Solo actualizar vencimiento.
+          const currentStock = Number(existing.stock);
+          if (currentStock !== stock) {
+            throw new BadRequestException(
+              'No se puede sobrescribir el stock de lote por importación; use ajustes o ingresos.',
+            );
+          }
           await this.prisma.productLotStock.update({
             where: { id: existing.id },
-            data: {
-              stock: new Prisma.Decimal(stock),
-              fechaVencimiento: fechaVenc,
-            },
+            data: { fechaVencimiento: fechaVenc },
           });
           updated += 1;
         } else {
@@ -1432,10 +1438,11 @@ export class InventoryMovementsService {
         const { estado, vendido } = this.mapEstado(estadoRaw);
         const existing = await this.prisma.productSerial.findFirst({
           where: { warehouseId: warehouse.id, serie, deletedAt: null },
-          select: { id: true },
+          select: { id: true, estado: true, vendido: true },
         });
 
         if (existing) {
+          this.integrity.assertCanMutateProductSerial(existing);
           await this.prisma.productSerial.update({
             where: { id: existing.id },
             data: {

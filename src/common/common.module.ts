@@ -6,6 +6,7 @@ import { RequestContextMiddleware } from './middleware/request-context.middlewar
 import { CacheService } from './cache/cache.service';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { EstablishmentScopeService } from './scoping/establishment-scope.service';
+import { EntityIntegrityService } from './services/entity-integrity.service';
 
 @Global()
 @Module({
@@ -16,6 +17,7 @@ import { EstablishmentScopeService } from './scoping/establishment-scope.service
     CacheService,
     PermissionsGuard,
     EstablishmentScopeService,
+    EntityIntegrityService,
   ],
   exports: [
     AuditLogService,
@@ -24,6 +26,7 @@ import { EstablishmentScopeService } from './scoping/establishment-scope.service
     CacheService,
     PermissionsGuard,
     EstablishmentScopeService,
+    EntityIntegrityService,
   ],
 })
 export class CommonModule implements NestModule {

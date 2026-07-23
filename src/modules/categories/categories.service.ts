@@ -6,6 +6,7 @@ import {
 } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +26,7 @@ export class CategoriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
@@ -155,6 +157,7 @@ export class CategoriesService {
     if (actor) {
       assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
+    await this.integrity.assertCanDeleteCategory(id);
 
     await this.prisma.category.update({
       where: { id },

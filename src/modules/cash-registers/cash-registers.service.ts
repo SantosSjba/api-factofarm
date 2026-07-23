@@ -143,6 +143,18 @@ export class CashRegistersService {
       throw new BadRequestException('Ya tiene una sesión de caja abierta');
     }
 
+    const registerOpen = await this.prisma.cashSession.count({
+      where: {
+        cashRegisterId: dto.cashRegisterId,
+        estado: CashSessionStatus.ABIERTA,
+      },
+    });
+    if (registerOpen > 0) {
+      throw new BadRequestException(
+        'La caja ya tiene una sesión abierta. Ciérrela antes de abrir otra.',
+      );
+    }
+
     const montoApertura = new Prisma.Decimal(dto.montoApertura ?? 0);
     const session = await this.prisma.cashSession.create({
       data: {

@@ -6,6 +6,7 @@ import {
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -59,6 +60,7 @@ export class SuppliersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async list(query: SupplierListQueryDto, actor?: JwtRequestUser) {
@@ -160,6 +162,7 @@ export class SuppliersService {
 
   async remove(id: string, actor?: JwtRequestUser) {
     await this.ensureSupplier(id, actor);
+    await this.integrity.assertCanDeleteSupplier(id);
     await this.prisma.supplier.update({
       where: { id },
       data: { deletedAt: new Date(), habilitado: false },

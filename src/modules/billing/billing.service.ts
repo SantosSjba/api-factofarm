@@ -16,6 +16,7 @@ import {
   ElectronicDocumentType,
   Prisma,
   SaleDocumentType,
+  SaleStatus,
   SunatDocumentStatus,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
@@ -33,6 +34,7 @@ import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
 import { getBillingProviderCapabilities } from './utils/billing-capabilities.util';
 import { hasRealOseConfigured } from './utils/ose-config.util';
 import { isValidPdfBuffer } from './utils/pdf-buffer.util';
+import { resolveSaleActionFlags } from '../sales/utils/sale-action-rules.util';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   BillingDocumentListQueryDto,
@@ -319,9 +321,24 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
+        _count: { select: { returns: true } },
+        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
       },
     });
     if (!sale) return null;
+
+    const existingCpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    // Emisión bloqueada si hubo devolución, anulación, archivo o no está COMPLETADA.
+    if (
+      sale.estado !== SaleStatus.COMPLETADA ||
+      sale._count.returns > 0 ||
+      !!sale.archivedAt
+    ) {
+      return null;
+    }
 
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId: sale.establishmentId },
@@ -335,10 +352,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     // Sin OSE real: no encola CPE. La venta/nota de venta queda registrada en ventas.
     if (!hasRealOseConfigured(config)) return null;
 
-    const existing = await this.prisma.electronicDocument.findFirst({
-      where: { saleId: sale.id, deletedAt: null },
-    });
-    if (existing) return existing.id;
+    if (existingCpe) return existingCpe.id;
 
     const docType = this.mapSaleDocumentType(sale.documentType);
     const seriesRow = await this.prisma.establishmentSeries.findFirst({
@@ -447,7 +461,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId: sale.establishmentId },
     });
-    if (config && !config.autoEmitOnSale) return null;
+    // NC por devolución siempre se encola si hay OSE (no depende de autoEmitOnSale).
+    if (!hasRealOseConfigured(config)) return null;
 
     const { serie, numero } = await this.resolveCreditNoteNumber(
       sale.establishmentId,
@@ -552,7 +567,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId: sale.establishmentId },
     });
-    if (config && !config.autoEmitOnSale) return null;
+    // ND manual siempre se encola si hay OSE (no depende de autoEmitOnSale).
+    if (!hasRealOseConfigured(config)) return null;
 
     const total = new Prisma.Decimal(dto.total);
     if (total.lte(0)) return null;
@@ -620,21 +636,42 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   async emitFromSale(saleId: string, establishmentId: string) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, establishmentId, deletedAt: null },
-      select: { id: true, documentType: true },
+      select: {
+        id: true,
+        documentType: true,
+        estado: true,
+        archivedAt: true,
+        _count: { select: { returns: true } },
+        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+      },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    if (
-      sale.documentType !== SaleDocumentType.BOLETA &&
-      sale.documentType !== SaleDocumentType.FACTURA
-    ) {
+    const cpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const flags = resolveSaleActionFlags({
+      documentType: sale.documentType,
+      estado: sale.estado,
+      archivedAt: sale.archivedAt,
+      hasReturns: sale._count.returns > 0,
+      hasActiveCpe: !!cpe,
+      sunatStatus: cpe?.sunatStatus ?? null,
+    });
+    if (!flags.canEmitCpe) {
       throw new BadRequestException(
-        'Solo boletas y facturas se emiten a SUNAT. Si es nota de venta, migre primero a boleta o factura.',
+        flags.emitBlockedReason ?? 'No se puede emitir esta venta a SUNAT',
+      );
+    }
+    if (!(await this.establishmentHasRealOse(establishmentId))) {
+      throw new BadRequestException(
+        'Configure facturación electrónica (OSE) en Mi farmacia para emitir a SUNAT.',
       );
     }
     const docId = await this.scheduleEmitFromSale(saleId, { force: true });
     if (!docId) {
       throw new BadRequestException(
-        'No se pudo emitir. Verifique OSE en Mi farmacia (proveedor + token) y que la venta no tenga ya un CPE.',
+        'No se pudo emitir. Verifique OSE, que la venta esté COMPLETADA sin devoluciones y sin CPE previo.',
       );
     }
     await this.processPendingJobs();

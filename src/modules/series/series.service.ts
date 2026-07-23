@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma, ProductSerialStatus } from '../../generated/prisma/client';
 import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SeriesListQueryDto } from './dto/series-list-query.dto';
 import { UpdateSeriesStatusDto } from './dto/update-series-status.dto';
@@ -24,7 +25,10 @@ const selectSerialList = {
 
 @Injectable()
 export class SeriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly integrity: EntityIntegrityService,
+  ) {}
 
   async list(query: SeriesListQueryDto, actor: JwtRequestUser) {
     const page = query.page ?? 1;
@@ -77,9 +81,10 @@ export class SeriesService {
   async updateStatus(id: string, dto: UpdateSeriesStatusDto, actor: JwtRequestUser) {
     const row = await this.prisma.productSerial.findFirst({
       where: { id, deletedAt: null, product: tenantWhere(actorFromJwt(actor)) },
-      select: { id: true },
+      select: { id: true, estado: true, vendido: true },
     });
     if (!row) throw new NotFoundException('Serie no encontrada');
+    this.integrity.assertCanMutateProductSerial(row);
 
     return this.prisma.productSerial.update({
       where: { id },
@@ -98,6 +103,7 @@ export class SeriesService {
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Serie no encontrada');
+    await this.integrity.assertCanDeleteProductSerial(id);
     await this.prisma.productSerial.update({
       where: { id },
       data: { deletedAt: new Date() },

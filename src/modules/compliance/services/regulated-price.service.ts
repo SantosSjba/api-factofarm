@@ -6,12 +6,14 @@ import {
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 
 @Injectable()
 export class RegulatedPriceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async list(search?: string) {
@@ -175,6 +177,7 @@ export class RegulatedPriceService {
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Precio regulado no encontrado');
+    await this.integrity.assertCanDeleteRegulatedPrice(id);
     await this.prisma.regulatedDrugPrice.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },

@@ -3,6 +3,7 @@ import { Prisma, ProductPriceChangeSource } from '../../generated/prisma/client'
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -103,6 +104,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly priceHistory: ProductPriceHistoryService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   private requireTenant(actor?: JwtRequestUser): string {
@@ -910,17 +912,10 @@ export class ProductsService {
         }
       }
 
-      if (dto.warehouseStocks) {
-        await tx.productWarehouseStock.deleteMany({ where: { productId: id } });
-        for (const ws of dto.warehouseStocks) {
-          await tx.productWarehouseStock.create({
-            data: {
-              productId: id,
-              warehouseId: ws.warehouseId,
-              cantidad: new Prisma.Decimal(ws.cantidad),
-            },
-          });
-        }
+      if (dto.warehouseStocks !== undefined) {
+        throw new BadRequestException(
+          'El stock no se puede modificar desde el producto; use ingresos, ajustes o transferencias de inventario.',
+        );
       }
 
       if (dto.presentations) {
@@ -1007,6 +1002,7 @@ export class ProductsService {
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Producto no encontrado');
+    await this.integrity.assertCanDeleteProduct(id);
     await this.prisma.product.update({
       where: { id },
       data: { deletedAt: new Date(), habilitado: false },
@@ -1142,15 +1138,7 @@ export class ProductsService {
         });
       }
 
-      for (const ws of source.warehouseStocks) {
-        await tx.productWarehouseStock.create({
-          data: {
-            productId: created.id,
-            warehouseId: ws.warehouseId,
-            cantidad: ws.cantidad,
-          },
-        });
-      }
+      // No copiar stock: el inventario debe ingresarse por movimientos/kardex.
 
       for (const pr of source.presentations) {
         await tx.productPresentation.create({
@@ -1602,20 +1590,32 @@ export class ProductsService {
               select: { id: true },
             });
 
-        await this.prisma.productWarehouseStock.upsert({
-          where: {
-            productId_warehouseId: {
+        // Stock solo en alta inicial. En actualización no se sobrescribe (kardex).
+        if (!current) {
+          await this.prisma.productWarehouseStock.create({
+            data: {
               productId: product.id,
               warehouseId: defaultWarehouse.id,
+              cantidad: new Prisma.Decimal(stock),
             },
-          },
-          update: { cantidad: new Prisma.Decimal(stock) },
-          create: {
-            productId: product.id,
-            warehouseId: defaultWarehouse.id,
-            cantidad: new Prisma.Decimal(stock),
-          },
-        });
+          });
+        } else if (stock > 0) {
+          const existingStock = await this.prisma.productWarehouseStock.findUnique({
+            where: {
+              productId_warehouseId: {
+                productId: product.id,
+                warehouseId: defaultWarehouse.id,
+              },
+            },
+            select: { cantidad: true },
+          });
+          const currentQty = existingStock ? Number(existingStock.cantidad) : 0;
+          if (currentQty !== stock) {
+            errors.push(
+              `Fila ${displayRow}: stock ignorado (producto existente). Use ingresos o ajustes de inventario.`,
+            );
+          }
+        }
 
         await this.priceHistory.recordImportPrices(
           product.id,

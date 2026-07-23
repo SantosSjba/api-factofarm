@@ -5,6 +5,7 @@ import {
   paginationArgs,
 } from '../../../common/dto/pagination.dto';
 import { CacheService } from '../../../common/cache/cache.service';
+import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -112,6 +113,7 @@ export class EstablishmentsService {
     private readonly cache: CacheService,
     private readonly tenants: TenantsService,
     private readonly billing: BillingService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(
@@ -231,6 +233,7 @@ export class EstablishmentsService {
     if (actor) {
       assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
+    await this.integrity.assertCanDeleteEstablishment(id);
     await this.prisma.establishment.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },
@@ -320,6 +323,7 @@ export class EstablishmentsService {
 
   async deleteSeries(establishmentId: string, seriesId: string, actor?: JwtRequestUser) {
     await this.ensureEstablishment(establishmentId, actor);
+    await this.integrity.assertCanDeleteBillingSeries(establishmentId, seriesId);
     const removed = await this.prisma.establishmentSeries.deleteMany({
       where: { id: seriesId, establishmentId },
     });

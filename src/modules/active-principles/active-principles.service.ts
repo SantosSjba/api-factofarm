@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateActivePrincipleDto } from './dto/create-active-principle.dto';
 import { UpdateActivePrincipleDto } from './dto/update-active-principle.dto';
@@ -19,6 +20,7 @@ export class ActivePrinciplesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto) {
@@ -83,6 +85,7 @@ export class ActivePrinciplesService {
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Principio activo no encontrado');
+    await this.integrity.assertCanDeleteActivePrinciple(id);
     await this.prisma.activePrinciple.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'ActivePrinciple', entityId: id });
   }

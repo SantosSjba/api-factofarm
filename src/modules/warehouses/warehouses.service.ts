@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -24,6 +25,7 @@ export class WarehousesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly scope: EstablishmentScopeService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(query: WarehouseListQueryDto, actor: JwtRequestUser) {
@@ -121,6 +123,7 @@ export class WarehousesService {
     });
     if (!current) throw new NotFoundException('Almacén no encontrado');
     this.scope.assertAccess(actor, current.establishmentId);
+    await this.integrity.assertCanDeleteWarehouse(id);
 
     await this.prisma.warehouse.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({

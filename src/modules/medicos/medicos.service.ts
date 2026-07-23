@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateMedicoDto, UpdateMedicoDto } from './dto/medico.dto';
 
@@ -22,6 +23,7 @@ export class MedicosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto) {
@@ -75,6 +77,7 @@ export class MedicosService {
   async remove(id: string, actorId?: string) {
     const current = await this.prisma.medico.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
     if (!current) throw new NotFoundException('Médico no encontrado');
+    await this.integrity.assertCanDeleteMedico(id);
     await this.prisma.medico.update({ where: { id }, data: { deletedAt: new Date(), activo: false } });
     await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'Medico', entityId: id });
   }

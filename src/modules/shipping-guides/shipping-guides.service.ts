@@ -6,6 +6,7 @@ import {
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateDepartureAddressDto,
@@ -24,6 +25,7 @@ export class ShippingGuidesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   listCarriers(establishmentId: string, query?: ShippingListQueryDto) {
@@ -85,6 +87,7 @@ export class ShippingGuidesService {
 
   async removeCarrier(establishmentId: string, id: string, userId: string) {
     await this.ensureCarrier(establishmentId, id);
+    await this.integrity.assertCanDeleteShippingCarrier(id);
     await this.prisma.shippingCarrier.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },

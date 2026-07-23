@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePharmaceuticalFormDto } from './dto/create-pharmaceutical-form.dto';
 import { UpdatePharmaceuticalFormDto } from './dto/update-pharmaceutical-form.dto';
@@ -19,6 +20,7 @@ export class PharmaceuticalFormsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto) {
@@ -83,6 +85,7 @@ export class PharmaceuticalFormsService {
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Forma farmacéutica no encontrada');
+    await this.integrity.assertCanDeletePharmaceuticalForm(id);
     await this.prisma.pharmaceuticalForm.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'PharmaceuticalForm', entityId: id });
   }

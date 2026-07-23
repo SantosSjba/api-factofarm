@@ -9,6 +9,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
 import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
@@ -34,6 +35,7 @@ export class UsersService {
     @Inject(USER_REPOSITORY) private readonly users: IUserRepository,
     private readonly audit: AuditLogService,
     private readonly tenants: TenantsService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async create(dto: CreateUserDto, actor?: JwtRequestUser): Promise<UserSnapshot> {
@@ -212,6 +214,7 @@ export class UsersService {
     if (actor) {
       this.assertUserTenantAccess(current, actor);
     }
+    await this.integrity.assertCanDeleteUser(id, actor?.sub);
     await this.users.delete(id);
     await this.audit.log({
       userId: actor?.sub,

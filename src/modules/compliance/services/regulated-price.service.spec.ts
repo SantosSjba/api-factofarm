@@ -14,7 +14,10 @@ describe('RegulatedPriceService', () => {
     establishment: { findFirst: jest.fn() },
     product: { findMany: jest.fn() },
   };
-  const service = new RegulatedPriceService(prisma as never, audit as never);
+  const integrity = {
+    assertCanDeleteRegulatedPrice: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new RegulatedPriceService(prisma as never, audit as never, integrity as never);
 
   beforeEach(() => jest.clearAllMocks());
 

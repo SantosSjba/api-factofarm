@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, PromotionType } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreatePromotionDto,
@@ -14,6 +15,7 @@ export class PromotionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(establishmentId: string, query: PromotionListQueryDto) {
@@ -153,6 +155,7 @@ export class PromotionsService {
 
   async remove(id: string, establishmentId: string, actorId?: string) {
     await this.ensure(id, establishmentId);
+    await this.integrity.assertCanDeletePromotion(id);
     await this.prisma.promotion.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },

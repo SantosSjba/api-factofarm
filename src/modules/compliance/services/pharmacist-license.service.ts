@@ -6,6 +6,7 @@ import {
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 import { canApproveControlledDispense } from '../../../common/permissions/role-policy.util';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
@@ -15,6 +16,7 @@ export class PharmacistLicenseService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly crypto: SensitiveHealthCryptoService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async list(includeInactive = false) {
@@ -101,6 +103,7 @@ export class PharmacistLicenseService {
 
   async remove(id: string, actorId?: string) {
     await this.ensure(id);
+    await this.integrity.assertCanDeletePharmacistLicense(id);
     await this.prisma.pharmacistLicense.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },

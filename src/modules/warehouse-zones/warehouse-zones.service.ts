@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -13,6 +14,7 @@ export class WarehouseZonesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly scope: EstablishmentScopeService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findByWarehouse(warehouseId: string, actor: JwtRequestUser) {
@@ -97,6 +99,7 @@ export class WarehouseZonesService {
     });
     if (!current) throw new NotFoundException('Zona de almacén no encontrada');
     await this.scope.assertWarehouseInTenant(actor, current.warehouseId);
+    await this.integrity.assertCanDeleteWarehouseZone(id);
 
     await this.prisma.warehouseZone.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({

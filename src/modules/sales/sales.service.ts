@@ -48,7 +48,9 @@ import {
 } from './dto/create-sale.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalePdfService } from './services/sale-pdf.service';
+import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
 import { readFile } from 'fs/promises';
+import { SunatDocumentStatus } from '../../generated/prisma/client';
 
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
   BOLETA: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
@@ -142,15 +144,25 @@ export class SalesService {
           electronicDocument: {
             select: { sunatStatus: true, id: true, deletedAt: true },
           },
+          _count: { select: { returns: true } },
         },
       }),
     ]);
 
     return buildPaginatedResult(
       rows.map((row) => {
-        const { electronicDocument, ...rest } = row;
+        const { electronicDocument, _count, ...rest } = row;
         const cpe =
           electronicDocument && !electronicDocument.deletedAt ? electronicDocument : null;
+        const flags = resolveSaleActionFlags({
+          documentType: rest.documentType,
+          estado: rest.estado,
+          archivedAt: rest.archivedAt,
+          hasReturns: _count.returns > 0,
+          hasActiveCpe: !!cpe,
+          sunatStatus: cpe?.sunatStatus ?? null,
+          hasRemainingQty: rest.estado !== SaleStatus.ANULADA,
+        });
         return {
           ...rest,
           storage: (row.archivedAt ? 'archived' : 'hot') as 'archived' | 'hot',
@@ -160,15 +172,14 @@ export class SalesService {
           total: rest.total.toString(),
           sunatStatus: cpe?.sunatStatus ?? null,
           electronicDocumentId: cpe?.id ?? null,
-          canEmitCpe:
-            (rest.documentType === SaleDocumentType.BOLETA ||
-              rest.documentType === SaleDocumentType.FACTURA) &&
-            !cpe,
-          canConvertToCpe:
-            (rest.documentType === SaleDocumentType.NOTA_VENTA ||
-              rest.documentType === SaleDocumentType.TICKET) &&
-            !cpe &&
-            rest.estado === SaleStatus.COMPLETADA,
+          canEmitCpe: flags.canEmitCpe,
+          canConvertToCpe: flags.canConvertToCpe,
+          canReturn: flags.canReturn,
+          canDebit: flags.canDebit,
+          emitBlockedReason: flags.emitBlockedReason,
+          convertBlockedReason: flags.convertBlockedReason,
+          returnBlockedReason: flags.returnBlockedReason,
+          debitBlockedReason: flags.debitBlockedReason,
         };
       }),
       total,
@@ -222,13 +233,64 @@ export class SalesService {
           },
         },
         payments: true,
+        electronicDocument: {
+          select: { id: true, deletedAt: true, sunatStatus: true },
+        },
+        returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
       },
     });
     if (sale) {
+      const previouslyReturned = new Map<string, Prisma.Decimal>();
+      for (const ret of sale.returns) {
+        for (const ri of ret.items) {
+          const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
+          previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
+        }
+      }
+      const hasRemaining = sale.items.some((item) => {
+        const prev = previouslyReturned.get(item.id) ?? new Prisma.Decimal(0);
+        return prev.lessThan(item.cantidad);
+      });
+      const cpe =
+        sale.electronicDocument && !sale.electronicDocument.deletedAt
+          ? sale.electronicDocument
+          : null;
+      const flags = resolveSaleActionFlags({
+        documentType: sale.documentType,
+        estado: sale.estado,
+        archivedAt: sale.archivedAt,
+        hasReturns: sale.returns.length > 0,
+        hasActiveCpe: !!cpe,
+        sunatStatus: cpe?.sunatStatus ?? null,
+        hasRemainingQty: hasRemaining,
+      });
+      const detail = this.mapSaleDetail(sale);
       return {
-        ...this.mapSaleDetail(sale),
+        ...detail,
         storage: sale.archivedAt ? 'archived' : 'hot',
         archivedAt: sale.archivedAt,
+        sunatStatus: cpe?.sunatStatus ?? null,
+        electronicDocumentId: cpe?.id ?? null,
+        canEmitCpe: flags.canEmitCpe,
+        canConvertToCpe: flags.canConvertToCpe,
+        canReturn: flags.canReturn,
+        canDebit: flags.canDebit,
+        emitBlockedReason: flags.emitBlockedReason,
+        convertBlockedReason: flags.convertBlockedReason,
+        returnBlockedReason: flags.returnBlockedReason,
+        debitBlockedReason: flags.debitBlockedReason,
+        items: detail.items.map((item) => {
+          const prev = previouslyReturned.get(item.id) ?? new Prisma.Decimal(0);
+          const remaining = Prisma.Decimal.max(
+            new Prisma.Decimal(item.cantidad).minus(prev),
+            new Prisma.Decimal(0),
+          );
+          return {
+            ...item,
+            cantidadDevuelta: prev.toString(),
+            cantidadRestante: remaining.toString(),
+          };
+        }),
       };
     }
 
@@ -867,11 +929,31 @@ export class SalesService {
     }
     const sale = await this.prisma.sale.findFirst({
       where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
-      include: { items: { include: { lotLines: true } } },
+      include: {
+        items: { include: { lotLines: true } },
+        _count: { select: { returns: true } },
+        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+      },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    if (sale.estado !== SaleStatus.COMPLETADA) {
-      throw new BadRequestException('Solo se pueden anular ventas completadas');
+    const cpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const flags = resolveSaleActionFlags({
+      documentType: sale.documentType,
+      estado: sale.estado,
+      archivedAt: sale.archivedAt,
+      hasReturns: sale._count.returns > 0,
+      hasActiveCpe: !!cpe,
+      sunatStatus: cpe?.sunatStatus ?? null,
+    });
+    if (!flags.canVoid) {
+      throw new BadRequestException(
+        sale._count.returns > 0
+          ? 'No se puede anular: la venta ya tiene devoluciones. Gestione con notas de crédito.'
+          : 'Solo se pueden anular ventas completadas sin devoluciones',
+      );
     }
     if (sale.sellerId === actor.sub) {
       throw new ForbiddenException('Otro usuario debe autorizar la anulación');
@@ -1095,24 +1177,70 @@ export class SalesService {
   ) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
-      include: { items: true },
+      include: {
+        items: true,
+        electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
+        returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
+      },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    if (sale.estado === SaleStatus.ANULADA) {
-      throw new BadRequestException('No se puede devolver una venta anulada');
+
+    const cpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const previouslyReturned = new Map<string, Prisma.Decimal>();
+    for (const ret of sale.returns) {
+      for (const ri of ret.items) {
+        const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
+        previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
+      }
+    }
+    const hasRemaining = sale.items.some((item) => {
+      const prev = previouslyReturned.get(item.id) ?? new Prisma.Decimal(0);
+      return prev.lessThan(item.cantidad);
+    });
+
+    const flags = resolveSaleActionFlags({
+      documentType: sale.documentType,
+      estado: sale.estado,
+      archivedAt: sale.archivedAt,
+      hasReturns: sale.returns.length > 0,
+      hasActiveCpe: !!cpe,
+      sunatStatus: cpe?.sunatStatus ?? null,
+      hasRemainingQty: hasRemaining,
+    });
+    if (!flags.canReturn) {
+      throw new BadRequestException(flags.returnBlockedReason ?? 'No se puede devolver esta venta');
+    }
+
+    if (!dto.items?.length) {
+      throw new BadRequestException('Indique al menos un ítem a devolver');
     }
 
     let totalDevuelto = new Prisma.Decimal(0);
+    const remainingByItem = new Map<string, Prisma.Decimal>();
+    for (const item of sale.items) {
+      const prev = previouslyReturned.get(item.id) ?? new Prisma.Decimal(0);
+      remainingByItem.set(
+        item.id,
+        Prisma.Decimal.max(item.cantidad.minus(prev), new Prisma.Decimal(0)),
+      );
+    }
+
     for (const line of dto.items) {
       const item = sale.items.find((row) => row.id === line.saleItemId);
       if (!item) throw new BadRequestException('Ítem de venta no válido');
       const qty = new Prisma.Decimal(line.quantity);
-      if (qty.greaterThan(item.cantidad)) {
-        throw new BadRequestException('Cantidad devuelta supera la vendida');
+      if (qty.lte(0)) throw new BadRequestException('La cantidad a devolver debe ser mayor a cero');
+      const remaining = remainingByItem.get(item.id) ?? new Prisma.Decimal(0);
+      if (qty.greaterThan(remaining)) {
+        throw new BadRequestException(
+          `Cantidad a devolver supera el saldo del ítem (disponible: ${remaining.toString()})`,
+        );
       }
-      totalDevuelto = totalDevuelto.plus(
-        item.totalLinea.times(qty).div(item.cantidad),
-      );
+      remainingByItem.set(item.id, remaining.minus(qty));
+      totalDevuelto = totalDevuelto.plus(item.totalLinea.times(qty).div(item.cantidad));
       await this.inventory.executeAdjustmentDelta({
         productId: item.productId,
         warehouseId: sale.warehouseId,
@@ -1140,10 +1268,8 @@ export class SalesService {
     });
 
     const allItemsFullyReturned = sale.items.every((item) => {
-      const returnedQty = dto.items
-        .filter((line) => line.saleItemId === item.id)
-        .reduce((acc, line) => acc.plus(new Prisma.Decimal(line.quantity)), new Prisma.Decimal(0));
-      return returnedQty.greaterThanOrEqualTo(item.cantidad);
+      const left = remainingByItem.get(item.id) ?? new Prisma.Decimal(0);
+      return left.lte(0);
     });
     await this.prisma.sale.update({
       where: { id: saleId },
@@ -1170,7 +1296,9 @@ export class SalesService {
 
     return {
       ok: true,
-      message: 'Devolución registrada',
+      message: allItemsFullyReturned
+        ? 'Devolución total registrada. Ya no se puede emitir a SUNAT.'
+        : 'Devolución parcial registrada. Emisión SUNAT bloqueada; use NC si el CPE ya estaba aceptado.',
       saleReturnId: saleReturn.id,
       totalDevuelto: totalDevuelto.toString(),
       electronicDocumentId,
@@ -1184,17 +1312,26 @@ export class SalesService {
   ) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
-      include: { electronicDocument: { select: { id: true, sunatStatus: true } } },
+      include: {
+        electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
+        _count: { select: { returns: true } },
+      },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    if (sale.estado === SaleStatus.ANULADA) {
-      throw new BadRequestException('No se puede emitir ND sobre una venta anulada');
-    }
-    if (sale.documentType !== SaleDocumentType.BOLETA && sale.documentType !== SaleDocumentType.FACTURA) {
-      throw new BadRequestException('La nota de débito solo aplica a boletas o facturas');
-    }
-    if (!sale.electronicDocument) {
-      throw new BadRequestException('La venta no tiene comprobante electrónico asociado');
+    const cpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const flags = resolveSaleActionFlags({
+      documentType: sale.documentType,
+      estado: sale.estado,
+      archivedAt: sale.archivedAt,
+      hasReturns: sale._count.returns > 0,
+      hasActiveCpe: !!cpe,
+      sunatStatus: cpe?.sunatStatus ?? null,
+    });
+    if (!flags.canDebit) {
+      throw new BadRequestException(flags.debitBlockedReason ?? 'No se puede emitir ND');
     }
 
     const electronicDocumentId = await this.billing.scheduleDebitNoteFromSale(saleId, {
@@ -1210,7 +1347,7 @@ export class SalesService {
 
     return {
       ok: true,
-      message: 'Nota de débito en proceso de emisión',
+      message: 'Nota de débito en cola de emisión',
       electronicDocumentId,
     };
   }
@@ -1625,23 +1762,27 @@ export class SalesService {
       where: { id: saleId, establishmentId, deletedAt: null },
       include: {
         customer: { select: { tipoDocumento: true, numeroDocumento: true } },
-        electronicDocument: { select: { id: true, deletedAt: true } },
+        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+        _count: { select: { returns: true } },
       },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
-    if (sale.estado !== SaleStatus.COMPLETADA) {
-      throw new BadRequestException('Solo se migran ventas completadas');
-    }
-    if (
-      sale.documentType !== SaleDocumentType.NOTA_VENTA &&
-      sale.documentType !== SaleDocumentType.TICKET
-    ) {
+    const cpe =
+      sale.electronicDocument && !sale.electronicDocument.deletedAt
+        ? sale.electronicDocument
+        : null;
+    const flags = resolveSaleActionFlags({
+      documentType: sale.documentType,
+      estado: sale.estado,
+      archivedAt: sale.archivedAt,
+      hasReturns: sale._count.returns > 0,
+      hasActiveCpe: !!cpe,
+      sunatStatus: cpe?.sunatStatus ?? null,
+    });
+    if (!flags.canConvertToCpe) {
       throw new BadRequestException(
-        'Solo notas de venta (o tickets) se pueden migrar a boleta/factura',
+        flags.convertBlockedReason ?? 'No se puede migrar esta venta a boleta/factura',
       );
-    }
-    if (sale.electronicDocument && !sale.electronicDocument.deletedAt) {
-      throw new BadRequestException('La venta ya tiene un comprobante electrónico');
     }
     if (nextType === SaleDocumentType.FACTURA) {
       if (!sale.customer || sale.customer.tipoDocumento !== 'RUC') {

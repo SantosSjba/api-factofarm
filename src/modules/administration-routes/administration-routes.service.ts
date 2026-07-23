@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAdministrationRouteDto } from './dto/create-administration-route.dto';
 import { UpdateAdministrationRouteDto } from './dto/update-administration-route.dto';
@@ -19,6 +20,7 @@ export class AdministrationRoutesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(filters?: MaestroListQueryDto) {
@@ -83,6 +85,7 @@ export class AdministrationRoutesService {
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Vía de administración no encontrada');
+    await this.integrity.assertCanDeleteAdministrationRoute(id);
     await this.prisma.administrationRoute.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'AdministrationRoute', entityId: id });
   }

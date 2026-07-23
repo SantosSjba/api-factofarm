@@ -12,7 +12,15 @@ describe('PharmacistLicenseService', () => {
   };
   const audit = { log: jest.fn() };
   const crypto = { encrypt: jest.fn(), decrypt: jest.fn() };
-  const service = new PharmacistLicenseService(prisma as never, audit as never, crypto as never);
+  const integrity = {
+    assertCanDeletePharmacistLicense: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new PharmacistLicenseService(
+    prisma as never,
+    audit as never,
+    crypto as never,
+    integrity as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 

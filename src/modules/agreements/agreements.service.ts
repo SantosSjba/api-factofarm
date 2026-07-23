@@ -9,6 +9,7 @@ import {
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AgreementListQueryDto,
@@ -24,6 +25,7 @@ export class AgreementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async findAll(establishmentId: string, query: AgreementListQueryDto) {
@@ -166,6 +168,7 @@ export class AgreementsService {
 
   async remove(id: string, establishmentId: string, userId: string) {
     await this.ensureExists(id, establishmentId);
+    await this.integrity.assertCanDeleteAgreement(id);
     await this.prisma.agreement.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },

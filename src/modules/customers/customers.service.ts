@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerDocumentType, Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -79,6 +80,7 @@ export class CustomersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly lpdp: LpdpService,
+    private readonly integrity: EntityIntegrityService,
   ) {}
 
   async list(query: CustomerListQueryDto, actor?: JwtRequestUser) {
@@ -197,6 +199,7 @@ export class CustomersService {
 
   async remove(id: string, actor?: JwtRequestUser) {
     await this.ensureCustomer(id, actor);
+    await this.integrity.assertCanDeleteCustomer(id);
     await this.prisma.customer.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false, habilitado: false },
