@@ -35,7 +35,7 @@ export class PrescriptionsController {
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.findByCustomer(customerId, await this.scope.resolve(actor));
+    return this.service.findByCustomer(customerId, await this.scope.resolve(actor), actor);
   }
 
   @Get(':id')
@@ -47,7 +47,7 @@ export class PrescriptionsController {
   @Post()
   @RequirePermissions('prescriptions.write', 'nav.recetas')
   async create(@Body() dto: CreatePrescriptionDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.create(await this.scope.resolve(actor), dto, actor);
   }
 
   @Post(':id/dispense')
@@ -68,6 +68,6 @@ export class PrescriptionsController {
     @Body() dto: AttachPrescriptionImageDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.attachImage(id, await this.scope.resolve(actor), dto.imagenArchivoId, actor.sub);
+    return this.service.attachImage(id, await this.scope.resolve(actor), dto.imagenArchivoId, actor);
   }
 }

@@ -57,7 +57,7 @@ export class HospitalController {
     @Body() dto: CreateHospitalConsumptionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createConsumption(await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.createConsumption(await this.scope.resolve(actor), dto, actor);
   }
 
   @Patch('consumptions/:id/dispense')

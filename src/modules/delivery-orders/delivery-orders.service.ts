@@ -15,8 +15,10 @@ import {
   formatDateYmdInTimeZone,
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { SalesService } from '../sales/sales.service';
 import { DeliveryNotificationService } from './delivery-notification.service';
 import {
@@ -43,6 +45,7 @@ export class DeliveryOrdersService {
     private readonly audit: AuditLogService,
     private readonly notifications: DeliveryNotificationService,
     private readonly sales: SalesService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async findAll(establishmentId: string, query: DeliveryOrderListQueryDto) {
@@ -118,17 +121,38 @@ export class DeliveryOrdersService {
     createdById: string,
     dto: CreateDeliveryOrderDto,
     canalOverride?: DeliveryChannel,
+    actor?: JwtRequestUser,
   ) {
+    if (actor) {
+      await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    }
     await this.validateWarehouse(dto.warehouseId, establishmentId);
+
     if (dto.customerId) {
-      const customer = await this.prisma.customer.findFirst({
-        where: { id: dto.customerId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!customer) throw new NotFoundException('Cliente no encontrado');
+      if (actor) {
+        await this.scope.assertCustomerInTenant(actor, dto.customerId);
+      } else {
+        const establishment = await this.prisma.establishment.findFirst({
+          where: { id: establishmentId, deletedAt: null },
+          select: { tenantId: true },
+        });
+        const customer = await this.prisma.customer.findFirst({
+          where: {
+            id: dto.customerId,
+            deletedAt: null,
+            ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
+          },
+          select: { id: true },
+        });
+        if (!customer) throw new NotFoundException('Cliente no encontrado');
+      }
     }
 
-    const { subtotal, igvTotal, total, itemRows } = await this.buildItems(dto.items);
+    const { subtotal, igvTotal, total, itemRows } = await this.buildItems(
+      dto.items,
+      actor,
+      establishmentId,
+    );
     const costoDelivery = new Prisma.Decimal(dto.costoDelivery ?? 0);
     const numero = await this.nextNumber(establishmentId);
 
@@ -362,6 +386,8 @@ export class DeliveryOrdersService {
 
   private async buildItems(
     items: CreateDeliveryOrderDto['items'],
+    actor?: JwtRequestUser,
+    establishmentId?: string,
   ): Promise<{
     subtotal: Prisma.Decimal;
     igvTotal: Prisma.Decimal;
@@ -373,9 +399,25 @@ export class DeliveryOrdersService {
     let total = new Prisma.Decimal(0);
     const itemRows: Prisma.DeliveryOrderItemCreateWithoutDeliveryOrderInput[] = [];
 
+    let tenantId: string | null = null;
+    if (!actor && establishmentId) {
+      const establishment = await this.prisma.establishment.findFirst({
+        where: { id: establishmentId, deletedAt: null },
+        select: { tenantId: true },
+      });
+      tenantId = establishment?.tenantId ?? null;
+    }
+
     for (const line of items) {
+      if (actor) {
+        await this.scope.assertProductInTenant(actor, line.productId);
+      }
       const product = await this.prisma.product.findFirst({
-        where: { id: line.productId, deletedAt: null },
+        where: {
+          id: line.productId,
+          deletedAt: null,
+          ...(tenantId ? { tenantId } : {}),
+        },
         select: {
           precioUnitarioVenta: true,
           incluyeIgvVenta: true,

@@ -138,9 +138,17 @@ export class InventoryMovementsService {
     };
   }
 
-  listWarehouses() {
+  async listWarehouses(actor: JwtRequestUser) {
+    const establishmentIds = await this.scope.establishmentIdsForActor(actor);
     return this.prisma.warehouse.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(establishmentIds
+          ? { establishmentId: { in: establishmentIds } }
+          : actor.tenantId
+            ? { establishment: { tenantId: actor.tenantId, deletedAt: null } }
+            : {}),
+      },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,
@@ -174,7 +182,9 @@ export class InventoryMovementsService {
     });
   }
 
-  async searchLotCodes(query: LotCodeSearchQueryDto) {
+  async searchLotCodes(query: LotCodeSearchQueryDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, query.warehouseId);
+    await this.scope.assertProductInTenant(actor, query.productId);
     const mode = query.mode ?? 'INBOUND';
     const search = query.search?.trim();
     const rows = await this.prisma.productLotStock.findMany({
@@ -509,7 +519,11 @@ export class InventoryMovementsService {
     };
   }
 
-  async createAdjustment(dto: CreateAdjustmentDto, actorId: string) {
+  async createAdjustment(dto: CreateAdjustmentDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    await this.scope.assertProductInTenant(actor, dto.productId);
+    const actorId = actor.sub;
+
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
       select: {
@@ -601,11 +615,20 @@ export class InventoryMovementsService {
     });
   }
 
-  async approveAdjustment(id: string, actorId: string) {
+  async approveAdjustment(id: string, actor: JwtRequestUser) {
+    const actorId = actor.sub;
     const pending = await this.prisma.inventoryPendingAdjustment.findFirst({
-      where: { id, deletedAt: null, estado: InventoryPendingAdjustmentStatus.PENDIENTE },
+      where: {
+        id,
+        deletedAt: null,
+        estado: InventoryPendingAdjustmentStatus.PENDIENTE,
+        ...(actor.tenantId
+          ? { warehouse: { establishment: { tenantId: actor.tenantId } } }
+          : {}),
+      },
     });
     if (!pending) throw new NotFoundException('Ajuste pendiente no encontrado');
+    await this.scope.assertWarehouseInTenant(actor, pending.warehouseId);
     if (pending.requestedById === actorId) {
       throw new ForbiddenException('Otro usuario debe aprobar el ajuste');
     }
@@ -638,12 +661,21 @@ export class InventoryMovementsService {
     return { ok: true, message: 'Ajuste aprobado y aplicado' };
   }
 
-  async rejectAdjustment(id: string, actorId: string) {
+  async rejectAdjustment(id: string, actor: JwtRequestUser) {
+    const actorId = actor.sub;
     const pending = await this.prisma.inventoryPendingAdjustment.findFirst({
-      where: { id, deletedAt: null, estado: InventoryPendingAdjustmentStatus.PENDIENTE },
-      select: { id: true, requestedById: true },
+      where: {
+        id,
+        deletedAt: null,
+        estado: InventoryPendingAdjustmentStatus.PENDIENTE,
+        ...(actor.tenantId
+          ? { warehouse: { establishment: { tenantId: actor.tenantId } } }
+          : {}),
+      },
+      select: { id: true, requestedById: true, warehouseId: true },
     });
     if (!pending) throw new NotFoundException('Ajuste pendiente no encontrado');
+    await this.scope.assertWarehouseInTenant(actor, pending.warehouseId);
     if (pending.requestedById === actorId) {
       throw new ForbiddenException('Otro usuario debe rechazar el ajuste');
     }
@@ -857,7 +889,11 @@ export class InventoryMovementsService {
     await this.prisma.$transaction(run);
   }
 
-  async createInboundMovement(dto: CreateInboundMovementDto, actorId?: string) {
+  async createInboundMovement(dto: CreateInboundMovementDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    await this.scope.assertProductInTenant(actor, dto.productId);
+    const actorId = actor.sub;
+
     const [product, warehouse, transferReason] = await Promise.all([
       this.prisma.product.findFirst({
         where: { id: dto.productId, deletedAt: null },
@@ -983,7 +1019,13 @@ export class InventoryMovementsService {
     };
   }
 
-  async listSaleAvailableLots(productId: string, warehouseId: string) {
+  async listSaleAvailableLots(
+    productId: string,
+    warehouseId: string,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, warehouseId);
+    await this.scope.assertProductInTenant(actor, productId);
     const policy = await this.lotAllocation.getPolicyFromWarehouse(warehouseId);
     const lots = await this.lotAllocation.listEligibleLots(productId, warehouseId, policy);
     return {
@@ -999,7 +1041,12 @@ export class InventoryMovementsService {
     };
   }
 
-  async previewSaleLotAllocation(dto: SaleLotAllocationPreviewDto) {
+  async previewSaleLotAllocation(
+    dto: SaleLotAllocationPreviewDto,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    await this.scope.assertProductInTenant(actor, dto.productId);
     const { policy, lines } = await this.resolveSaleLotAllocation(dto);
     const eligible = await this.lotAllocation.listEligibleLots(
       dto.productId,
@@ -1025,7 +1072,12 @@ export class InventoryMovementsService {
     dto: DispatchSaleStockDto,
     actorId: string,
     tx?: Prisma.TransactionClient,
+    actor?: JwtRequestUser,
   ) {
+    if (actor) {
+      await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+      await this.scope.assertProductInTenant(actor, dto.productId);
+    }
     const previewDto: SaleLotAllocationPreviewDto = {
       productId: dto.productId,
       warehouseId: dto.warehouseId,
@@ -1078,7 +1130,11 @@ export class InventoryMovementsService {
     };
   }
 
-  async createOutboundMovement(dto: CreateOutboundMovementDto, actorId?: string) {
+  async createOutboundMovement(dto: CreateOutboundMovementDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    await this.scope.assertProductInTenant(actor, dto.productId);
+    const actorId = actor.sub;
+
     const [product, warehouse, transferReason, currentStock, policy] = await Promise.all([
       this.prisma.product.findFirst({
         where: { id: dto.productId, deletedAt: null },
@@ -1337,7 +1393,12 @@ export class InventoryMovementsService {
     await this.prisma.$transaction(run);
   }
 
-  async importLots(dto: ImportInventoryFileDto, file: Express.Multer.File) {
+  async importLots(
+    dto: ImportInventoryFileDto,
+    file: Express.Multer.File,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
       select: { id: true },
@@ -1420,7 +1481,12 @@ export class InventoryMovementsService {
     return { totalRows: rows.length, created, updated, errors };
   }
 
-  async importSeries(dto: ImportInventoryFileDto, file: Express.Multer.File) {
+  async importSeries(
+    dto: ImportInventoryFileDto,
+    file: Express.Multer.File,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
       select: { id: true },

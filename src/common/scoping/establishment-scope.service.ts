@@ -1,10 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { JwtRequestUser } from '../../modules/auth/domain/auth.types';
-import { isPlatformAdmin } from '../permissions/role-policy.util';
+import { hasChainScope, isPlatformAdmin } from '../permissions/role-policy.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { actorFromJwt, assertTenantAccess } from './tenant-scope.util';
 import {
-  assertEstablishmentAccess,
   establishmentWhere,
   resolveEstablishmentScope,
   type ScopeActor,
@@ -40,8 +39,18 @@ export class EstablishmentScopeService {
     return establishmentWhere(this.toActor(user), field);
   }
 
-  assertAccess(user: JwtRequestUser, resourceEstablishmentId: string): void {
-    assertEstablishmentAccess(this.toActor(user), resourceEstablishmentId, user.tenantId);
+  /**
+   * Valida acceso a un establecimiento: primero tenant, luego sucursal
+   * (admins de cadena / plataforma pueden cruzar sucursales del mismo tenant).
+   */
+  async assertAccess(user: JwtRequestUser, resourceEstablishmentId: string): Promise<void> {
+    await this.assertEstablishmentInTenant(user, resourceEstablishmentId);
+    if (isPlatformAdmin(user.role) || hasChainScope(user.role)) {
+      return;
+    }
+    if (resourceEstablishmentId !== user.establecimientoId) {
+      throw new ForbiddenException('No puede acceder a datos de otra sucursal');
+    }
   }
 
   async assertEstablishmentInTenant(
@@ -121,6 +130,17 @@ export class EstablishmentScopeService {
     });
     if (!row) {
       throw new NotFoundException('Producto no encontrado');
+    }
+    assertTenantAccess(actorFromJwt(user), row.tenantId);
+  }
+
+  async assertSupplierInTenant(user: JwtRequestUser, supplierId: string): Promise<void> {
+    const row = await this.prisma.supplier.findFirst({
+      where: { id: supplierId, deletedAt: null },
+      select: { tenantId: true },
+    });
+    if (!row) {
+      throw new NotFoundException('Proveedor no encontrado');
     }
     assertTenantAccess(actorFromJwt(user), row.tenantId);
   }

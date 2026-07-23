@@ -5,7 +5,10 @@ import { productIscSystemsData } from '../data/product-isc-systems';
 import { taxAffectationTypesData } from '../data/tax-affectation-types';
 import { unitsOfMeasureData } from '../data/units-of-measure';
 
-export async function seedProductCatalogs(prisma: PrismaClient): Promise<void> {
+export async function seedProductCatalogs(
+  prisma: PrismaClient,
+  demoTenantId: string,
+): Promise<void> {
   for (const row of unitsOfMeasureData) {
     await prisma.unitOfMeasure.upsert({
       where: { codigo: row.codigo },
@@ -46,32 +49,15 @@ export async function seedProductCatalogs(prisma: PrismaClient): Promise<void> {
     });
   }
 
+  // Solo sedes del tenant demo: evita crear almacenes/ubicaciones en otros clientes SaaS.
   const establishments = await prisma.establishment.findMany({
-    where: { deletedAt: null },
+    where: { tenantId: demoTenantId, deletedAt: null },
     select: { id: true, codigo: true, nombre: true },
     orderBy: { codigo: 'asc' },
   });
 
   for (const est of establishments) {
-    const warehouseNombre =
-      est.codigo === '0001' || est.nombre.toLowerCase().includes('sucursal')
-        ? 'Almacén - SUCURSAL'
-        : 'Almacén Oficina Principal';
-
-    await prisma.warehouse.upsert({
-      where: {
-        establishmentId_nombre: {
-          establishmentId: est.id,
-          nombre: warehouseNombre,
-        },
-      },
-      update: { deletedAt: null },
-      create: {
-        establishmentId: est.id,
-        nombre: warehouseNombre,
-      },
-    });
-
+    // Ubicación de producto por sede (sin almacén duplicado: "Almacén principal" ya lo crea establishments seed).
     await prisma.productLocation.upsert({
       where: {
         establishmentId_nombre: {

@@ -85,15 +85,18 @@ export class ComplianceController {
   @Get('lpdp/retention-candidates')
   @RequirePermissions('compliance.read', 'nav.lpdp')
   @ApiOperation({ summary: 'Clientes candidatos a retención/eliminación programada' })
-  retentionCandidates() {
-    return this.lpdp.listRetentionCandidates();
+  retentionCandidates(@CurrentUser() actor: JwtRequestUser) {
+    return this.lpdp.listRetentionCandidates(actor);
   }
 
   @Get('lpdp/arco')
   @RequirePermissions('compliance.read', 'nav.lpdp')
   @ApiOperation({ summary: 'Listar solicitudes ARCO' })
-  listArco(@Query('status') status?: ArcoRequestStatus) {
-    return this.lpdp.listArcoRequests(status);
+  listArco(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('status') status?: ArcoRequestStatus,
+  ) {
+    return this.lpdp.listArcoRequests(status, actor);
   }
 
   @Post('lpdp/arco')
@@ -116,14 +119,17 @@ export class ComplianceController {
     @Body() dto: ProcessArcoRequestDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.lpdp.processArcoRequest(id, dto.status, dto.responseNotes, actor.sub);
+    return this.lpdp.processArcoRequest(id, dto.status, dto.responseNotes, actor);
   }
 
   @Get('lpdp/customers/:customerId/export')
   @RequirePermissions('compliance.read', 'customers.read', 'nav.lpdp')
   @ApiOperation({ summary: 'Exportar datos del cliente (derecho de acceso ARCO)' })
-  exportCustomer(@Param('customerId', ParseUUIDPipe) customerId: string) {
-    return this.lpdp.exportCustomerData(customerId);
+  exportCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.lpdp.exportCustomerData(customerId, actor);
   }
 
   @Get('pharmacist-licenses')

@@ -32,7 +32,7 @@ export class QuotationsController {
   @RequirePermissions('sales.write', 'nav.cotizaciones')
   @ApiOperation({ summary: 'Crear cotización' })
   async create(@Body() dto: CreateQuotationDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(await this.scope.resolve(actor), actor.sub, dto);
+    return this.service.create(await this.scope.resolve(actor), actor.sub, dto, actor);
   }
 
   @Post(':id/send')

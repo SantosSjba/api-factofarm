@@ -8,8 +8,10 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
@@ -25,6 +27,7 @@ export class HospitalService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly inventory: InventoryMovementsService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async listAreas(establishmentId: string, query: HospitalAreaListQueryDto) {
@@ -141,10 +144,11 @@ export class HospitalService {
   async createConsumption(
     establishmentId: string,
     dto: CreateHospitalConsumptionDto,
-    userId: string,
+    actor: JwtRequestUser,
   ) {
     if (!dto.items?.length) throw new BadRequestException('Debe incluir al menos un producto');
 
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, establishmentId, deletedAt: null },
       select: { id: true },
@@ -157,12 +161,16 @@ export class HospitalService {
     });
     if (!area) throw new NotFoundException('Área hospitalaria no válida');
 
+    for (const item of dto.items) {
+      await this.scope.assertProductInTenant(actor, item.productId);
+    }
+
     const row = await this.prisma.hospitalInternalConsumption.create({
       data: {
         establishmentId,
         warehouseId: dto.warehouseId,
         hospitalAreaId: dto.hospitalAreaId,
-        solicitadoPorId: userId,
+        solicitadoPorId: actor.sub,
         motivo: dto.motivo?.trim() || null,
         comentario: dto.comentario?.trim() || null,
         items: {
@@ -177,7 +185,7 @@ export class HospitalService {
     });
 
     await this.audit.log({
-      userId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'HospitalInternalConsumption',
       entityId: row.id,

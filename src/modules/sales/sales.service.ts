@@ -20,11 +20,13 @@ import {
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { canVoidSaleDirectly } from '../../common/permissions/role-policy.util';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import {
   applySaleLevelDiscount,
   computeSaleLineTotals,
 } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
 import { InventoryLotAllocationService } from '../inventory-movements/inventory-lot-allocation.service';
 import { BillingService } from '../billing/billing.service';
@@ -80,6 +82,7 @@ export class SalesService {
     private readonly promotions: PromotionsService,
     private readonly salePdf: SalePdfService,
     private readonly fileStorage: LocalDiskFileStorage,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async findAll(establishmentId: string, query: SaleListQueryDto) {
@@ -530,7 +533,7 @@ export class SalesService {
 
   async create(
     dto: CreateSaleDto,
-    actor: { sub: string; establecimientoId: string },
+    actor: JwtRequestUser | { sub: string; establecimientoId: string },
     idempotencyKey?: string,
   ) {
     if (idempotencyKey?.trim()) {
@@ -544,6 +547,29 @@ export class SalesService {
     }
 
     await this.assertDocumentTypeAllowed(actor.establecimientoId, dto.documentType);
+
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: actor.establecimientoId, deletedAt: null },
+      select: { id: true, tenantId: true },
+    });
+    if (!establishment) throw new NotFoundException('Establecimiento no encontrado');
+
+    const scopedActor = this.asScopedActor(actor);
+    if (dto.customerId) {
+      if (scopedActor) {
+        await this.scope.assertCustomerInTenant(scopedActor, dto.customerId);
+      } else {
+        const customer = await this.prisma.customer.findFirst({
+          where: {
+            id: dto.customerId,
+            deletedAt: null,
+            tenantId: establishment.tenantId,
+          },
+          select: { id: true },
+        });
+        if (!customer) throw new NotFoundException('Cliente no encontrado');
+      }
+    }
 
     const warehouse = await this.prisma.warehouse.findFirst({
       where: {
@@ -577,6 +603,8 @@ export class SalesService {
       dto,
       actor.establecimientoId,
       resolvedAgreement?.id,
+      establishment.tenantId,
+      scopedActor,
     );
     await this.regulatedPrices.checkSalePrices(
       actor.establecimientoId,
@@ -1680,10 +1708,21 @@ export class SalesService {
     );
   }
 
+  private asScopedActor(
+    actor: JwtRequestUser | { sub: string; establecimientoId: string },
+  ): JwtRequestUser | undefined {
+    if ('role' in actor && 'tenantId' in actor && 'permissionCodes' in actor) {
+      return actor as JwtRequestUser;
+    }
+    return undefined;
+  }
+
   private async buildPricedItems(
     dto: CreateSaleDto,
-    establishmentId: string,
+    _establishmentId: string,
     agreementId?: string,
+    tenantId?: string | null,
+    actor?: JwtRequestUser,
   ) {
     const items: Array<{
       productId: string;
@@ -1701,8 +1740,16 @@ export class SalesService {
     }> = [];
 
     for (const line of dto.items) {
+      if (actor) {
+        await this.scope.assertProductInTenant(actor, line.productId);
+      }
       const product = await this.prisma.product.findFirst({
-        where: { id: line.productId, deletedAt: null, habilitado: true },
+        where: {
+          id: line.productId,
+          deletedAt: null,
+          habilitado: true,
+          ...(tenantId ? { tenantId } : {}),
+        },
         select: {
           id: true,
           precioUnitarioVenta: true,

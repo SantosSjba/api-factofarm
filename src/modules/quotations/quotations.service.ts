@@ -1,13 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, QuotationStatus } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateQuotationDto, QuotationListQueryDto } from './dto/quotation.dto';
 
 @Injectable()
 export class QuotationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   private async ensure(id: string, establishmentId: string) {
     const row = await this.prisma.quotation.findFirst({
@@ -76,13 +81,25 @@ export class QuotationsService {
     };
   }
 
-  async create(establishmentId: string, sellerId: string, dto: CreateQuotationDto) {
+  async create(establishmentId: string, sellerId: string, dto: CreateQuotationDto, actor: JwtRequestUser) {
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: dto.warehouseId, establishmentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!warehouse) throw new NotFoundException('Almacén no válido');
+
+    if (dto.customerId) {
+      await this.scope.assertCustomerInTenant(actor, dto.customerId);
+    }
+
     let subtotal = new Prisma.Decimal(0);
     let igvTotal = new Prisma.Decimal(0);
     let total = new Prisma.Decimal(0);
     const itemRows: Prisma.QuotationItemCreateWithoutQuotationInput[] = [];
 
     for (const line of dto.items) {
+      await this.scope.assertProductInTenant(actor, line.productId);
       const product = await this.prisma.product.findFirst({
         where: { id: line.productId, deletedAt: null },
         select: {

@@ -102,6 +102,9 @@ export class InventoryTransfersService {
       throw new BadRequestException('El almacén origen y destino deben ser distintos');
     }
 
+    await this.scope.assertWarehouseInTenant(actor, dto.fromWarehouseId);
+    await this.scope.assertWarehouseInTenant(actor, dto.toWarehouseId);
+
     const [fromWarehouse, toWarehouse] = await Promise.all([
       this.prisma.warehouse.findFirst({
         where: { id: dto.fromWarehouseId, deletedAt: null },
@@ -155,8 +158,8 @@ export class InventoryTransfersService {
     return { id: created.id, message: 'Transferencia registrada en borrador' };
   }
 
-  async dispatch(id: string, actorId?: string) {
-    const transfer = await this.loadTransfer(id);
+  async dispatch(id: string, actor: JwtRequestUser) {
+    const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
       throw new BadRequestException('Solo se pueden despachar transferencias en borrador');
     }
@@ -180,7 +183,7 @@ export class InventoryTransfersService {
           transferReasonId: outReason.id,
           unitCost: item.costoUnitario,
           reference: transfer.guiaNumero ?? transfer.id,
-          userId: actorId,
+          userId: actor.sub,
         });
       }
 
@@ -194,7 +197,7 @@ export class InventoryTransfersService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'DISPATCH',
       entity: 'InventoryStockTransfer',
       entityId: id,
@@ -205,8 +208,8 @@ export class InventoryTransfersService {
     return { ok: true, message: 'Transferencia despachada' };
   }
 
-  async receive(id: string, actorId?: string) {
-    const transfer = await this.loadTransfer(id);
+  async receive(id: string, actor: JwtRequestUser) {
+    const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.EN_TRANSITO) {
       throw new BadRequestException('Solo se pueden recibir transferencias en tránsito');
     }
@@ -230,7 +233,7 @@ export class InventoryTransfersService {
           transferReasonId: inReason.id,
           unitCost: item.costoUnitario,
           reference: transfer.guiaNumero ?? transfer.id,
-          userId: actorId,
+          userId: actor.sub,
         });
       }
 
@@ -244,7 +247,7 @@ export class InventoryTransfersService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'RECEIVE',
       entity: 'InventoryStockTransfer',
       entityId: id,
@@ -253,8 +256,8 @@ export class InventoryTransfersService {
     return { ok: true, message: 'Transferencia recibida en almacén destino' };
   }
 
-  async cancel(id: string, actorId?: string) {
-    const transfer = await this.loadTransfer(id);
+  async cancel(id: string, actor: JwtRequestUser) {
+    const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
       throw new BadRequestException('Solo se pueden anular transferencias en borrador');
     }
@@ -265,7 +268,7 @@ export class InventoryTransfersService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CANCEL',
       entity: 'InventoryStockTransfer',
       entityId: id,
@@ -274,12 +277,23 @@ export class InventoryTransfersService {
     return { ok: true, message: 'Transferencia anulada' };
   }
 
-  private async loadTransfer(id: string) {
+  private async loadTransfer(id: string, actor: JwtRequestUser) {
     const transfer = await this.prisma.inventoryStockTransfer.findFirst({
-      where: { id, deletedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        ...(actor.tenantId
+          ? {
+              fromWarehouse: { establishment: { tenantId: actor.tenantId } },
+              toWarehouse: { establishment: { tenantId: actor.tenantId } },
+            }
+          : {}),
+      },
       include: { items: true },
     });
     if (!transfer) throw new NotFoundException('Transferencia no encontrada');
+    await this.scope.assertWarehouseInTenant(actor, transfer.fromWarehouseId);
+    await this.scope.assertWarehouseInTenant(actor, transfer.toWarehouseId);
     return transfer;
   }
 

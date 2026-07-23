@@ -53,7 +53,7 @@ export class PurchasesController {
   @RequirePermissions('purchases.write', 'nav.ordenes_compra')
   @ApiOperation({ summary: 'Crear orden de compra' })
   async createOrder(@Body() dto: CreatePurchaseOrderDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createPurchaseOrder(await this.scope.resolve(actor), actor.sub, dto);
+    return this.service.createPurchaseOrder(await this.scope.resolve(actor), actor.sub, dto, actor);
   }
 
   @Post('purchase-orders/:id/approve')
@@ -117,7 +117,7 @@ export class PurchasesController {
   @RequirePermissions('purchases.write', 'nav.ordenes_compra')
   @ApiOperation({ summary: 'Registrar nota de crédito proveedor' })
   async createCreditNote(@Body() dto: CreateSupplierCreditNoteDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createSupplierCreditNote(await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.createSupplierCreditNote(await this.scope.resolve(actor), dto, actor);
   }
 
   @Get('reports/replenishment')

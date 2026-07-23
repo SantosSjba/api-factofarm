@@ -33,7 +33,7 @@ export class InventoryTransfersController {
   @ApiOperation({ summary: 'Despachar transferencia (salida origen)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   dispatch(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.dispatch(id, actor.sub);
+    return this.service.dispatch(id, actor);
   }
 
   @Post(':id/receive')
@@ -41,7 +41,7 @@ export class InventoryTransfersController {
   @ApiOperation({ summary: 'Recibir transferencia (ingreso destino)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   receive(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.receive(id, actor.sub);
+    return this.service.receive(id, actor);
   }
 
   @Post(':id/cancel')
@@ -49,6 +49,6 @@ export class InventoryTransfersController {
   @ApiOperation({ summary: 'Anular transferencia en borrador' })
   @ApiParam({ name: 'id', format: 'uuid' })
   cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.cancel(id, actor.sub);
+    return this.service.cancel(id, actor);
   }
 }

@@ -189,7 +189,7 @@ export class InventoryPhysicalCountsService {
           lotCode: item.codigoLote ?? undefined,
           reason: `Conteo físico ${countId}`,
         },
-        actor.sub,
+        actor,
       );
       if (result.pendingApproval) pendingApproval += 1;
       else if (result.applied) applied += 1;

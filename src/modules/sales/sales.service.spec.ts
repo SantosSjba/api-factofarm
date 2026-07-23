@@ -65,6 +65,10 @@ function buildService() {
     {} as never,
     { build: jest.fn() } as never,
     { exists: jest.fn(), resolveAbsolutePath: jest.fn() } as never,
+    {
+      assertCustomerInTenant: jest.fn().mockResolvedValue(undefined),
+      assertProductInTenant: jest.fn().mockResolvedValue(undefined),
+    } as never,
   );
   return { service, prisma, audit, inventory, billing, lotAllocation, realtime };
 }

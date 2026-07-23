@@ -88,6 +88,7 @@ export class MarketingController {
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    await this.scope.assertCustomerInTenant(actor, customerId);
     return this.loyalty.listHistory(customerId, await this.scope.resolve(actor));
   }
 
@@ -99,6 +100,7 @@ export class MarketingController {
     @Body() dto: LoyaltyAdjustDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    await this.scope.assertCustomerInTenant(actor, customerId);
     const establishmentId = await this.scope.resolve(actor);
     return this.loyalty.adjustPoints(
       establishmentId,

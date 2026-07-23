@@ -8,6 +8,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import {
@@ -16,6 +17,7 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   AgreementListQueryDto,
   AgreementSettlementQueryDto,
@@ -31,6 +33,7 @@ export class AgreementsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly integrity: EntityIntegrityService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async findAll(establishmentId: string, query: AgreementListQueryDto) {
@@ -186,10 +189,11 @@ export class AgreementsService {
     id: string,
     establishmentId: string,
     dto: UpsertAgreementPricesDto,
-    userId: string,
+    actor: JwtRequestUser,
   ) {
     await this.ensureExists(id, establishmentId);
     for (const item of dto.items) {
+      await this.scope.assertProductInTenant(actor, item.productId);
       await this.prisma.agreementProductPrice.upsert({
         where: { agreementId_productId: { agreementId: id, productId: item.productId } },
         create: {
@@ -200,7 +204,12 @@ export class AgreementsService {
         update: { precio: new Prisma.Decimal(item.precio) },
       });
     }
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'AgreementProductPrice', entityId: id });
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'UPDATE',
+      entity: 'AgreementProductPrice',
+      entityId: id,
+    });
     return this.findOne(id, establishmentId);
   }
 

@@ -74,7 +74,7 @@ export class AgreementsController {
     @Body() dto: UpsertAgreementPricesDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertPrices(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.upsertPrices(id, await this.scope.resolve(actor), dto, actor);
   }
 
   @Get(':id/settlement')

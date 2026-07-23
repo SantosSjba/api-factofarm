@@ -63,7 +63,7 @@ export class WarehousesService {
   }
 
   async create(dto: CreateWarehouseDto, actor: JwtRequestUser) {
-    this.scope.assertAccess(actor, dto.establishmentId);
+    await this.scope.assertAccess(actor, dto.establishmentId);
 
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: dto.establishmentId, deletedAt: null },
@@ -95,7 +95,7 @@ export class WarehousesService {
       select: { id: true, establishmentId: true },
     });
     if (!current) throw new NotFoundException('Almacén no encontrado');
-    this.scope.assertAccess(actor, current.establishmentId);
+    await this.scope.assertAccess(actor, current.establishmentId);
 
     try {
       const updated = await this.prisma.warehouse.update({
@@ -122,7 +122,7 @@ export class WarehousesService {
       select: { id: true, establishmentId: true },
     });
     if (!current) throw new NotFoundException('Almacén no encontrado');
-    this.scope.assertAccess(actor, current.establishmentId);
+    await this.scope.assertAccess(actor, current.establishmentId);
     await this.integrity.assertCanDeleteWarehouse(id);
 
     await this.prisma.warehouse.update({ where: { id }, data: { deletedAt: new Date() } });

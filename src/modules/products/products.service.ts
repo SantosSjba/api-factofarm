@@ -4,7 +4,7 @@ import { PresentationDefaultPrice } from '../../generated/prisma/enums';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import { actorFromJwt, assertTenantAccess, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
@@ -378,11 +378,22 @@ export class ProductsService {
     actor?: JwtRequestUser,
   ) {
     await this.findOne(productId, actor);
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      select: { tenantId: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
     const supplier = await this.prisma.supplier.findFirst({
       where: { id: dto.supplierId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
     if (!supplier) throw new NotFoundException('Proveedor no encontrado');
+    if (actor) {
+      assertTenantAccess(actorFromJwt(actor), supplier.tenantId);
+    }
+    if (supplier.tenantId !== product.tenantId) {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
 
     const row = await this.prisma.supplierProduct.upsert({
       where: { supplierId_productId: { supplierId: dto.supplierId, productId } },
@@ -474,26 +485,34 @@ export class ProductsService {
     }
 
     if (dto.categoryId) {
-      const c = await this.prisma.category.findFirst({ where: { id: dto.categoryId, deletedAt: null } });
+      const c = await this.prisma.category.findFirst({
+        where: { id: dto.categoryId, deletedAt: null, tenantId },
+      });
       if (!c) throw new BadRequestException('Categoría no válida');
     }
 
     if (dto.brandId) {
-      const b = await this.prisma.brand.findFirst({ where: { id: dto.brandId, deletedAt: null } });
+      const b = await this.prisma.brand.findFirst({
+        where: { id: dto.brandId, deletedAt: null, tenantId },
+      });
       if (!b) throw new BadRequestException('Marca no válida');
     }
 
     const productLocation = dto.productLocationId
       ? await this.prisma.productLocation.findFirst({
-        where: { id: dto.productLocationId, deletedAt: null },
-      })
+          where: {
+            id: dto.productLocationId,
+            deletedAt: null,
+            establishment: { tenantId, deletedAt: null },
+          },
+        })
       : null;
     if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
 
     const defaultWarehouse = dto.defaultWarehouseId
       ? await this.prisma.warehouse.findFirst({
-        where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
-      })
+          where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
+        })
       : null;
     if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
 
@@ -747,18 +766,26 @@ export class ProductsService {
     }
 
     if (dto.categoryId) {
-      const c = await this.prisma.category.findFirst({ where: { id: dto.categoryId, deletedAt: null } });
+      const c = await this.prisma.category.findFirst({
+        where: { id: dto.categoryId, deletedAt: null, tenantId },
+      });
       if (!c) throw new BadRequestException('Categoría no válida');
     }
 
     if (dto.brandId) {
-      const b = await this.prisma.brand.findFirst({ where: { id: dto.brandId, deletedAt: null } });
+      const b = await this.prisma.brand.findFirst({
+        where: { id: dto.brandId, deletedAt: null, tenantId },
+      });
       if (!b) throw new BadRequestException('Marca no válida');
     }
 
     const productLocation = dto.productLocationId
       ? await this.prisma.productLocation.findFirst({
-          where: { id: dto.productLocationId, deletedAt: null },
+          where: {
+            id: dto.productLocationId,
+            deletedAt: null,
+            establishment: { tenantId, deletedAt: null },
+          },
         })
       : null;
     if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
@@ -2069,13 +2096,17 @@ export class ProductsService {
 
   async historyStock(id: string, actor?: JwtRequestUser) {
     await this.findOne(id, actor);
+    const tenantId = actor ? this.requireTenant(actor) : null;
 
     const rows = await this.prisma.productWarehouseStock.findMany({
       where: {
         productId: id,
-        warehouse: { deletedAt: null },
+        warehouse: {
+          deletedAt: null,
+          ...(tenantId ? { establishment: { tenantId, deletedAt: null } } : {}),
+        },
       },
-      orderBy: { warehouseId: 'asc' },
+      orderBy: [{ warehouse: { establishment: { codigo: 'asc' } } }, { warehouseId: 'asc' }],
       select: {
         cantidad: true,
         warehouse: {
@@ -2092,24 +2123,33 @@ export class ProductsService {
       warehouseId: r.warehouse.id,
       ubicacion: `${r.warehouse.nombre} · ${r.warehouse.establishment.nombre}`,
       stock: r.cantidad.toString(),
+      establishmentCodigo: r.warehouse.establishment.codigo ?? '—',
+      /** @deprecated usar establishmentCodigo */
       series: r.warehouse.establishment.codigo ?? '—',
     }));
   }
 
   async stockSummary(id: string, actor?: JwtRequestUser) {
     const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
+    const tenantId = actor ? this.requireTenant(actor) : null;
     const product = await this.prisma.product.findFirst({
       where: { id, deletedAt: null, ...tenantFilter },
       select: {
         id: true,
         warehouseStocks: {
-          where: { warehouse: { deletedAt: null } },
+          where: {
+            warehouse: {
+              deletedAt: null,
+              ...(tenantId ? { establishment: { tenantId, deletedAt: null } } : {}),
+            },
+          },
           orderBy: { warehouseId: 'asc' },
           select: {
             warehouse: {
               select: {
                 id: true,
                 nombre: true,
+                establishment: { select: { nombre: true, codigo: true } },
               },
             },
             cantidad: true,
@@ -2135,8 +2175,9 @@ export class ProductsService {
     return {
       stockByLocation: product.warehouseStocks.map((s) => ({
         warehouseId: s.warehouse.id,
-        ubicacion: `${s.warehouse.nombre}`,
+        ubicacion: `${s.warehouse.nombre} · ${s.warehouse.establishment.nombre}`,
         stock: s.cantidad.toString(),
+        establishmentCodigo: s.warehouse.establishment.codigo ?? '—',
       })),
       priceList: product.presentations.map((p) => ({
         id: p.id,

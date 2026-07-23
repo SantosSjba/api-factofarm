@@ -91,8 +91,11 @@ export class ProductsController {
   @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Crear ubicaci?n de producto por establecimiento' })
   @ApiBody({ type: CreateProductLocationDto })
-  createLocation(@Body() dto: CreateProductLocationDto, @CurrentUser() actor: JwtRequestUser) {
-    this.scope.assertAccess(actor, dto.establishmentId);
+  async createLocation(
+    @Body() dto: CreateProductLocationDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    await this.scope.assertAccess(actor, dto.establishmentId);
     return this.productsService.createProductLocation(dto);
   }
 

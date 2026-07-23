@@ -38,7 +38,7 @@ export class DeliveryOrdersController {
   @RequirePermissions('delivery.write', 'nav.ordenes_pedido')
   @ApiOperation({ summary: 'Crear pedido delivery' })
   async create(@Body() dto: CreateDeliveryOrderDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(await this.scope.resolve(actor), actor.sub, dto);
+    return this.service.create(await this.scope.resolve(actor), actor.sub, dto, undefined, actor);
   }
 
   @Patch(':id/status')

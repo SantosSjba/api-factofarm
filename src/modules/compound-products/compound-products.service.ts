@@ -160,7 +160,7 @@ export class CompoundProductsService {
 
   async create(dto: CreateCompoundProductDto, actor?: JwtRequestUser) {
     const tenantId = this.requireTenant(actor);
-    await this.validateReferences(dto);
+    await this.validateReferences(dto, tenantId);
     const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException('Debe agregar al menos un producto al compuesto.');
@@ -196,7 +196,7 @@ export class CompoundProductsService {
     });
     if (!exists) throw new NotFoundException('Producto compuesto no encontrado');
 
-    await this.validateReferences(dto);
+    await this.validateReferences(dto, tenantId);
     const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException('Debe agregar al menos un producto al compuesto.');
@@ -560,7 +560,7 @@ export class CompoundProductsService {
     return normalized;
   }
 
-  private async validateReferences(dto: CreateCompoundProductDto) {
+  private async validateReferences(dto: CreateCompoundProductDto, tenantId: string) {
     const checks: Promise<unknown>[] = [];
     checks.push(
       this.prisma.unitOfMeasure.findFirst({ where: { id: dto.unitId, deletedAt: null }, select: { id: true } }).then((x) => {
@@ -590,16 +590,20 @@ export class CompoundProductsService {
     }
     if (dto.categoryId) {
       checks.push(
-        this.prisma.category.findFirst({ where: { id: dto.categoryId, deletedAt: null }, select: { id: true } }).then((x) => {
-          if (!x) throw new BadRequestException('Categoría no encontrada.');
-        }),
+        this.prisma.category
+          .findFirst({ where: { id: dto.categoryId, deletedAt: null, tenantId }, select: { id: true } })
+          .then((x) => {
+            if (!x) throw new BadRequestException('Categoría no encontrada.');
+          }),
       );
     }
     if (dto.brandId) {
       checks.push(
-        this.prisma.brand.findFirst({ where: { id: dto.brandId, deletedAt: null }, select: { id: true } }).then((x) => {
-          if (!x) throw new BadRequestException('Marca no encontrada.');
-        }),
+        this.prisma.brand
+          .findFirst({ where: { id: dto.brandId, deletedAt: null, tenantId }, select: { id: true } })
+          .then((x) => {
+            if (!x) throw new BadRequestException('Marca no encontrada.');
+          }),
       );
     }
     await Promise.all(checks);

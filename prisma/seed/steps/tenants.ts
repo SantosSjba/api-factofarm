@@ -30,52 +30,17 @@ export async function seedTenants(prisma: PrismaClient): Promise<{ demoTenantId:
   return { demoTenantId: demoTenant.id };
 }
 
+/**
+ * Asigna tenant demo solo a filas sin tenant.
+ * Catálogos/entidades con `tenantId` obligatorio ya lo reciben en sus seeds de create;
+ * no se reescribe para no clobber otros tenants.
+ */
 export async function backfillTenantAssignments(
   prisma: PrismaClient,
   demoTenantId: string,
 ): Promise<void> {
-  await prisma.establishment.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
   await prisma.user.updateMany({
-    where: { role: { not: 'SUPER_ADMIN' } },
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.product.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.customer.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.supplier.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.service.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.compoundProduct.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.category.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.brand.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.customerZone.updateMany({
-    data: { tenantId: demoTenantId },
-  });
-
-  await prisma.customerType.updateMany({
+    where: { role: { not: 'SUPER_ADMIN' }, tenantId: null },
     data: { tenantId: demoTenantId },
   });
 }

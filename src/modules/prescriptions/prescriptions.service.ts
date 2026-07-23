@@ -1,8 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrescriptionStatus, Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import { actorFromJwt, assertTenantAccess } from '../../common/scoping/tenant-scope.util';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { SensitiveHealthCryptoService } from '../compliance/services/sensitive-health-crypto.service';
 import {
   CreatePrescriptionDto,
@@ -16,6 +20,7 @@ export class PrescriptionsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly crypto: SensitiveHealthCryptoService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   async findAll(establishmentId: string, query: PrescriptionListQueryDto) {
@@ -95,7 +100,8 @@ export class PrescriptionsService {
     return this.mapDetail(row);
   }
 
-  async findByCustomer(customerId: string, establishmentId: string) {
+  async findByCustomer(customerId: string, establishmentId: string, actor: JwtRequestUser) {
+    await this.scope.assertCustomerInTenant(actor, customerId);
     const rows = await this.prisma.prescription.findMany({
       where: {
         customerId,
@@ -112,14 +118,16 @@ export class PrescriptionsService {
     }));
   }
 
-  async create(establishmentId: string, dto: CreatePrescriptionDto, actorId?: string) {
+  async create(establishmentId: string, dto: CreatePrescriptionDto, actor: JwtRequestUser) {
     if (dto.items.length === 0) throw new BadRequestException('La receta requiere al menos un ítem');
 
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: dto.customerId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!customer) throw new NotFoundException('Paciente/cliente no encontrado');
+    await this.scope.assertCustomerInTenant(actor, dto.customerId);
+    for (const item of dto.items) {
+      await this.scope.assertProductInTenant(actor, item.productId);
+    }
+    if (dto.imagenArchivoId) {
+      await this.assertArchivoInTenant(actor, dto.imagenArchivoId);
+    }
 
     let medicoNombre = dto.medicoNombre?.trim() || null;
     let medicoCmp = dto.medicoCmp?.trim() || null;
@@ -154,7 +162,7 @@ export class PrescriptionsService {
         diagnosticoCipher: encryptHealth ? this.crypto.encrypt(diagnosticoPlain) : null,
         notasCipher: encryptHealth ? this.crypto.encrypt(notasPlain) : null,
         imagenArchivoId: dto.imagenArchivoId ?? null,
-        registeredById: actorId ?? null,
+        registeredById: actor.sub,
         items: {
           create: dto.items.map((item) => ({
             productId: item.productId,
@@ -168,7 +176,7 @@ export class PrescriptionsService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'Prescription',
       entityId: created.id,
@@ -176,15 +184,14 @@ export class PrescriptionsService {
     return this.findOne(created.id, establishmentId);
   }
 
-  async attachImage(id: string, establishmentId: string, imagenArchivoId: string, actorId?: string) {
+  async attachImage(id: string, establishmentId: string, imagenArchivoId: string, actor: JwtRequestUser) {
     const prescription = await this.prisma.prescription.findFirst({
       where: { id, establishmentId, deletedAt: null },
       select: { id: true },
     });
     if (!prescription) throw new NotFoundException('Receta no encontrada');
 
-    const archivo = await this.prisma.archivo.findUnique({ where: { id: imagenArchivoId }, select: { id: true } });
-    if (!archivo) throw new NotFoundException('Archivo no encontrado');
+    await this.assertArchivoInTenant(actor, imagenArchivoId);
 
     await this.prisma.prescription.update({
       where: { id },
@@ -192,7 +199,7 @@ export class PrescriptionsService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'UPDATE',
       entity: 'Prescription',
       entityId: id,
@@ -200,6 +207,19 @@ export class PrescriptionsService {
     });
 
     return this.findOne(id, establishmentId);
+  }
+
+  private async assertArchivoInTenant(actor: JwtRequestUser, archivoId: string) {
+    const archivo = await this.prisma.archivo.findUnique({
+      where: { id: archivoId },
+      select: { id: true, tenantId: true },
+    });
+    if (!archivo) throw new NotFoundException('Archivo no encontrado');
+    if (!archivo.tenantId) {
+      if (isPlatformAdmin(actor.role)) return;
+      throw new ForbiddenException('Archivo sin tenant asignado');
+    }
+    assertTenantAccess(actorFromJwt(actor), archivo.tenantId);
   }
 
   async validateForSale(

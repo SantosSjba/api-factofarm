@@ -17,16 +17,16 @@ export async function seedProducts(prisma: PrismaClient, demoTenantId: string): 
       select: { id: true },
     }),
     prisma.establishment.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, codigo: true },
       orderBy: { codigo: 'asc' },
     }),
     prisma.category.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, nombre: true },
     }),
     prisma.brand.findMany({
-      where: { deletedAt: null },
+      where: { tenantId: demoTenantId, deletedAt: null },
       select: { id: true, nombre: true },
     }),
     prisma.productAttributeType.findMany({
@@ -41,28 +41,31 @@ export async function seedProducts(prisma: PrismaClient, demoTenantId: string): 
 
   const branch = establishments.find((e) => e.codigo === '0001') ?? establishments[0];
   if (!branch) {
-    throw new Error('No hay establecimientos para seed de productos.');
+    throw new Error('No hay establecimientos del tenant demo para seed de productos.');
   }
 
-  const [establishmentWarehouses, defaultLocation] = await Promise.all([
-    prisma.warehouse.findMany({
-      where: { establishmentId: { in: establishments.map((e) => e.id) }, deletedAt: null },
-      orderBy: [{ establishmentId: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true, establishmentId: true },
-    }),
-    prisma.productLocation.findFirst({
-      where: { establishmentId: branch.id, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    }),
-  ]);
+  // Un almacén "principal" por sede (evita duplicar stock en almacenes demo redundantes).
+  const principalWarehouses = await prisma.warehouse.findMany({
+    where: {
+      establishmentId: { in: establishments.map((e) => e.id) },
+      deletedAt: null,
+      nombre: 'Almacén principal',
+    },
+    orderBy: [{ establishmentId: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, establishmentId: true },
+  });
+
+  const defaultLocation = await prisma.productLocation.findFirst({
+    where: { establishmentId: branch.id, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
 
   const defaultWarehouse =
-    establishmentWarehouses.find((w) => w.establishmentId === branch.id) ??
-    establishmentWarehouses[0];
+    principalWarehouses.find((w) => w.establishmentId === branch.id) ?? principalWarehouses[0];
 
   if (!defaultWarehouse) {
-    throw new Error('No hay almacén para seed de productos.');
+    throw new Error('No hay almacén principal para seed de productos.');
   }
 
   const categoryByName = new Map(categories.map((c) => [c.nombre.toUpperCase(), c.id]));
@@ -104,7 +107,7 @@ export async function seedProducts(prisma: PrismaClient, demoTenantId: string): 
       : null;
 
     const existing = await prisma.product.findFirst({
-      where: { codigoInterno },
+      where: { tenantId: demoTenantId, codigoInterno },
       select: { id: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -147,8 +150,9 @@ export async function seedProducts(prisma: PrismaClient, demoTenantId: string): 
           select: { id: true },
         });
 
+    // Stock demo solo en almacenes principales del tenant (una fila por sede).
     const syncedWarehouseIds = new Set<string>();
-    for (const warehouse of establishmentWarehouses) {
+    for (const warehouse of principalWarehouses) {
       if (syncedWarehouseIds.has(warehouse.id)) continue;
       syncedWarehouseIds.add(warehouse.id);
       await syncWarehouseCatalog(product.id, warehouse.id, row);

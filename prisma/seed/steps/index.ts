@@ -43,7 +43,7 @@ export async function runSeedSteps(prisma: PrismaClient): Promise<void> {
     return { demoTenantId: tenantId };
   })();
   await runStep('Establecimientos', () => seedEstablishments(prisma, demoTenantId));
-  await runStep('Catálogos de productos', () => seedProductCatalogs(prisma));
+  await runStep('Catálogos de productos', () => seedProductCatalogs(prisma, demoTenantId));
   await runStep('Tipos de cliente', () => seedCustomerTypes(prisma, demoTenantId));
   await runStep('Categorías', () => seedCategories(prisma, demoTenantId));
   await runStep('Marcas', () => seedBrands(prisma, demoTenantId));

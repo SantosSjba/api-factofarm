@@ -18,7 +18,9 @@ import {
   monthBoundsInTimeZone,
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   CreateGoodsReceiptDto,
   CreatePurchaseOrderDto,
@@ -37,6 +39,7 @@ export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   // —— Órdenes de compra ——
@@ -114,13 +117,17 @@ export class PurchasesService {
     establishmentId: string,
     createdById: string,
     dto: CreatePurchaseOrderDto,
+    actor: JwtRequestUser,
   ) {
-    await this.validateSupplier(dto.supplierId);
+    await this.scope.assertSupplierInTenant(actor, dto.supplierId);
+    await this.assertSupplierEnabled(dto.supplierId);
+    await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     await this.validateWarehouse(dto.warehouseId, establishmentId);
 
     const { subtotal, igvTotal, total, itemRows } = await this.buildOrderItems(
       dto.supplierId,
       dto.items,
+      actor,
     );
     const numero = await this.nextPurchaseOrderNumber(establishmentId);
 
@@ -530,9 +537,10 @@ export class PurchasesService {
   async createSupplierCreditNote(
     establishmentId: string,
     dto: CreateSupplierCreditNoteDto,
-    actorId: string,
+    actor: JwtRequestUser,
   ) {
-    await this.validateSupplier(dto.supplierId);
+    await this.scope.assertSupplierInTenant(actor, dto.supplierId);
+    await this.assertSupplierEnabled(dto.supplierId);
     const monto = new Prisma.Decimal(dto.monto);
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -571,7 +579,7 @@ export class PurchasesService {
     });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'SupplierCreditNote',
       entityId: created.id,
@@ -730,11 +738,18 @@ export class PurchasesService {
   }
 
   async priceComparison(establishmentId: string, query: PriceComparisonQueryDto) {
-    void establishmentId;
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { tenantId: true },
+    });
     const links = await this.prisma.supplierProduct.findMany({
       where: {
         precioCompra: { not: null },
-        product: { deletedAt: null, habilitado: true },
+        product: {
+          deletedAt: null,
+          habilitado: true,
+          ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
+        },
         ...(query.productId ? { productId: query.productId } : {}),
       },
       include: {
@@ -789,8 +804,8 @@ export class PurchasesService {
     return { items: [...byProduct.values()] };
   }
 
-  async supplierPurchaseHistory(supplierId: string) {
-    await this.validateSupplier(supplierId);
+  async supplierPurchaseHistory(supplierId: string, actor: JwtRequestUser) {
+    await this.scope.assertSupplierInTenant(actor, supplierId);
     const rows = await this.prisma.purchaseOrder.findMany({
       where: { supplierId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
@@ -828,7 +843,7 @@ export class PurchasesService {
     return po;
   }
 
-  private async validateSupplier(supplierId: string) {
+  private async assertSupplierEnabled(supplierId: string) {
     const s = await this.prisma.supplier.findFirst({
       where: { id: supplierId, deletedAt: null, habilitado: true },
       select: { id: true },
@@ -847,6 +862,7 @@ export class PurchasesService {
   private async buildOrderItems(
     supplierId: string,
     items: CreatePurchaseOrderDto['items'],
+    actor: JwtRequestUser,
   ) {
     let subtotal = new Prisma.Decimal(0);
     let igvTotal = new Prisma.Decimal(0);
@@ -854,6 +870,7 @@ export class PurchasesService {
     const itemRows: Prisma.PurchaseOrderItemCreateWithoutPurchaseOrderInput[] = [];
 
     for (const line of items) {
+      await this.scope.assertProductInTenant(actor, line.productId);
       const product = await this.prisma.product.findFirst({
         where: { id: line.productId, deletedAt: null },
         select: {

@@ -91,21 +91,21 @@ export class InventoryMovementsController {
   @RequirePermissions('inventory.adjust', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Ajuste de stock (con aprobación si supera umbral)' })
   createAdjustment(@Body() dto: CreateAdjustmentDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createAdjustment(dto, actor.sub);
+    return this.service.createAdjustment(dto, actor);
   }
 
   @Post('adjustments/:id/approve')
   @RequirePermissions('inventory.adjust')
   @ApiOperation({ summary: 'Aprobar ajuste pendiente (segunda autorización)' })
   approveAdjustment(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.approveAdjustment(id, actor.sub);
+    return this.service.approveAdjustment(id, actor);
   }
 
   @Post('adjustments/:id/reject')
   @RequirePermissions('inventory.adjust')
   @ApiOperation({ summary: 'Rechazar ajuste pendiente' })
   rejectAdjustment(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.rejectAdjustment(id, actor.sub);
+    return this.service.rejectAdjustment(id, actor);
   }
 
   @Get('sales/available-lots')
@@ -114,29 +114,33 @@ export class InventoryMovementsController {
   listSaleAvailableLots(
     @Query('productId', ParseUUIDPipe) productId: string,
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listSaleAvailableLots(productId, warehouseId);
+    return this.service.listSaleAvailableLots(productId, warehouseId, actor);
   }
 
   @Post('sales/allocation-preview')
   @RequirePermissions('inventory.read', 'nav.inventario_movimientos', 'nav.lotes')
   @ApiOperation({ summary: 'Previsualizar asignación FEFO/FIFO o manual de lotes para venta' })
-  previewSaleLotAllocation(@Body() dto: SaleLotAllocationPreviewDto) {
-    return this.service.previewSaleLotAllocation(dto);
+  previewSaleLotAllocation(
+    @Body() dto: SaleLotAllocationPreviewDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.previewSaleLotAllocation(dto, actor);
   }
 
   @Post('sales/dispatch')
   @RequirePermissions('inventory.write', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Despachar stock de venta con trazabilidad por lote' })
   dispatchSaleStock(@Body() dto: DispatchSaleStockDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.dispatchSaleStock(dto, actor.sub);
+    return this.service.dispatchSaleStock(dto, actor.sub, undefined, actor);
   }
 
   @Get('catalogs/warehouses')
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Listar almacenes para importación de inventario' })
-  listWarehouses() {
-    return this.service.listWarehouses();
+  listWarehouses(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.listWarehouses(actor);
   }
 
   @Get('catalogs/transfer-reasons')
@@ -156,8 +160,11 @@ export class InventoryMovementsController {
   @Get('catalogs/lot-codes')
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Buscar códigos de lote por producto y almacén' })
-  searchLotCodes(@Query() query: LotCodeSearchQueryDto) {
-    return this.service.searchLotCodes(query);
+  searchLotCodes(
+    @Query() query: LotCodeSearchQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.searchLotCodes(query, actor);
   }
 
   @Post('inbound')
@@ -167,7 +174,7 @@ export class InventoryMovementsController {
     @Body() dto: CreateInboundMovementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createInboundMovement(dto, actor.sub);
+    return this.service.createInboundMovement(dto, actor);
   }
 
   @Post('outbound')
@@ -177,7 +184,7 @@ export class InventoryMovementsController {
     @Body() dto: CreateOutboundMovementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createOutboundMovement(dto, actor.sub);
+    return this.service.createOutboundMovement(dto, actor);
   }
 
   @Post('import/lots')
@@ -200,8 +207,12 @@ export class InventoryMovementsController {
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
-  importLots(@Body() dto: ImportInventoryFileDto, @UploadedFile() file: Express.Multer.File) {
-    return this.service.importLots(dto, file);
+  importLots(
+    @Body() dto: ImportInventoryFileDto,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.importLots(dto, file, actor);
   }
 
   @Post('import/series')
@@ -224,8 +235,12 @@ export class InventoryMovementsController {
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
-  importSeries(@Body() dto: ImportInventoryFileDto, @UploadedFile() file: Express.Multer.File) {
-    return this.service.importSeries(dto, file);
+  importSeries(
+    @Body() dto: ImportInventoryFileDto,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.importSeries(dto, file, actor);
   }
 
   @Get('import/template')

@@ -7,10 +7,12 @@ import {
   ArcoRequestStatus,
   ArcoRequestType,
   LpdpConsentPurpose,
-  Prisma,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
+import { EstablishmentScopeService } from '../../../common/scoping/establishment-scope.service';
+import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
 export const LPDP_CONSENT_VERSION = '2026-06-11';
@@ -48,6 +50,7 @@ export class LpdpService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly crypto: SensitiveHealthCryptoService,
+    private readonly scope: EstablishmentScopeService,
   ) {}
 
   getTreatmentMatrix() {
@@ -134,9 +137,14 @@ export class LpdpService {
     return created;
   }
 
-  async listArcoRequests(status?: ArcoRequestStatus) {
+  async listArcoRequests(status: ArcoRequestStatus | undefined, actor: JwtRequestUser) {
     return this.prisma.arcoRequest.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...(status ? { status } : {}),
+        ...(!isPlatformAdmin(actor.role) && actor.tenantId
+          ? { customer: { tenantId: actor.tenantId } }
+          : {}),
+      },
       include: {
         customer: { select: { id: true, nombre: true, numeroDocumento: true } },
         processedBy: { select: { id: true, nombre: true } },
@@ -149,10 +157,17 @@ export class LpdpService {
   async processArcoRequest(
     id: string,
     status: ArcoRequestStatus,
-    responseNotes?: string,
-    actorId?: string,
+    responseNotes: string | undefined,
+    actor: JwtRequestUser,
   ) {
-    const row = await this.prisma.arcoRequest.findUnique({ where: { id } });
+    const row = await this.prisma.arcoRequest.findFirst({
+      where: {
+        id,
+        ...(!isPlatformAdmin(actor.role) && actor.tenantId
+          ? { customer: { tenantId: actor.tenantId } }
+          : {}),
+      },
+    });
     if (!row) throw new NotFoundException('Solicitud ARCO no encontrada');
 
     const updated = await this.prisma.arcoRequest.update({
@@ -160,12 +175,13 @@ export class LpdpService {
       data: {
         status,
         responseNotes: responseNotes?.trim() || null,
-        processedById: actorId ?? null,
+        processedById: actor.sub,
         processedAt: new Date(),
       },
     });
 
     if (status === ArcoRequestStatus.COMPLETADA && row.requestType === ArcoRequestType.CANCELACION) {
+      await this.scope.assertCustomerInTenant(actor, row.customerId);
       await this.prisma.customer.update({
         where: { id: row.customerId },
         data: { deletedAt: new Date(), activo: false, habilitado: false },
@@ -173,7 +189,7 @@ export class LpdpService {
     }
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'UPDATE',
       entity: 'ArcoRequest',
       entityId: id,
@@ -182,7 +198,8 @@ export class LpdpService {
     return updated;
   }
 
-  async exportCustomerData(customerId: string) {
+  async exportCustomerData(customerId: string, actor: JwtRequestUser) {
+    await this.scope.assertCustomerInTenant(actor, customerId);
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, deletedAt: null },
       include: {
@@ -231,13 +248,16 @@ export class LpdpService {
     };
   }
 
-  async listRetentionCandidates() {
+  async listRetentionCandidates(actor: JwtRequestUser) {
     const cutoff = new Date();
     cutoff.setFullYear(cutoff.getFullYear() - 10);
 
     const staleCustomers = await this.prisma.customer.findMany({
       where: {
         deletedAt: null,
+        ...(!isPlatformAdmin(actor.role) && actor.tenantId
+          ? { tenantId: actor.tenantId }
+          : {}),
         sales: { none: { createdAt: { gte: cutoff }, deletedAt: null } },
         prescriptions: { none: { createdAt: { gte: cutoff }, deletedAt: null } },
       },

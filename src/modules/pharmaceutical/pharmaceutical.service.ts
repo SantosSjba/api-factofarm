@@ -588,11 +588,16 @@ export class PharmaceuticalService {
   }
 
   async sanitaryRegistryAlerts(establishmentId: string, daysAhead = 90) {
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { tenantId: true },
+    });
     const limit = new Date();
     limit.setDate(limit.getDate() + daysAhead);
     const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
+        ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
         registroSanitario: { not: null },
         registroSanitarioVigencia: { not: null, lte: limit },
       },
