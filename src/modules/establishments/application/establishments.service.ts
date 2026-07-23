@@ -8,11 +8,13 @@ import { CacheService } from '../../../common/cache/cache.service';
 import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { BillingService } from '../../billing/billing.service';
 import { TenantsService } from '../../tenants/tenants.service';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { CreateEstablishmentSeriesDto } from '../dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from '../dto/create-establishment.dto';
 import { UpdateEstablishmentDto } from '../dto/update-establishment.dto';
+import { UpdatePharmacyProfileDto } from '../dto/update-pharmacy-profile.dto';
 
 const DOCUMENT_LABELS: Record<DocumentSeriesType, string> = {
   FACTURA_ELECTRONICA: 'FACTURA ELECTRONICA',
@@ -108,6 +110,7 @@ export class EstablishmentsService {
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
     private readonly tenants: TenantsService,
+    private readonly billing: BillingService,
   ) {}
 
   async findAll(
@@ -481,6 +484,142 @@ export class EstablishmentsService {
     });
     if (!row) throw new NotFoundException('Establecimiento no encontrado');
     return row;
+  }
+
+  /** Perfil comercial + fiscal del establecimiento activo del usuario. */
+  async getPharmacyProfile(establishmentId: string, actor: JwtRequestUser) {
+    await this.ensureEstablishment(establishmentId, actor);
+    const row = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: {
+        ...selectEstablishment,
+        numeroRegistroDigemid: true,
+        tenant: { select: { id: true, nombre: true, ruc: true } },
+      },
+    });
+    if (!row) throw new NotFoundException('Establecimiento no encontrado');
+
+    const billing = await this.billing.getConfig(establishmentId);
+    const { tenant, ...establishment } = row;
+
+    return {
+      establishmentId: establishment.id,
+      tenantId: tenant.id,
+      tenantNombre: tenant.nombre,
+      tenantRuc: tenant.ruc,
+      nombre: establishment.nombre,
+      codigo: establishment.codigo,
+      pais: establishment.pais,
+      departmentId: establishment.departmentId,
+      provinceId: establishment.provinceId,
+      districtId: establishment.districtId,
+      direccionFiscal: establishment.direccionFiscal,
+      direccionComercial: establishment.direccionComercial,
+      telefono: establishment.telefono,
+      correoContacto: establishment.correoContacto,
+      direccionWeb: establishment.direccionWeb,
+      informacionAdicional: establishment.informacionAdicional,
+      numeroRegistroDigemid: establishment.numeroRegistroDigemid,
+      logoArchivoId: establishment.logoArchivoId,
+      logoUrl: establishment.logoArchivoId
+        ? `/api/v1/files/${establishment.logoArchivoId}`
+        : null,
+      rucEmisor: billing.rucEmisor ?? tenant.ruc ?? null,
+      razonSocialEmisor: billing.razonSocialEmisor ?? tenant.nombre ?? null,
+      billingProvider: billing.provider,
+      hasOseCredentials: !!(billing.hasApiToken || billing.hasCertificate),
+    };
+  }
+
+  async updatePharmacyProfile(
+    establishmentId: string,
+    dto: UpdatePharmacyProfileDto,
+    actor: JwtRequestUser,
+  ) {
+    await this.ensureEstablishment(establishmentId, actor);
+
+    const establishmentPatch: UpdateEstablishmentDto = {};
+    if (dto.nombre !== undefined) establishmentPatch.nombre = dto.nombre;
+    if (dto.codigo !== undefined) establishmentPatch.codigo = dto.codigo;
+    if (dto.direccionFiscal !== undefined) establishmentPatch.direccionFiscal = dto.direccionFiscal;
+    if (dto.direccionComercial !== undefined) {
+      establishmentPatch.direccionComercial = dto.direccionComercial;
+    }
+    if (dto.telefono !== undefined) establishmentPatch.telefono = dto.telefono;
+    if (dto.correoContacto !== undefined) establishmentPatch.correoContacto = dto.correoContacto;
+    if (dto.direccionWeb !== undefined) establishmentPatch.direccionWeb = dto.direccionWeb;
+    if (dto.informacionAdicional !== undefined) {
+      establishmentPatch.informacionAdicional = dto.informacionAdicional;
+    }
+    if (dto.departmentId !== undefined) {
+      establishmentPatch.departmentId = dto.departmentId ?? undefined;
+    }
+    if (dto.provinceId !== undefined) {
+      establishmentPatch.provinceId = dto.provinceId ?? undefined;
+    }
+    if (dto.districtId !== undefined) {
+      establishmentPatch.districtId = dto.districtId ?? undefined;
+    }
+    if (dto.logoArchivoId !== undefined) {
+      establishmentPatch.logoArchivoId = dto.logoArchivoId ?? undefined;
+      // Allow explicit null clear via raw update below when needed
+    }
+    if (dto.numeroRegistroDigemid !== undefined) {
+      establishmentPatch.numeroRegistroDigemid = dto.numeroRegistroDigemid ?? undefined;
+    }
+
+    if (Object.keys(establishmentPatch).length > 0 || dto.logoArchivoId === null) {
+      const data = this.mapEstablishmentUpdateInput(establishmentPatch);
+      if (dto.logoArchivoId === null) {
+        data.logoArchivoId = null;
+      }
+      if (dto.numeroRegistroDigemid === null) {
+        data.numeroRegistroDigemid = null;
+      }
+      if (dto.departmentId === null) data.departmentId = null;
+      if (dto.provinceId === null) data.provinceId = null;
+      if (dto.districtId === null) data.districtId = null;
+
+      await this.prisma.establishment.update({
+        where: { id: establishmentId },
+        data,
+      });
+    }
+
+    if (dto.rucEmisor !== undefined || dto.razonSocialEmisor !== undefined) {
+      const rucEmisor =
+        dto.rucEmisor !== undefined ? dto.rucEmisor.trim() || null : undefined;
+      const razonSocialEmisor =
+        dto.razonSocialEmisor !== undefined
+          ? dto.razonSocialEmisor.trim() || null
+          : undefined;
+
+      // Solo toca campos fiscales; no altera proveedor/token OSE.
+      await this.prisma.establishmentBillingConfig.upsert({
+        where: { establishmentId },
+        create: {
+          establishmentId,
+          rucEmisor: rucEmisor ?? null,
+          razonSocialEmisor: razonSocialEmisor ?? null,
+        },
+        update: {
+          ...(rucEmisor !== undefined ? { rucEmisor } : {}),
+          ...(razonSocialEmisor !== undefined ? { razonSocialEmisor } : {}),
+        },
+      });
+
+      // Sincroniza RUC comercial del tenant SaaS cuando el cliente lo actualiza.
+      if (actor.tenantId && rucEmisor) {
+        await this.prisma.tenant
+          .update({
+            where: { id: actor.tenantId },
+            data: { ruc: rucEmisor },
+          })
+          .catch(() => undefined);
+      }
+    }
+
+    return this.getPharmacyProfile(establishmentId, actor);
   }
 
   private normPaymentPhone(value: string | undefined): string | null | undefined {

@@ -12,18 +12,23 @@ import {
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateEstablishmentSeriesDto } from './dto/create-establishment-series.dto';
 import { CreateEstablishmentDto } from './dto/create-establishment.dto';
 import { EstablishmentListQueryDto } from './dto/establishment-list-query.dto';
 import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
+import { UpdatePharmacyProfileDto } from './dto/update-pharmacy-profile.dto';
 import { EstablishmentsService } from './application/establishments.service';
 
 @ApiTags('establishments')
 @ApiBearerAuth()
 @Controller('establishments')
 export class EstablishmentsController {
-  constructor(private readonly establishmentsService: EstablishmentsService) {}
+  constructor(
+    private readonly establishmentsService: EstablishmentsService,
+    private readonly scope: EstablishmentScopeService,
+  ) {}
 
   @Get('series/document-types')
   @ApiOperation({
@@ -76,6 +81,30 @@ export class EstablishmentsController {
   @ApiOperation({ summary: 'Números Yape/Plin del establecimiento activo (referencia POS)' })
   posPaymentSettings(@CurrentUser() actor: JwtRequestUser) {
     return this.establishmentsService.getPosPaymentSettings(actor.establecimientoId, actor);
+  }
+
+  @Get('pharmacy-profile')
+  @RequirePermissions('establishments.read', 'nav.establecimientos', 'establishments.write')
+  @ApiOperation({
+    summary: 'Perfil de farmacia del establecimiento activo (logo, contacto y datos de facturación)',
+  })
+  async getPharmacyProfile(@CurrentUser() actor: JwtRequestUser) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.establishmentsService.getPharmacyProfile(establishmentId, actor);
+  }
+
+  @Patch('pharmacy-profile')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
+  @ApiOperation({
+    summary: 'Actualizar perfil de farmacia (identidad del local + RUC/razón social emisor)',
+  })
+  @ApiBody({ type: UpdatePharmacyProfileDto })
+  async updatePharmacyProfile(
+    @Body() dto: UpdatePharmacyProfileDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.establishmentsService.updatePharmacyProfile(establishmentId, dto, actor);
   }
 
   @Post()
