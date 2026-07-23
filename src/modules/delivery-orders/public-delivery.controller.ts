@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
 import { DeliveryOrdersService } from './delivery-orders.service';
 import { PublicCreateDeliveryOrderDto } from './dto/delivery-order.dto';
@@ -10,6 +11,7 @@ export class PublicDeliveryController {
   constructor(private readonly service: DeliveryOrdersService) {}
 
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Get(':slug')
   @ApiOperation({ summary: 'Info pública del portal de pedidos' })
   getStore(@Param('slug') slug: string) {
@@ -17,6 +19,7 @@ export class PublicDeliveryController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post(':slug/orders')
   @ApiOperation({ summary: 'Crear pedido desde portal web público' })
   createOrder(@Param('slug') slug: string, @Body() dto: PublicCreateDeliveryOrderDto) {

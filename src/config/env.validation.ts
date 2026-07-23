@@ -29,7 +29,14 @@ export const envValidationSchema = Joi.object({
   /** Orígenes CORS adicionales separados por coma (producción). */
   CORS_ORIGINS: Joi.string().optional().allow(''),
   /** Clave AES-256 para secretos de facturación (32+ bytes en base64 o hex). Obligatoria en producción. */
-  BILLING_ENCRYPTION_KEY: Joi.string().min(32).optional().allow(''),
+  BILLING_ENCRYPTION_KEY: Joi.string().min(32).when('NODE_ENV', {
+    is: 'production',
+    then: Joi.required().messages({
+      'any.required':
+        'BILLING_ENCRYPTION_KEY es obligatoria en producción para cifrar secretos OSE',
+    }),
+    otherwise: Joi.optional().allow(''),
+  }),
   /** Clave AES-256 para cifrado de datos sensibles de salud (recetas, diagnósticos). Obligatoria en producción. */
   LPDP_SENSITIVE_ENCRYPTION_KEY: Joi.string().min(32).when('NODE_ENV', {
     is: 'production',

@@ -95,11 +95,16 @@ Copia y completa:
 - [ ] Crear database dedicada (ej. `miapp_db`).
 - [ ] `DATABASE_URL` interno en la app Coolify.
 - [ ] Migraciones aplicadas (entrypoint o comando local con URL pública).
+- [ ] **NUNCA** ejecutar `prisma db seed` / `pnpm run db:seed` contra la DB de producción (crea usuarios demo con contraseñas conocidas). El seed es solo para desarrollo local.
 
 ### 5. CORS / front
 
 - [ ] API: `FRONTEND_URL` + `CORS_ORIGINS` con el dominio HTTPS del front.
 - [ ] Front build: API base URL = dominio público del API (`https://api-..../api/v1`).
+
+### 5b. Beta FactoFarm (checklist completo)
+
+Ver `docs/BETA-LAUNCH-CHECKLIST.md` (SMTP, secretos, legales, uploads, Sentry, promesa comercial).
 
 ---
 

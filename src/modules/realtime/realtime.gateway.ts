@@ -15,9 +15,22 @@ import type { AuthJwtPayload } from '../auth/domain/auth.types';
 import { establishmentRoom, saleRoom } from './realtime.events';
 import { RealtimeService } from './realtime.service';
 
+function realtimeCorsOrigin(): boolean | string[] {
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+  const origins = [
+    process.env.FRONTEND_URL,
+    ...(process.env.CORS_ORIGINS?.split(',') ?? []),
+  ]
+    .map((v) => v?.trim())
+    .filter((v): v is string => !!v);
+  return origins.length > 0 ? origins : false;
+}
+
 @WebSocketGateway({
   namespace: '/realtime',
-  cors: { origin: true, credentials: true },
+  cors: { origin: realtimeCorsOrigin(), credentials: true },
 })
 export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);

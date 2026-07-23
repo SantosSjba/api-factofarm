@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-const DOCS_ROOT = join(process.cwd(), '..', 'docs');
+/** En Docker/prod: `/app/docs`. En monorepo local también puede resolverse desde cwd. */
+const DOCS_ROOT = join(process.cwd(), 'docs');
 
 @Injectable()
 export class LegalService {
@@ -20,11 +21,11 @@ export class LegalService {
   private getProviderInfo() {
     return {
       razonSocial:
-        this.config.get<string>('COMPANY_LEGAL_NAME')?.trim() || 'FactoFarm (configurar COMPANY_LEGAL_NAME)',
-      ruc: this.config.get<string>('COMPANY_RUC')?.trim() || '20XXXXXXXXX',
+        this.config.get<string>('COMPANY_LEGAL_NAME')?.trim() || 'FACTOSYS PERU S.A.C.',
+      ruc: this.config.get<string>('COMPANY_RUC')?.trim() || '20614608952',
       domicilio:
         this.config.get<string>('COMPANY_ADDRESS')?.trim() ||
-        'Lima, Perú (configurar COMPANY_ADDRESS)',
+        'Trujillo, La Libertad, Perú. Atendemos todo el Perú (24 departamentos y Callao).',
     };
   }
 
