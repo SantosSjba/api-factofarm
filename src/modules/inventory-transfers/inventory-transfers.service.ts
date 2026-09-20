@@ -195,6 +195,11 @@ export class InventoryTransfersService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.inventoryStockTransfer.updateMany({
+        where: { id, estado: InventoryTransferStatus.BORRADOR, deletedAt: null },
+        data: { estado: InventoryTransferStatus.EN_TRANSITO, fechaEnvio: new Date() },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('La transferencia ya fue despachada o anulada');
       for (const item of transfer.items) {
         await this.applyStockDelta(tx, {
           productId: item.productId,
@@ -247,10 +252,20 @@ export class InventoryTransfersService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.inventoryStockTransfer.updateMany({
+        where: { id, estado: InventoryTransferStatus.EN_TRANSITO, deletedAt: null },
+        data: { estado: InventoryTransferStatus.RECIBIDO, fechaRecepcion: new Date() },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('La transferencia ya fue recibida');
       for (const item of transfer.items) {
+        const sourceLot = item.codigoLote ? await tx.productLotStock.findFirst({
+          where: { productId: item.productId, warehouseId: transfer.fromWarehouseId, codigoLote: item.codigoLote, deletedAt: null },
+          select: { fechaVencimiento: true },
+        }) : null;
         await this.applyStockDelta(tx, {
           productId: item.productId,
           warehouseId: transfer.toWarehouseId,
+          expirationDate: sourceLot?.fechaVencimiento,
           lotCode: item.codigoLote,
           delta: item.cantidad,
           movementType: InventoryMovementType.TRANSFERENCIA_ENTRADA,
@@ -286,10 +301,11 @@ export class InventoryTransfersService {
       throw new BadRequestException('Solo se pueden anular transferencias en borrador');
     }
 
-    await this.prisma.inventoryStockTransfer.update({
-      where: { id },
+    const cancelled = await this.prisma.inventoryStockTransfer.updateMany({
+      where: { id, estado: InventoryTransferStatus.BORRADOR, deletedAt: null },
       data: { estado: InventoryTransferStatus.ANULADO },
     });
+    if (cancelled.count !== 1) throw new BadRequestException('La transferencia ya no está en borrador');
 
     await this.audit.log({
       userId: actor.sub,
@@ -353,6 +369,7 @@ export class InventoryTransfersService {
       unitCost: Prisma.Decimal | null;
       reference: string;
       userId?: string;
+      expirationDate?: Date | null;
     },
   ) {
     const absQty = input.delta.abs();
@@ -381,6 +398,7 @@ export class InventoryTransfersService {
         cantidad: input.delta,
         costoUnitario: input.unitCost,
         codigoLote: input.lotCode,
+        fechaVencimiento: input.expirationDate,
         referencia: input.reference,
         userId: input.userId ?? null,
       },
@@ -401,15 +419,16 @@ export class InventoryTransfersService {
         if (!lot || lot.stock.lessThan(absQty)) {
           throw new BadRequestException(`Stock insuficiente en lote ${input.lotCode}`);
         }
-        await tx.productLotStock.update({
-          where: { id: lot.id },
-          data: { stock: lot.stock.plus(input.delta) },
+        const updated = await tx.productLotStock.updateMany({
+          where: { id: lot.id, stock: { gte: absQty }, deletedAt: null },
+          data: { stock: { decrement: absQty } },
         });
+        if (updated.count !== 1) throw new BadRequestException(`Stock insuficiente en lote ${input.lotCode}`);
       } else if (lot) {
         await tx.productLotStock.update({
           where: { id: lot.id },
           data: {
-            stock: lot.stock.plus(input.delta),
+            stock: { increment: input.delta },
             costoUnitario: input.unitCost ?? undefined,
           },
         });
@@ -421,20 +440,20 @@ export class InventoryTransfersService {
             codigoLote: input.lotCode,
             stock: input.delta,
             costoUnitario: input.unitCost,
+            fechaVencimiento: input.expirationDate,
           },
         });
       }
     }
 
-    const warehouseStock = await tx.productWarehouseStock.findUnique({
-      where: {
-        productId_warehouseId: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-        },
-      },
-      select: { cantidad: true },
-    });
+    if (input.delta.isNegative()) {
+      const updated = await tx.productWarehouseStock.updateMany({
+        where: { productId: input.productId, warehouseId: input.warehouseId, cantidad: { gte: absQty } },
+        data: { cantidad: { decrement: absQty } },
+      });
+      if (updated.count !== 1) throw new BadRequestException('Stock insuficiente para despachar la transferencia');
+      return;
+    }
 
     await tx.productWarehouseStock.upsert({
       where: {
@@ -444,7 +463,7 @@ export class InventoryTransfersService {
         },
       },
       update: {
-        cantidad: (warehouseStock?.cantidad ?? new Prisma.Decimal(0)).plus(input.delta),
+        cantidad: { increment: input.delta },
       },
       create: {
         productId: input.productId,

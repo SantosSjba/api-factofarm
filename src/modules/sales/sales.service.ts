@@ -930,6 +930,16 @@ export class SalesService {
         });
       }
 
+      if (dto.prescriptionId) {
+        await this.prescriptions.applyDispenseFromSale(
+          dto.prescriptionId,
+          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+          actor.sub,
+          tx,
+          actor.establecimientoId,
+          dto.substitutions,
+        );
+      }
       return sale.id;
     });
 
@@ -945,20 +955,6 @@ export class SalesService {
         `Post-commit billing emit failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
-
-    if (dto.prescriptionId) {
-      void this.prescriptions
-        .applyDispenseFromSale(
-          dto.prescriptionId,
-          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
-          actor.sub,
-        )
-        .catch((err) => {
-          this.logger.error(
-            `Post-commit prescription dispense failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-    }
 
     void this.pharmaceutical
       .recordControlledOutflow(

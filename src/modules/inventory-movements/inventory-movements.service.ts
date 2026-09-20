@@ -21,6 +21,7 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import * as XLSX from 'xlsx';
 import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
 import { CreateOutboundMovementDto } from './dto/create-outbound-movement.dto';
@@ -59,6 +60,7 @@ export class InventoryMovementsService {
     private readonly audit: AuditLogService,
     private readonly scope: EstablishmentScopeService,
     private readonly integrity: EntityIntegrityService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
@@ -906,7 +908,7 @@ export class InventoryMovementsService {
       }),
       this.prisma.warehouse.findFirst({
         where: { id: dto.warehouseId, deletedAt: null },
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, establishmentId: true },
       }),
       this.prisma.inventoryTransferReason.findFirst({
         where: { id: dto.transferReasonId, deletedAt: null, activo: true },
@@ -962,7 +964,7 @@ export class InventoryMovementsService {
           await tx.productLotStock.update({
             where: { id: existingLot.id },
             data: {
-              stock: existingLot.stock.plus(amount),
+              stock: { increment: amount },
               fechaVencimiento: fechaVencimiento ?? undefined,
               costoUnitario: unitCost ?? undefined,
             },
@@ -981,15 +983,6 @@ export class InventoryMovementsService {
         }
       }
 
-      const current = await tx.productWarehouseStock.findUnique({
-        where: {
-          productId_warehouseId: {
-            productId: product.id,
-            warehouseId: warehouse.id,
-          },
-        },
-        select: { cantidad: true },
-      });
       await tx.productWarehouseStock.upsert({
         where: {
           productId_warehouseId: {
@@ -997,7 +990,7 @@ export class InventoryMovementsService {
             warehouseId: warehouse.id,
           },
         },
-        update: { cantidad: (current?.cantidad ?? new Prisma.Decimal(0)).plus(amount) },
+        update: { cantidad: { increment: amount } },
         create: {
           productId: product.id,
           warehouseId: warehouse.id,
@@ -1018,9 +1011,10 @@ export class InventoryMovementsService {
       },
     });
 
-    return {
-      ok: true,
-      message: 'Ingreso registrado correctamente',
+      this.realtime.emitStockUpdated(warehouse.establishmentId, warehouse.id, product.id);
+      return {
+        ok: true,
+        message: 'Ingreso registrado correctamente',
     };
   }
 

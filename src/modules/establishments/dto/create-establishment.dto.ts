@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -46,19 +47,22 @@ export class CreateEstablishmentDto {
   @MaxLength(80)
   pais?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ example: '15', description: 'Código ubigeo departamento', maxLength: 10 })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(10)
   departmentId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ example: '1501', description: 'Código ubigeo provincia', maxLength: 10 })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(10)
   provinceId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ example: '150101', description: 'Código ubigeo distrito', maxLength: 10 })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(10)
   districtId?: string;
 
   @ApiPropertyOptional({ maxLength: 250 })
@@ -140,7 +144,8 @@ export class CreateEstablishmentDto {
   @IsEnum(InventoryLotAllocationMethod)
   inventoryLotAllocationMethod?: InventoryLotAllocationMethod;
 
-  @ApiPropertyOptional({ default: true, description: 'Bloquear venta de lotes vencidos' })
+  @ApiPropertyOptional({ default: true, description: 'Bloqueo obligatorio de venta de lotes vencidos' })
+  @Equals(true, { message: 'No se permite desactivar el bloqueo de venta de lotes vencidos' })
   @IsOptional()
   @IsBoolean()
   blockExpiredProductSales?: boolean;

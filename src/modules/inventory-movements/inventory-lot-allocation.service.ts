@@ -48,7 +48,7 @@ export class InventoryLotAllocationService {
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
     return {
       establishmentId: warehouse.establishmentId,
-      blockExpiredProductSales: warehouse.establishment.blockExpiredProductSales,
+      blockExpiredProductSales: true,
       inventoryLotAllocationMethod: warehouse.establishment.inventoryLotAllocationMethod,
     };
   }
@@ -81,7 +81,7 @@ export class InventoryLotAllocationService {
         ...row,
         vencido: this.isExpired(row.fechaVencimiento, now),
       }))
-      .filter((row) => !(resolvedPolicy.blockExpiredProductSales && row.vencido))
+      .filter((row) => !row.vencido)
       .sort((a, b) => this.compareLotsForAllocation(a, b, resolvedPolicy.inventoryLotAllocationMethod));
   }
 
@@ -92,6 +92,9 @@ export class InventoryLotAllocationService {
     let remaining = quantity;
     const lines: LotAllocationLine[] = [];
 
+    if (!quantity.isFinite() || quantity.lte(0)) {
+      throw new BadRequestException('La cantidad debe ser positiva y finita');
+    }
     for (const lot of lots) {
       if (remaining.lte(0)) break;
       if (lot.stock.lte(0)) continue;
@@ -117,7 +120,7 @@ export class InventoryLotAllocationService {
     return lots.reduce((acc, lot) => acc.plus(lot.stock), new Prisma.Decimal(0));
   }
 
-  /** Suma stock en lotes no vencidos (o todos si no bloquea vencidos) por producto. */
+  /** Solo los lotes no vencidos forman parte del stock vendible. */
   async batchSumEligibleStock(
     productIds: string[],
     warehouseId: string,
@@ -125,7 +128,7 @@ export class InventoryLotAllocationService {
     const totals = new Map<string, Prisma.Decimal>();
     if (!productIds.length) return totals;
 
-    const policy = await this.getPolicyFromWarehouse(warehouseId);
+    await this.getPolicyFromWarehouse(warehouseId);
     const now = new Date();
     const rows = await this.prisma.productLotStock.findMany({
       where: {
@@ -146,7 +149,7 @@ export class InventoryLotAllocationService {
     }
 
     for (const row of rows) {
-      if (policy.blockExpiredProductSales && this.isExpired(row.fechaVencimiento, now)) {
+      if (this.isExpired(row.fechaVencimiento, now)) {
         continue;
       }
       const current = totals.get(row.productId) ?? new Prisma.Decimal(0);
@@ -163,6 +166,7 @@ export class InventoryLotAllocationService {
   ): LotAllocationLine[] {
     const lotByCode = new Map(lots.map((lot) => [lot.codigoLote.toLowerCase(), lot]));
     const lines: LotAllocationLine[] = [];
+    const allocated = new Map<string, Prisma.Decimal>();
 
     for (const item of manualLots) {
       const code = item.lotCode.trim();
@@ -173,17 +177,19 @@ export class InventoryLotAllocationService {
       if (!lot) {
         throw new BadRequestException(`Lote no disponible para venta: ${code}`);
       }
-      if (policy.blockExpiredProductSales && lot.vencido) {
+      if (lot.vencido) {
         throw new BadRequestException(`No se puede vender el lote vencido: ${code}`);
       }
       const qty = new Prisma.Decimal(item.quantity);
-      if (qty.lte(0)) {
+      if (!qty.isFinite() || qty.lte(0)) {
         throw new BadRequestException(`Cantidad inválida para el lote ${code}`);
       }
-      if (lot.stock.lessThan(qty)) {
+      const total = (allocated.get(lot.id) ?? new Prisma.Decimal(0)).plus(qty);
+      if (lot.stock.lessThan(total)) {
         throw new BadRequestException(`Stock insuficiente en el lote ${code}`);
       }
       lines.push(this.toAllocationLine(lot, qty));
+      allocated.set(lot.id, total);
     }
 
     return lines;
@@ -194,7 +200,7 @@ export class InventoryLotAllocationService {
     blockExpiredProductSales: boolean,
     lotCode?: string,
   ) {
-    if (blockExpiredProductSales && this.isExpired(fechaVencimiento)) {
+    if (this.isExpired(fechaVencimiento)) {
       throw new BadRequestException(
         lotCode
           ? `No se puede despachar el lote vencido: ${lotCode}`

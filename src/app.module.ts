@@ -72,6 +72,7 @@ import { DataRetentionModule } from './modules/data-retention/data-retention.mod
     }),
     LoggerModule.forRoot({
       pinoHttp: {
+        redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
         transport:
           process.env.NODE_ENV !== 'production'
             ? { target: 'pino-pretty', options: { singleLine: true } }

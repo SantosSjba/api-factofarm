@@ -46,6 +46,7 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
       { log: jest.fn() } as never,
       {} as never,
       {} as never,
+      { emitStockUpdated: jest.fn() } as never,
     );
 
     const result = await service.dispatchSaleStock(
@@ -103,6 +104,7 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
       { log: jest.fn() } as never,
       {} as never,
       {} as never,
+      { emitStockUpdated: jest.fn() } as never,
     );
 
     await expect(

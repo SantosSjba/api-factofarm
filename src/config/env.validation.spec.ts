@@ -15,6 +15,7 @@ describe('env.validation', () => {
   it('exige LPDP_SENSITIVE_ENCRYPTION_KEY en producción', () => {
     const { error } = envValidationSchema.validate({
       NODE_ENV: 'production',
+      BILLING_ENCRYPTION_KEY: 'b'.repeat(32),
       JWT_SECRET: 'x'.repeat(32),
       DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
     });
@@ -22,12 +23,14 @@ describe('env.validation', () => {
   });
 
   it('deshabilita Swagger por defecto en producción', () => {
-    const { value } = envValidationSchema.validate({
+    const { value, error } = envValidationSchema.validate({
       NODE_ENV: 'production',
+      BILLING_ENCRYPTION_KEY: 'b'.repeat(32),
       JWT_SECRET: 'x'.repeat(32),
       DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
       LPDP_SENSITIVE_ENCRYPTION_KEY: 'y'.repeat(32),
     });
+    expect(error).toBeUndefined();
     expect(value.SWAGGER_ENABLED).toBe(false);
   });
 

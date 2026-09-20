@@ -2,6 +2,7 @@ import { PleService } from './ple.service';
 
 describe('PleService', () => {
   const prisma = {
+    establishment: { findFirst: jest.fn().mockResolvedValue({ timeZone: 'America/Lima' }) },
     establishmentBillingConfig: { findUnique: jest.fn().mockResolvedValue({ rucEmisor: '20123456789' }) },
     sale: {
       findMany: jest.fn(),

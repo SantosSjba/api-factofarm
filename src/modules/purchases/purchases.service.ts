@@ -20,6 +20,7 @@ import {
 } from '../../common/utils/timezone.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   CreateGoodsReceiptDto,
@@ -40,6 +41,7 @@ export class PurchasesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly scope: EstablishmentScopeService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // —— Órdenes de compra ——
@@ -238,11 +240,16 @@ export class PurchasesService {
     const productIds = [...new Set(po.items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, deletedAt: null },
-      select: { id: true, manejaLotes: true, nombre: true },
+      select: {
+        id: true, manejaLotes: true, nombre: true, incluyeIgvCompra: true,
+        purchaseTaxAffectation: { select: { codigo: true } },
+        saleTaxAffectation: { select: { codigo: true } },
+      },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
 
     let receiptTotal = new Prisma.Decimal(0);
+    const receivedInRequest = new Map<string, Prisma.Decimal>();
     const receiptLines: Array<{
       purchaseOrderItemId: string;
       productId: string;
@@ -257,13 +264,19 @@ export class PurchasesService {
       const poItem = itemMap.get(line.purchaseOrderItemId);
       if (!poItem) throw new BadRequestException(`Ítem ${line.purchaseOrderItemId} no pertenece a la OC`);
       const qty = new Prisma.Decimal(line.quantity);
+      if (!qty.isFinite() || qty.lte(0)) {
+        throw new BadRequestException('La cantidad recibida debe ser positiva y finita');
+      }
       const pending = poItem.cantidadPedida.minus(poItem.cantidadRecibida);
-      if (qty.greaterThan(pending)) {
+      const requested = (receivedInRequest.get(poItem.id) ?? new Prisma.Decimal(0)).plus(qty);
+      if (requested.greaterThan(pending)) {
         throw new BadRequestException(
           `Cantidad excede lo pendiente para ${poItem.productId}: pendiente ${pending.toString()}`,
         );
       }
+      receivedInRequest.set(poItem.id, requested);
       const product = productById.get(poItem.productId);
+      if (!product) throw new BadRequestException('Producto de la orden no disponible');
       const codigoLote = line.lotCode?.trim() || null;
       if (product?.manejaLotes && qty.greaterThan(0) && !codigoLote) {
         throw new BadRequestException(
@@ -273,7 +286,14 @@ export class PurchasesService {
       const cost = line.unitCost != null
         ? new Prisma.Decimal(line.unitCost)
         : poItem.precioUnitario;
-      receiptTotal = receiptTotal.plus(cost.times(qty));
+      if (!cost.isFinite() || cost.lt(0)) throw new BadRequestException('Costo unitario inválido');
+      const totals = computeSaleLineTotals({
+        unitPrice: cost,
+        quantity: qty,
+        incluyeIgv: product.incluyeIgvCompra,
+        taxCodigo: product.purchaseTaxAffectation?.codigo ?? product.saleTaxAffectation.codigo,
+      });
+      receiptTotal = receiptTotal.plus(totals.totalLinea);
       receiptLines.push({
         purchaseOrderItemId: poItem.id,
         productId: poItem.productId,
@@ -288,6 +308,19 @@ export class PurchasesService {
     const grNumero = await this.nextGoodsReceiptNumber(establishmentId);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Serialize receipts for an order and recheck its state under the row lock.
+      const claimed = await tx.purchaseOrder.updateMany({
+        where: {
+          id: po.id,
+          establishmentId,
+          deletedAt: null,
+          estado: { in: [PurchaseOrderStatus.ENVIADA, PurchaseOrderStatus.PARCIALMENTE_RECIBIDA] },
+        },
+        data: { estado: PurchaseOrderStatus.PARCIALMENTE_RECIBIDA },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('La orden ya no admite recepciones');
+      }
       const gr = await tx.goodsReceipt.create({
         data: {
           purchaseOrderId: po.id,
@@ -312,10 +345,16 @@ export class PurchasesService {
       });
 
       for (const line of receiptLines) {
-        await tx.purchaseOrderItem.update({
-          where: { id: line.purchaseOrderItemId },
-          data: { cantidadRecibida: line.poItem.cantidadRecibida.plus(line.cantidad) },
+        const received = await tx.purchaseOrderItem.updateMany({
+          where: {
+            id: line.purchaseOrderItemId,
+            cantidadRecibida: { lte: line.poItem.cantidadPedida.minus(line.cantidad) },
+          },
+          data: { cantidadRecibida: { increment: line.cantidad } },
         });
+        if (received.count !== 1) {
+          throw new BadRequestException('La cantidad excede lo pendiente de recepción');
+        }
 
         await tx.inventoryInboundMovement.create({
           data: {
@@ -347,7 +386,7 @@ export class PurchasesService {
             await tx.productLotStock.update({
               where: { id: existingLot.id },
               data: {
-                stock: existingLot.stock.plus(line.cantidad),
+                stock: { increment: line.cantidad },
                 fechaVencimiento: line.fechaVencimiento ?? undefined,
                 costoUnitario: line.costoUnitario,
               },
@@ -366,15 +405,6 @@ export class PurchasesService {
           }
         }
 
-        const current = await tx.productWarehouseStock.findUnique({
-          where: {
-            productId_warehouseId: {
-              productId: line.productId,
-              warehouseId: po.warehouseId,
-            },
-          },
-          select: { cantidad: true },
-        });
         await tx.productWarehouseStock.upsert({
           where: {
             productId_warehouseId: {
@@ -382,7 +412,7 @@ export class PurchasesService {
               warehouseId: po.warehouseId,
             },
           },
-          update: { cantidad: (current?.cantidad ?? new Prisma.Decimal(0)).plus(line.cantidad) },
+          update: { cantidad: { increment: line.cantidad } },
           create: {
             productId: line.productId,
             warehouseId: po.warehouseId,
@@ -444,6 +474,7 @@ export class PurchasesService {
       entityId: result.goodsReceiptId,
     });
 
+    this.realtime.emitStockUpdated(establishmentId, po.warehouseId);
     return this.getPurchaseOrder(purchaseOrderId, establishmentId);
   }
 

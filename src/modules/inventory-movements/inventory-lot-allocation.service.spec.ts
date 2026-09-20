@@ -4,6 +4,11 @@ import { InventoryLotAllocationService, type EligibleLotRow } from './inventory-
 
 describe('InventoryLotAllocationService', () => {
   const service = new InventoryLotAllocationService({} as never);
+  const policy = {
+    establishmentId: 'e1',
+    blockExpiredProductSales: true,
+    inventoryLotAllocationMethod: InventoryLotAllocationMethod.FEFO,
+  };
 
   const lot = (
     codigoLote: string,
@@ -63,5 +68,35 @@ describe('InventoryLotAllocationService', () => {
     expect(() => service.planAutoAllocation(lots, new Prisma.Decimal(5))).toThrow(
       /Stock vendible por lotes: 2/,
     );
+  });
+
+  it('acumula referencias repetidas al mismo lote sin permitir sobreventa', () => {
+    const lots = [lot('L-1', 5, null, new Date())];
+    expect(() => service.planManualAllocation(lots, [
+      { lotCode: 'L-1', quantity: 3 },
+      { lotCode: ' l-1 ', quantity: 3 },
+    ], policy)).toThrow(/Stock insuficiente/);
+    expect(lots[0].stock.toString()).toBe('5');
+    expect(service.planManualAllocation(lots, [
+      { lotCode: 'L-1', quantity: 2 },
+      { lotCode: 'L-1', quantity: 3 },
+    ], policy).map((line) => line.cantidad)).toEqual(['2', '3']);
+  });
+
+  it.each([0, -1, NaN, Infinity])('rechaza cantidades inválidas: %s', (quantity) => {
+    const lots = [lot('L-1', 5, null, new Date())];
+    expect(() => service.planAutoAllocation(lots, new Prisma.Decimal(quantity))).toThrow(BadRequestException);
+    expect(() => service.planManualAllocation(lots, [{ lotCode: 'L-1', quantity }], policy)).toThrow(BadRequestException);
+  });
+
+  it('bloquea lotes vencidos incluso con una configuración antigua desactivada', async () => {
+    const expired = lot('OLD', 4, new Date('2020-01-01'), new Date('2020-01-01'));
+    const legacyPolicy = { ...policy, blockExpiredProductSales: false };
+    const listing = new InventoryLotAllocationService({ productLotStock: {
+      findMany: jest.fn().mockResolvedValue([expired]),
+    } } as never);
+    expect(await listing.listEligibleLots('p', 'w', legacyPolicy)).toEqual([]);
+    expect(() => service.planManualAllocation([expired], [{ lotCode: 'OLD', quantity: 1 }], legacyPolicy)).toThrow(/vencido/);
+    expect(() => service.assertLotSellable(expired.fechaVencimiento, false)).toThrow(/vencido/);
   });
 });

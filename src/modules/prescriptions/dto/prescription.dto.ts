@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  Matches,
   IsArray,
   IsDateString,
   IsEnum,
@@ -26,6 +28,7 @@ export class PrescriptionItemDto {
 
   @ApiProperty({ example: '2' })
   @IsString()
+  @Matches(/^\d{1,14}(\.\d{1,4})?$/, { message: 'Cantidad prescrita inválida (máximo 4 decimales)' })
   cantidadPrescrita!: string;
 
   @ApiPropertyOptional()
@@ -85,6 +88,7 @@ export class CreatePrescriptionDto {
 
   @ApiProperty({ type: [PrescriptionItemDto] })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => PrescriptionItemDto)
   items!: PrescriptionItemDto[];
@@ -107,10 +111,24 @@ export class PrescriptionListQueryDto extends PaginationQueryDto {
   search?: string;
 }
 
+export class DispensePrescriptionItemDto {
+  @ApiProperty()
+  @IsUUID()
+  productId!: string;
+
+  @ApiProperty({ example: '2' })
+  @IsString()
+  @Matches(/^\d{1,14}(\.\d{1,4})?$/, { message: 'Cantidad a dispensar inválida (máximo 4 decimales)' })
+  cantidad!: string;
+}
+
 export class DispensePrescriptionDto {
-  @ApiProperty({ type: [Object] })
+  @ApiProperty({ type: [DispensePrescriptionItemDto] })
   @IsArray()
-  items!: Array<{ productId: string; cantidad: string }>;
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => DispensePrescriptionItemDto)
+  items!: DispensePrescriptionItemDto[];
 }
 
 export class AttachPrescriptionImageDto {

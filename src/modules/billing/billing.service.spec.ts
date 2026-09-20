@@ -9,6 +9,7 @@ describe('BillingService', () => {
       upsert: jest.fn(),
     },
     electronicDocument: {
+      findFirst: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
     },

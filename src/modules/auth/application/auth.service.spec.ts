@@ -53,7 +53,7 @@ describe('AuthService (integration-ish)', () => {
     });
 
     jest.spyOn(require('bcrypt'), 'compare').mockResolvedValue(true);
-    jest.spyOn(service as never, 'issueTokens').mockResolvedValue({
+    jest.spyOn(service as unknown as { issueTokens: (...args: unknown[]) => Promise<unknown> }, 'issueTokens').mockResolvedValue({
       accessToken: 'a',
       refreshToken: 'r',
       user: {} as never,

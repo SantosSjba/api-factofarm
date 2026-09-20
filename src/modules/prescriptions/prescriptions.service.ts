@@ -120,9 +120,17 @@ export class PrescriptionsService {
 
   async create(establishmentId: string, dto: CreatePrescriptionDto, actor: JwtRequestUser) {
     if (dto.items.length === 0) throw new BadRequestException('La receta requiere al menos un ítem');
+    if (new Set(dto.items.map((item) => item.productId)).size !== dto.items.length) {
+      throw new BadRequestException('No repita productos en la receta');
+    }
+    if (dto.validUntil && new Date(dto.validUntil) < new Date(dto.fechaEmision)) {
+      throw new BadRequestException('El vencimiento de la receta no puede ser anterior a su emisión');
+    }
 
     await this.scope.assertCustomerInTenant(actor, dto.customerId);
     for (const item of dto.items) {
+      const quantity = new Prisma.Decimal(item.cantidadPrescrita);
+      if (!quantity.isFinite() || quantity.lte(0)) throw new BadRequestException('La cantidad prescrita debe ser positiva');
       await this.scope.assertProductInTenant(actor, item.productId);
     }
     if (dto.imagenArchivoId) {
@@ -261,21 +269,41 @@ export class PrescriptionsService {
     prescriptionId: string,
     saleItems: Array<{ productId: string; cantidad: Prisma.Decimal }>,
     actorId?: string,
+    transaction?: Prisma.TransactionClient,
+    establishmentId?: string,
+    substitutions?: Array<{ originalProductId: string; substituteProductId: string }>,
   ) {
-    const prescription = await this.prisma.prescription.findUnique({
-      where: { id: prescriptionId },
-      include: { items: true },
-    });
-    if (!prescription) return;
-
-    await this.prisma.$transaction(async (tx) => {
+    const dispense = async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.prescription.updateMany({
+        where: {
+          id: prescriptionId,
+          ...(establishmentId ? { establishmentId } : {}),
+          deletedAt: null,
+          estado: { in: [PrescriptionStatus.ACTIVA, PrescriptionStatus.PARCIALMENTE_DISPENSADA] },
+          OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
+        },
+        data: { estado: PrescriptionStatus.PARCIALMENTE_DISPENSADA },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Receta no válida, vencida o completada');
+      const prescription = await tx.prescription.findUniqueOrThrow({
+        where: { id: prescriptionId },
+        include: { items: true },
+      });
       for (const saleItem of saleItems) {
-        const line = prescription.items.find((i) => i.productId === saleItem.productId);
-        if (!line) continue;
-        await tx.prescriptionItem.update({
-          where: { id: line.id },
-          data: { cantidadDispensada: line.cantidadDispensada.plus(saleItem.cantidad) },
+        const productId = substitutions?.find((s) => s.substituteProductId === saleItem.productId)?.originalProductId ?? saleItem.productId;
+        const line = prescription.items.find((i) => i.productId === productId);
+        if (!line) throw new BadRequestException('El producto no está en la receta indicada');
+        if (!saleItem.cantidad.isFinite() || saleItem.cantidad.lte(0)) {
+          throw new BadRequestException('Cantidad a dispensar inválida');
+        }
+        const updated = await tx.prescriptionItem.updateMany({
+          where: {
+            id: line.id,
+            cantidadDispensada: { lte: line.cantidadPrescrita.minus(saleItem.cantidad) },
+          },
+          data: { cantidadDispensada: { increment: saleItem.cantidad } },
         });
+        if (updated.count !== 1) throw new BadRequestException('Cantidad a dispensar excede lo prescrito pendiente');
       }
 
       const updatedItems = await tx.prescriptionItem.findMany({ where: { prescriptionId } });
@@ -288,7 +316,12 @@ export class PrescriptionsService {
           : PrescriptionStatus.ACTIVA;
 
       await tx.prescription.update({ where: { id: prescriptionId }, data: { estado } });
-    });
+    };
+    if (transaction) {
+      await dispense(transaction);
+      return;
+    }
+    await this.prisma.$transaction(dispense);
 
     await this.audit.log({
       userId: actorId,
@@ -309,7 +342,7 @@ export class PrescriptionsService {
       cantidad: new Prisma.Decimal(i.cantidad),
     }));
     await this.validateForSale(id, establishmentId, items);
-    await this.applyDispenseFromSale(id, items, actorId);
+    await this.applyDispenseFromSale(id, items, actorId, undefined, establishmentId);
     return this.findOne(id, establishmentId);
   }
 

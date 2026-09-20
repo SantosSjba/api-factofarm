@@ -35,10 +35,14 @@ type PosCatalogItem = {
   precio?: string | number;
 };
 
-export async function loginAsAdmin(app: INestApplication<App>): Promise<AuthContext> {
+export async function loginAs(
+  app: INestApplication<App>,
+  email: string,
+  password: string,
+): Promise<AuthContext> {
   const res = await request(app.getHttpServer())
     .post('/api/v1/auth/login')
-    .send(DEMO_ADMIN)
+    .send({ email, password })
     .expect(200);
 
   return {
@@ -46,6 +50,19 @@ export async function loginAsAdmin(app: INestApplication<App>): Promise<AuthCont
     userId: res.body.user.id,
     establishmentId: res.body.user.establecimientoId,
   };
+}
+
+export async function loginAsAdmin(app: INestApplication<App>): Promise<AuthContext> {
+  return loginAs(app, DEMO_ADMIN.email, DEMO_ADMIN.password);
+}
+
+/** Mismo establecimiento 0000 que admin — sirve para vender y que admin anule. */
+export async function loginAsAdminCadena(app: INestApplication<App>): Promise<AuthContext> {
+  return loginAs(app, 'admin.cadena@factosysperu.com', 'Cadena123!');
+}
+
+export async function loginAsCajero(app: INestApplication<App>): Promise<AuthContext> {
+  return loginAs(app, 'cajero@factosysperu.com', 'Cajero123!');
 }
 
 async function findWarehouseWithStock(
@@ -186,6 +203,10 @@ export async function waitForSaleBillingAccepted(
   throw new Error(`Timeout esperando sunatStatus ACEPTADO para venta ${saleId}`);
 }
 
+/**
+ * Flujo POS con nota de venta (válido sin OSE real).
+ * Para boleta/CPE se requiere proveedor OSE distinto de MOCK.
+ */
 export async function runPosSaleFlow(app: INestApplication<App>, ctx: PosContext) {
   const bearer = { Authorization: `Bearer ${ctx.token}` };
 
@@ -198,19 +219,11 @@ export async function runPosSaleFlow(app: INestApplication<App>, ctx: PosContext
     .send({
       warehouseId: ctx.warehouseId,
       cashSessionId: session.id,
-      documentType: 'BOLETA',
+      documentType: 'NOTA_VENTA',
       items: [{ productId: ctx.productId, quantity: 1 }],
       payments: [{ metodo: 'EFECTIVO', monto: ctx.productPrice }],
     })
     .expect(201);
-
-  const cpe = await request(app.getHttpServer())
-    .post(`/api/v1/billing/sales/${sale.body.id}/emit`)
-    .set(bearer)
-    .send({})
-    .expect(201);
-
-  const billingStatus = await waitForSaleBillingAccepted(app, ctx.token, sale.body.id);
 
   const close = await request(app.getHttpServer())
     .post(`/api/v1/cash-registers/sessions/${session.id}/close`)
@@ -218,5 +231,10 @@ export async function runPosSaleFlow(app: INestApplication<App>, ctx: PosContext
     .send({ montoCierreFisico: ctx.productPrice, notasCierre: 'E2E' })
     .expect(201);
 
-  return { session: { body: session }, sale, cpe: { body: { ...cpe.body, sunatStatus: billingStatus.sunatStatus } }, close };
+  return {
+    session: { body: session },
+    sale,
+    cpe: { body: { sunatStatus: null as string | null, skipped: true } },
+    close,
+  };
 }
