@@ -46,7 +46,11 @@ npm test -- --testPathPatterns=timezone.util.spec
 | QA-UI-05 | Densidad admin (caja/recepción/listas) | **fixed** | Padding shell ↓; recepción auto-carga ítems |
 | QA-UI-06 | Header rings + Usuarios/Establecimientos | **PASS** | Rings sin clip; CRUD OK; smoke rutas menú |
 | QA-UI-07 | Usuarios/Establecimientos responsive + CRUD real | **PASS** | 390/768/1440; CRUD persistente QA-*; seed intacto |
-| QA-UI-08 | Login completo (+ fix logo) | **PASS** | Contraste logo; matriz A–F; Enter submit; build OK |
+| QA-UI-08 | Login completo (+ fix logo) | **PASS** | Contraste; sin logo duplicado móvil; full-bleed; Enter submit |
+| QA-UI-09 | Dashboards completo (shell por rol) | **PASS** | Admin A–D; smoke E1–E6; CTA caja cajero; build OK |
+| QA-UI-10 | Usuarios completo + compactación | **PASS** | Densidad H1/filas/cards; CRUD QA; 390/768/1440 |
+| QA-UI-11 | Usuarios validación Número/celular + QA live | **PASS** | DNI `eds` → error; API 400; árbol permisos; builds OK |
+| QA-UI-12 | Foto usuario + MinIO/storage | **PASS** | upload+GET Bearer; preview `blob:`; `users.write` en upload |
 
 ---
 
@@ -145,7 +149,8 @@ npm test -- --testPathPatterns=timezone.util.spec
 
 #### Causa del logo
 - No era 404: `logo-nav.png` responde **200**. En panel `brand-950` el logo oscuro quedaba ilegible.
-- **Fix:** chip blanco + `logo-nav.png` en aside; logo compacto en columna form (`lg:hidden`) para móvil.
+- **Fix:** chip blanco + `logo-nav.png` en aside; franja móvil full-bleed (`:host { display:block; width:100% }`).
+- **Ajuste posterior:** se quitó el logo extra en la columna form (duplicado en móvil) y el toggle de tema pasó a la franja en `<lg`.
 
 #### Matriz A–F (navegador)
 | ID | Caso | Resultado |
@@ -173,11 +178,132 @@ npm test -- --testPathPatterns=timezone.util.spec
 | F4 | `aria-invalid` / `role=alert` | **PASS** (error API + hints) |
 
 #### Bugs corregidos en este pase
-1. Contraste logo auth (chip blanco + asset `logo-nav.png` + logo form móvil).
-2. Errores de login no se limpiaban al editar → `(input)` en form.
-3. Enter no enviaba el form → `app-button` acepta `type="submit"`; signin usa submit + `ngSubmit` (sin doble `btnClick`).
+1. Contraste logo auth (chip blanco + asset `logo-nav.png`).
+2. Logo duplicado + margen lateral en móvil → un solo logo en franja; `:host` block 100%; toggle en franja móvil.
+3. Errores de login no se limpiaban al editar → `(input)` en form.
+4. Enter no enviaba el form → `app-button` acepta `type="submit"`; signin usa submit + `ngSubmit` (sin doble `btnClick`).
 
 - **Build front:** `pnpm run build` OK (2026-09-20).
+
+### QA-UI-09 — Dashboards completo (shell por rol) (2026-09-20)
+- **Entorno:** front `localhost:4200/dashboard` + API `localhost:3000` (DB connected); demo `admin@factosysperu.com` / `Admin123!`; viewports CDP **390 / 768 / 1440** + theme light/dark.
+- **Usuarios smoke (temporales):** `qa.dash.*@test.local` / `QaDash123!` (gerente, farmacéutico, cajero, almacenero, contador); eliminados al final.
+- **Precondición técnica:** `prebundle.exclude` TanStack en `angular.json` (sin NG0203 / `injectQuery` en `/dashboard`).
+
+#### Matriz A–F
+| ID | Caso | Resultado |
+|----|------|-----------|
+| A1 | Login admin → `/dashboard` | **PASS** (título admin/cadena; sin NG0203) |
+| A2 | Menú lateral usable | **PASS** (Dashboard activo) |
+| A3 | Guest sin token → login | **PASS** |
+| A4 | `defaultHomePath` cajero → POS; `/dashboard` accesible | **PASS** (`/punto-venta`; Mi panel OK) |
+| B1 | KPI cards (usuarios/estabs/clientes/productos) | **PASS** (10 / 2 / 2 / 7 vs API) |
+| B2 | Chart 14d | **PASS** (series visibles) |
+| B3 | Alertas inventario + links | **PASS** |
+| B4 | Chain summary | **PASS** (2 sucursales; scroll OK) |
+| B5 | Loading → content | **PASS** (`page-state` + skeletons) |
+| B6 | Error + Reintentar | **PASS** (bloqueo Network + retry) |
+| B7 | Valores vs API 200 | **PASS** |
+| C1–C4 | Onboarding banner (visible / links / dismiss / restore) | **PASS** (`localStorage`) |
+| D1–D3 | 390 / 768 / 1440 | **PASS** (sin overflow-x; grids estables) |
+| D4 | Dark/light | **PASS** |
+| D5–D6 | Densidad + focus/links | **PASS** |
+| E1 | GERENTE_SUCURSAL → panel gerente | **PASS** (ventas/cajas/personal) |
+| E2 | FARMACEUTICO → panel farmacéutico | **PASS** (recetas/anulaciones/controlados) |
+| E3 | CAJERO → panel cajero | **PASS** (CTA caja + POS; Abrir caja →) |
+| E4 | ALMACENERO → panel almacén | **PASS** (links inventario/traslados/OC/frío) |
+| E5 | CONTADOR → panel contabilidad | **PASS** (CPE/jobs + CxP/CxC) |
+| E6 | Shell routing (no admin por defecto) | **PASS** |
+| F1 | Console limpia / sin NG0203 | **PASS** |
+| F2 | `pnpm run build` | **PASS** |
+| F3 | Documentar QA-UI-09 | **PASS** |
+
+#### Bugs corregidos en este pase
+1. CTAs cajero “Ir a caja” / “Ir al POS” no proyectaban en `app-page-toolbar` → falta `data-toolbar-actions` en el wrapper (fix en `dash-cashier.component.ts`). Card “Abrir caja →” a `/caja-chica-pos` ya OK.
+
+- **Cleanup:** 5 usuarios `QA Dash *` eliminados vía API.
+- **Build front:** `pnpm run build` OK (2026-09-20).
+
+### QA-UI-10 — Usuarios completo + compactación (2026-09-20)
+- **Entorno:** front `localhost:4200/usuarios` + API `localhost:3000`; demo `admin@factosysperu.com` / `Admin123!`; viewports CDP **390 / 768 / 1440** + theme light/dark.
+- **Datos QA:** `QA Usuario Temp` → `QA Usuario Editado` / `qa.user.<ts>@test.local` (eliminado al final; seed intacto).
+
+#### Densidad (baseline → post-fix)
+| Métrica | Antes | Después |
+|---------|-------|---------|
+| H1 | 36px (`sm:text-title-md`) | **30px** (`text-title-sm`) |
+| Fila card @390 | ~335px | **~161px** |
+| Modo @768 | cards (overflow) | **tabla real** (`naturalWidth` ~722) |
+| Columna Api Token | siempre `—` | **eliminada** |
+
+#### Matriz A–F
+| ID | Caso | Resultado |
+|----|------|-----------|
+| A1–A3 | Acceso `/usuarios`, breadcrumb, Nuevo | **PASS** |
+| B1–B5 | Listado densificado; acciones; Admin sin Eliminar; paginación | **PASS** |
+| C1–C4 | Buscar / rol Cajero / Limpiar / sin coincidencias | **PASS** |
+| D1 | Crear QA + permisos | **PASS** |
+| D2 | Tabs Personales / Documentos | **PASS** |
+| D3 | Editar nombre → listado | **PASS** |
+| D4 | Permisos fila → toggle → Cancelar | **PASS** |
+| D5 | Eliminar QA (confirm) | **PASS** |
+| D6 | Validación email/password (yup + toast) | **PASS** |
+| D7 | Select Establecimiento (2 opts) | **PASS** |
+| E1–E6 | 390/768/1440; dark/light; márgenes | **PASS** |
+| F1–F3 | Console OK; build; docs | **PASS** |
+
+#### Bugs corregidos en este pase
+1. H1 demasiado grande → quitar `sm:text-title-md`; breadcrumb sin `mb-5`.
+2. Columna **Api Token** placeholder (`apiTokenCell()` → `—`) eliminada del listado.
+3. Celdas `px-5 py-4` → `px-3 py-2.5`; `#`/`Establecimiento` responsive; card header denser vía clase local.
+4. Cards móviles densas: clase `ff-usuarios-list` + CSS en `styles.css`.
+5. Modal form: padding/gaps `sm:px-6`, `gap-3`, `mt-1.5`; delete confirm `text-lg`.
+
+- **Build front:** `pnpm run build` OK (2026-09-20).
+
+### QA-UI-11 — Usuarios validación completa + fix Número (2026-09-20)
+- **Entorno:** front `localhost:4200/usuarios` + API `localhost:3000` (reiniciado tras DTO); demo `admin@factosysperu.com` / `Admin123!`.
+- **Hallazgo previo:** en Datos personales, **Número** aceptaba `"eds"` (solo `max(20)`). Correo personal sí validaba.
+
+#### Fix
+1. Front (`usuario-form-modal`): formato por `tipoDoc` — DNI `^\d{8}$`, CE 9–12 alfanum., PASAPORTE 6–12, OTRO 1–20 alfanum./guiones; celulares `^\+?\d{7,15}$`; mensajes live + bloqueo en Guardar.
+2. API: `IsPeruDocument` en `UserProfileDto.numeroDocumento` + `Matches` celulares; helpers en `peru-documents.ts` (PASAPORTE/OTRO).
+3. Tras redeploy/restart API: `POST /users` con DNI `eds` → **400** `profile.DNI debe tener 8 dígitos.`
+
+#### Matriz A–G
+| ID | Caso | Resultado |
+|----|------|-----------|
+| A | Listado `/usuarios`, buscar Admin (2 filas), Limpiar | **PASS** |
+| B | Modal eliminar: Cancelar sin spinner; cierre OK | **PASS** |
+| C | Nuevo → Guardar vacío: hints nombre/email/establecimiento/password | **PASS** |
+| D | Personales: DNI+`eds` → **«DNI debe tener 8 dígitos.»** (borde rojo) | **PASS** |
+| E | Tab Permisos: bosque único (~98 checks), filtro «Buscar módulo…», indeterminate | **PASS** |
+| F | CRUD QA: create DNI válido 201; edit nombre; delete; seed intacto; cleanup `QA Bad Doc` | **PASS** |
+| G | `pnpm run build` front + `npm run build` API | **PASS** |
+
+- **Cleanup:** usuarios QA (`qa.baddoc@test.local`, `QA UI11*`) eliminados vía API.
+- **Builds:** front + API OK (2026-09-20).
+
+### QA-UI-12 — Foto usuario + MinIO/storage (2026-09-20)
+- **Entorno:** front `localhost:4200/usuarios` + API `localhost:3000`; demo `admin@factosysperu.com` / `Admin123!`.
+- **Storage:** `FilesModule` usa `S3MinioFileStorage` si `S3_ENDPOINT`+keys; si no, disco local. Upload/GET funcionaron en local (PUT+stream OK).
+
+#### Hallazgos / fixes
+1. **Permisos:** `POST /files/upload` no incluía `users.write` → operadores solo-Usuarios recibían 403. Añadido en `files.controller.ts`.
+2. **Preview:** `<img src="/api/v1/files/:id">` no envía Bearer → 401. Fix: `FilesApiService.fetchObjectUrl` (GET blob + `blob:`) en modal Usuarios (upload y al editar).
+
+#### Matriz M1–M6
+| ID | Caso | Resultado |
+|----|------|-----------|
+| M1 | Upload PNG 1×1 vía API | **PASS** (201 + `id`) |
+| M2 | `GET /files/:id` con Bearer | **PASS** 200 `image/png` |
+| M3 | Crear usuario con `profile.fotoArchivoId` | **PASS** (`fotoUrl` = `/api/v1/files/...`) |
+| M4 | Editar QA en UI → Personales | **PASS** preview `blob:http://localhost:4200/...` `naturalWidth=1` |
+| M5 | Sin error rojo de carga foto | **PASS** |
+| M6 | Cleanup + builds | **PASS** |
+
+- **Cleanup:** `QA UI12 Foto` / `qa.ui12.foto.*@test.local` eliminados.
+- **Builds:** `pnpm run build` front + `npm run build` API OK.
 
 ---
 
@@ -192,13 +318,18 @@ npm test -- --testPathPatterns=timezone.util.spec
 | 2026-09-20 | QA-UI-06 header + Usuarios/Establecimientos | PASS + build OK |
 | 2026-09-20 | QA-UI-07 Usuarios/Establecimientos CRUD+responsive | PASS + build OK |
 | 2026-09-20 | QA-UI-08 Login completo (+ logo) | PASS + build OK |
+| 2026-09-20 | QA-UI-09 Dashboards completo (shell por rol) | PASS + build OK |
+| 2026-09-20 | QA-UI-10 Usuarios completo + compactación | PASS + build OK |
+| 2026-09-20 | QA-UI-11 Usuarios validación Número/celular | PASS + API 400 DNI eds + builds OK |
+| 2026-09-20 | QA-UI-12 Foto usuario + MinIO/storage | PASS + blob preview + users.write + builds OK |
 
 ---
 
 ## Próximos (opcional)
 
-1. Redeploy front + API (QA-UI-01…08; DTO ubigeo).
+1. Redeploy front + API (QA-UI-01…10; DTO ubigeo).
 2. E2E devolución con stock restore cuando haya OSE de prueba.
 3. E2E filtro “hoy” cerca de medianoche Lima (instante fijo).
 4. Seguir barrido opción por opción (inventario, comprobantes, fármacos).
 5. Probar pestañas Catálogo/Carrito en dispositivo real &lt;768px.
+6. Revisar permisos POS del rol CAJERO seed/QA si “No tiene permisos” reaparece fuera de dashboard.

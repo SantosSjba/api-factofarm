@@ -5,24 +5,25 @@ import { UserRole } from '../../../../generated/prisma/client';
 import { UserProfileDto } from './user-profile.dto';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'María García', maxLength: 200 })
+  @ApiProperty({ example: 'María García', maxLength: 150 })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
+  @MaxLength(150)
   nombre!: string;
 
-  @ApiProperty({ example: 'maria@empresa.com' })
+  @ApiProperty({ example: 'maria@empresa.com', maxLength: 150 })
   @IsEmail()
+  @MaxLength(150)
   email!: string;
 
   @ApiProperty({
     minLength: 8,
-    maxLength: 128,
+    maxLength: 100,
     description: 'Contraseña en claro; el API guarda hash (no se devuelve en listados).',
   })
   @IsString()
   @MinLength(8)
-  @MaxLength(128)
+  @MaxLength(100)
   password!: string;
 
   @ApiProperty({ enum: UserRole, example: UserRole.VENDEDOR })

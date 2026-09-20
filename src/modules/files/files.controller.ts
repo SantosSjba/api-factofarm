@@ -33,6 +33,7 @@ export class FilesController {
 
   @Post('upload')
   @RequirePermissions(
+    'users.write',
     'establishments.write',
     'prescriptions.write',
     'products.write',

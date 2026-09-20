@@ -6,11 +6,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IdentityDocumentType } from '../../../../generated/prisma/client';
+import { IsPeruDocument } from '../../../../common/validators/is-peru-document.decorator';
 
 /** Campos pestaña "Datos personales" (opcionales; completar según negocio). */
 export class UserProfileDto {
@@ -19,10 +21,11 @@ export class UserProfileDto {
   @IsEnum(IdentityDocumentType)
   tipoDocumento?: IdentityDocumentType;
 
-  @ApiPropertyOptional({ maxLength: 32 })
+  @ApiPropertyOptional({ maxLength: 20 })
   @IsOptional()
   @IsString()
-  @MaxLength(32)
+  @MaxLength(20)
+  @IsPeruDocument()
   numeroDocumento?: string;
 
   @ApiPropertyOptional({ maxLength: 120 })
@@ -43,32 +46,40 @@ export class UserProfileDto {
   @IsDate()
   fechaNacimiento?: Date;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 150 })
   @IsOptional()
   @IsEmail()
+  @MaxLength(150)
   emailPersonal?: string;
 
-  @ApiPropertyOptional({ maxLength: 500 })
+  @ApiPropertyOptional({ maxLength: 250 })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(250)
   direccion?: string;
 
-  @ApiPropertyOptional({ maxLength: 32 })
-  @IsOptional()
+  @ApiPropertyOptional({ maxLength: 30 })
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
   @IsString()
-  @MaxLength(32)
+  @MaxLength(30)
+  @Matches(/^\+?\d{7,15}$/, {
+    message: 'Celular personal no válido (use dígitos, 7 a 15).',
+  })
   celularPersonal?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 150 })
   @IsOptional()
   @IsEmail()
+  @MaxLength(150)
   emailCorporativo?: string;
 
-  @ApiPropertyOptional({ maxLength: 32 })
-  @IsOptional()
+  @ApiPropertyOptional({ maxLength: 30 })
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
   @IsString()
-  @MaxLength(32)
+  @MaxLength(30)
+  @Matches(/^\+?\d{7,15}$/, {
+    message: 'Celular corporativo no válido (use dígitos, 7 a 15).',
+  })
   celularCorporativo?: string;
 
   @ApiPropertyOptional({ type: String, format: 'date' })

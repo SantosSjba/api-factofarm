@@ -5,22 +5,23 @@ import { UserRole } from '../../../../generated/prisma/client';
 import { UserProfileDto } from './user-profile.dto';
 
 export class UpdateUserDto {
-  @ApiPropertyOptional({ maxLength: 200 })
+  @ApiPropertyOptional({ maxLength: 150 })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(150)
   nombre?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 150 })
   @IsOptional()
   @IsEmail()
+  @MaxLength(150)
   email?: string;
 
-  @ApiPropertyOptional({ minLength: 8, maxLength: 128 })
+  @ApiPropertyOptional({ minLength: 8, maxLength: 100 })
   @IsOptional()
   @IsString()
   @MinLength(8)
-  @MaxLength(128)
+  @MaxLength(100)
   password?: string;
 
   @ApiPropertyOptional({ enum: UserRole })

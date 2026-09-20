@@ -5,26 +5,23 @@ import {
   ValidatorConstraintInterface,
   ValidationArguments,
 } from 'class-validator';
-import { isValidCe, isValidDni, isValidRuc } from './peru-documents';
+import {
+  identityDocumentNumberMessage,
+  isValidIdentityDocumentNumber,
+} from './peru-documents';
 
 type DocHolder = { tipoDocumento?: string };
 
 @ValidatorConstraint({ name: 'isPeruDocument', async: false })
 export class IsPeruDocumentConstraint implements ValidatorConstraintInterface {
   validate(numero: string, args: ValidationArguments): boolean {
-    const value = numero?.trim();
-    if (!value) return true;
-
     const tipo = (args.object as DocHolder).tipoDocumento;
-    if (tipo === 'RUC') return isValidRuc(value);
-    if (tipo === 'DNI') return isValidDni(value);
-    if (tipo === 'CE') return isValidCe(value);
-    return true;
+    return isValidIdentityDocumentNumber(tipo, numero);
   }
 
   defaultMessage(args: ValidationArguments): string {
-    const tipo = (args.object as DocHolder).tipoDocumento ?? 'documento';
-    return `Número de documento inválido para tipo ${tipo}`;
+    const tipo = (args.object as DocHolder).tipoDocumento ?? null;
+    return identityDocumentNumberMessage(tipo);
   }
 }
 
