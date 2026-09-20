@@ -46,12 +46,13 @@ Leyenda: `[x]` hecho en código/docs · `[ ]` pendiente operativo (Coolify / neg
 | B2 | Quitar copy “desarrollo / .env / logs” en UX pública | `[x]` | |
 | B3 | POS: bloquear cobro sin caja abierta | `[x]` | |
 | B4 | FAQ landing: no prometer SUNAT out-of-the-box | `[x]` | |
-| B5 | Volumen persistente `UPLOADS_DIR` en Coolify | `[ ]` | Evitar perder logos/archivos |
+| B5 | Storage MinIO bucket `factofarm` (S3_*) | `[~]` | Código listo (`S3MinioFileStorage`). Configurar en Coolify API: `S3_ENDPOINT=https://storage.factosysperu.com`, keys, `S3_BUCKET=factofarm`. Alternativa: volumen `/app/uploads` |
 | B6 | `SENTRY_DSN` | `[ ]` | Observabilidad |
 | B7 | Throttle portal delivery público | `[x]` | 5/min |
 | B8 | Front build args: WhatsApp, email, site, company | `[ ]` | Horneados en imagen |
 | B9 | “Mantener sesión” funcional | `[x]` | localStorage vs sessionStorage |
 | B10 | Contacto ARCO/privacidad con correo | `[x]` | |
+| B11 | **Postgres backups programados en Coolify** (I-INF-03) | `[ ]` | **Operativo:** en Coolify → `postgresql-db` → Backups → habilitar schedule (diario). No se puede crear vía código. Fallback manual: `scripts/backup-postgres.sh` |
 
 ### C. Medio (post-arranque)
 
@@ -91,7 +92,14 @@ COMPANY_RUC=20614608952
 COMPANY_ADDRESS=Trujillo, La Libertad, Perú. Atendemos todo el Perú (24 departamentos y Callao).
 
 SENTRY_DSN=...                 # recomendado
-# Volumen: montar /app/uploads → UPLOADS_DIR=uploads
+# Storage MinIO (preferido) — bucket factofarm
+S3_ENDPOINT=https://storage.factosysperu.com
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_BUCKET=factofarm
+S3_REGION=us-east-1
+S3_KEY_PREFIX=uploads
+# Alternativa disco: montar volumen Coolify → /app/uploads
 ```
 
 ## Variables Coolify — Front (build-args)

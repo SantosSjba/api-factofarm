@@ -20,6 +20,7 @@ import {
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { FilesService } from './application/files.service';
 import { UploadFileResponseDto } from './application/dto/upload-file-response.dto';
@@ -31,6 +32,12 @@ export class FilesController {
   constructor(private readonly files: FilesService) {}
 
   @Post('upload')
+  @RequirePermissions(
+    'establishments.write',
+    'prescriptions.write',
+    'products.write',
+    'customers.write',
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

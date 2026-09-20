@@ -54,12 +54,13 @@ async function upsertDemoUser(
     getDefaultNavCodesForRole(demo.role),
     demo.role,
   );
-  const hash = await bcrypt.hash(demo.passwordPlain, SALT_ROUNDS);
+  const resetPasswords = process.env.SEED_RESET_PASSWORDS === 'true';
   const tenantId = demo.tenantScoped ? est.tenantId : null;
 
   const existing = await prisma.user.findUnique({ where: { email: demo.email } });
 
   if (!existing) {
+    const hash = await bcrypt.hash(demo.passwordPlain, SALT_ROUNDS);
     const user = await prisma.user.create({
       data: {
         nombre: demo.nombre,
@@ -93,7 +94,9 @@ async function upsertDemoUser(
     where: { id: existing.id },
     data: {
       nombre: demo.nombre,
-      passwordHash: hash,
+      ...(resetPasswords
+        ? { passwordHash: await bcrypt.hash(demo.passwordPlain, SALT_ROUNDS) }
+        : {}),
       role: demo.role,
       tenantId,
       establecimientoId: est.id,

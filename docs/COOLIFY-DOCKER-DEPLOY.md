@@ -106,6 +106,26 @@ Copia y completa:
 
 Ver `docs/BETA-LAUNCH-CHECKLIST.md` (SMTP, secretos, legales, uploads, Sentry, promesa comercial).
 
+### 5c. Archivos persistentes (obligatorio en prod)
+
+**Preferido — MinIO (FACTOSYS PERU → storage-minio):**
+
+```env
+S3_ENDPOINT=https://storage.factosysperu.com
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_BUCKET=factofarm
+S3_REGION=us-east-1
+S3_KEY_PREFIX=uploads
+```
+
+Si esas variables están definidas, la API usa `S3MinioFileStorage` (SDK S3 path-style) y **no** depende del disco del contenedor. Consola MinIO: `https://admin-storage.factosysperu.com`.
+
+**Alternativa — volumen local:**
+
+- `UPLOADS_DIR=/app/uploads` + `VOLUME /app/uploads` en Coolify persistent storage.
+- Sin volumen ni S3, un redeploy borra logos y adjuntos.
+
 ---
 
 ## Comandos plantilla (copiar/pegar)

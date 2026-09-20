@@ -338,8 +338,9 @@ export class PrescriptionsService {
       fechaEmision: row.fechaEmision.toISOString(),
       validUntil: row.validUntil?.toISOString() ?? null,
       estado: row.estado,
-      diagnostico: row.diagnostico,
-      notas: row.notas,
+      diagnostico:
+        this.crypto.decrypt(row.diagnosticoCipher) ?? row.diagnostico ?? null,
+      notas: this.crypto.decrypt(row.notasCipher) ?? row.notas ?? null,
       medicoNombre: row.medicoNombre,
       medicoCmp: row.medicoCmp,
       medico: row.medico,

@@ -828,7 +828,7 @@ export class InventoryMovementsService {
           if (lot) {
             await tx.productLotStock.update({
               where: { id: lot.id },
-              data: { stock: lot.stock.plus(amount) },
+              data: { stock: { increment: amount } },
             });
           } else {
             await tx.productLotStock.create({
@@ -841,45 +841,50 @@ export class InventoryMovementsService {
             });
           }
         } else {
-          if (!lot || lot.stock.lessThan(amount)) {
+          const lotUpdated = await tx.productLotStock.updateMany({
+            where: {
+              productId: input.productId,
+              warehouseId: input.warehouseId,
+              codigoLote: input.lotCode,
+              deletedAt: null,
+              stock: { gte: amount },
+            },
+            data: { stock: { decrement: amount } },
+          });
+          if (lotUpdated.count !== 1) {
             throw new BadRequestException('Stock insuficiente en el lote para el ajuste');
           }
-          await tx.productLotStock.update({
-            where: { id: lot.id },
-            data: { stock: lot.stock.minus(amount) },
-          });
         }
       }
 
-      const current = await tx.productWarehouseStock.findUnique({
-        where: {
-          productId_warehouseId: {
+      if (isInbound) {
+        await tx.productWarehouseStock.upsert({
+          where: {
+            productId_warehouseId: {
+              productId: input.productId,
+              warehouseId: input.warehouseId,
+            },
+          },
+          update: { cantidad: { increment: amount } },
+          create: {
             productId: input.productId,
             warehouseId: input.warehouseId,
+            cantidad: amount,
           },
-        },
-        select: { cantidad: true },
-      });
-      const base = current?.cantidad ?? new Prisma.Decimal(0);
-      const next = base.plus(input.delta);
-      if (next.lessThan(0)) {
-        throw new BadRequestException('El ajuste dejaría stock negativo');
+        });
+      } else {
+        const warehouseUpdated = await tx.productWarehouseStock.updateMany({
+          where: {
+            productId: input.productId,
+            warehouseId: input.warehouseId,
+            cantidad: { gte: amount },
+          },
+          data: { cantidad: { decrement: amount } },
+        });
+        if (warehouseUpdated.count !== 1) {
+          throw new BadRequestException('El ajuste dejaría stock negativo');
+        }
       }
-
-      await tx.productWarehouseStock.upsert({
-        where: {
-          productId_warehouseId: {
-            productId: input.productId,
-            warehouseId: input.warehouseId,
-          },
-        },
-        update: { cantidad: next },
-        create: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-          cantidad: next,
-        },
-      });
     };
 
     if (input.tx) {
@@ -1075,6 +1080,27 @@ export class InventoryMovementsService {
     actor?: JwtRequestUser,
   ) {
     if (actor) {
+      // Endpoint HTTP: exige vínculo a venta del establecimiento (B-LOG-14).
+      if (!dto.saleId?.trim()) {
+        throw new BadRequestException(
+          'saleId es obligatorio: el despacho público debe vincularse a una venta existente',
+        );
+      }
+      const sale = await this.prisma.sale.findFirst({
+        where: {
+          id: dto.saleId,
+          deletedAt: null,
+          establishmentId: actor.establecimientoId,
+          ...(actor.tenantId ? { establishment: { tenantId: actor.tenantId } } : {}),
+        },
+        select: { id: true, warehouseId: true },
+      });
+      if (!sale) {
+        throw new NotFoundException('Venta no encontrada en el establecimiento');
+      }
+      if (sale.warehouseId !== dto.warehouseId) {
+        throw new BadRequestException('El almacén no coincide con el de la venta');
+      }
       await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
       await this.scope.assertProductInTenant(actor, dto.productId);
     }
@@ -1117,7 +1143,7 @@ export class InventoryMovementsService {
       // Productos sin manejaLotes no generan líneas de lote; totalQuantity es el descuento real.
       totalQuantity,
       fechaRegistro: new Date(),
-      reference: dto.reference ?? null,
+      reference: dto.reference ?? dto.saleId ?? null,
       comment: dto.comment ?? null,
       userId: actorId,
       tx,
@@ -1401,15 +1427,25 @@ export class InventoryMovementsService {
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, establishment: { select: { tenantId: true } } },
     });
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
+    const tenantId = actor.tenantId ?? warehouse.establishment.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('No se pudo resolver el tenant para la importación de lotes');
+    }
     const rows = this.readRows(file);
 
-    let created = 0;
-    let updated = 0;
+    type LotImportOp = {
+      displayRow: number;
+      codigoInterno: string;
+      codigoLote: string;
+      stock: number;
+      fechaVenc: Date | null;
+    };
+
+    const ops: LotImportOp[] = [];
     const errors: string[] = [];
-    const touched = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -1424,53 +1460,88 @@ export class InventoryMovementsService {
         errors.push(`Fila ${displayRow}: faltan campos obligatorios o stock inválido.`);
         continue;
       }
+      ops.push({ displayRow, codigoInterno, codigoLote, stock, fechaVenc });
+    }
 
+    // B-PER-12: apply valid rows in transactional chunks (single TX for small files).
+    const CHUNK = 50;
+    let created = 0;
+    let updated = 0;
+    const touched = new Set<string>();
+
+    for (let offset = 0; offset < ops.length; offset += CHUNK) {
+      const chunk = ops.slice(offset, offset + CHUNK);
       try {
-        const product = await this.prisma.product.findFirst({
-          where: { codigoInterno, deletedAt: null },
-          select: { id: true },
-        });
-        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+        const result = await this.prisma.$transaction(async (tx) => {
+          let chunkCreated = 0;
+          let chunkUpdated = 0;
+          const chunkTouched = new Set<string>();
 
-        const existing = await this.prisma.productLotStock.findFirst({
-          where: { productId: product.id, warehouseId: warehouse.id, codigoLote, deletedAt: null },
-          select: { id: true, stock: true },
-        });
+          for (const op of chunk) {
+            const product = await tx.product.findFirst({
+              where: { codigoInterno: op.codigoInterno, deletedAt: null, tenantId },
+              select: { id: true },
+            });
+            if (!product) {
+              throw new BadRequestException(
+                `Fila ${op.displayRow}: Producto no encontrado en el tenant (${op.codigoInterno})`,
+              );
+            }
 
-        if (existing) {
-          // No sobrescribir stock de lote existente (rompe kardex). Solo actualizar vencimiento.
-          const currentStock = Number(existing.stock);
-          if (currentStock !== stock) {
-            throw new BadRequestException(
-              'No se puede sobrescribir el stock de lote por importación; use ajustes o ingresos.',
-            );
+            const existing = await tx.productLotStock.findFirst({
+              where: {
+                productId: product.id,
+                warehouseId: warehouse.id,
+                codigoLote: op.codigoLote,
+                deletedAt: null,
+              },
+              select: { id: true, stock: true },
+            });
+
+            if (existing) {
+              // No sobrescribir stock de lote existente (rompe kardex). Solo actualizar vencimiento.
+              const currentStock = Number(existing.stock);
+              if (currentStock !== op.stock) {
+                throw new BadRequestException(
+                  `Fila ${op.displayRow}: No se puede sobrescribir el stock de lote por importación; use ajustes o ingresos.`,
+                );
+              }
+              await tx.productLotStock.update({
+                where: { id: existing.id },
+                data: { fechaVencimiento: op.fechaVenc },
+              });
+              chunkUpdated += 1;
+            } else {
+              await tx.productLotStock.create({
+                data: {
+                  productId: product.id,
+                  warehouseId: warehouse.id,
+                  codigoLote: op.codigoLote,
+                  stock: new Prisma.Decimal(op.stock),
+                  fechaVencimiento: op.fechaVenc,
+                },
+              });
+              chunkCreated += 1;
+            }
+
+            await tx.product.update({
+              where: { id: product.id },
+              data: { manejaLotes: true },
+            });
+            chunkTouched.add(product.id);
           }
-          await this.prisma.productLotStock.update({
-            where: { id: existing.id },
-            data: { fechaVencimiento: fechaVenc },
-          });
-          updated += 1;
-        } else {
-          await this.prisma.productLotStock.create({
-            data: {
-              productId: product.id,
-              warehouseId: warehouse.id,
-              codigoLote,
-              stock: new Prisma.Decimal(stock),
-              fechaVencimiento: fechaVenc,
-            },
-          });
-          created += 1;
-        }
 
-        await this.prisma.product.update({
-          where: { id: product.id },
-          data: { manejaLotes: true },
+          return { chunkCreated, chunkUpdated, chunkTouched };
         });
-        touched.add(product.id);
+
+        created += result.chunkCreated;
+        updated += result.chunkUpdated;
+        for (const id of result.chunkTouched) touched.add(id);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Error no identificado';
-        errors.push(`Fila ${displayRow}: ${message}`);
+        errors.push(
+          `Lote filas ${chunk[0].displayRow}–${chunk[chunk.length - 1].displayRow}: ${message}`,
+        );
       }
     }
 
@@ -1489,9 +1560,13 @@ export class InventoryMovementsService {
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, establishment: { select: { tenantId: true } } },
     });
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
+    const tenantId = actor.tenantId ?? warehouse.establishment.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('No se pudo resolver el tenant para la importación de series');
+    }
     const rows = this.readRows(file);
 
     let created = 0;
@@ -1515,10 +1590,14 @@ export class InventoryMovementsService {
 
       try {
         const product = await this.prisma.product.findFirst({
-          where: { codigoInterno, deletedAt: null },
+          where: { codigoInterno, deletedAt: null, tenantId },
           select: { id: true },
         });
-        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+        if (!product) {
+          throw new BadRequestException(
+            `Producto no encontrado en el tenant (${codigoInterno})`,
+          );
+        }
 
         const { estado, vendido } = this.mapEstado(estadoRaw);
         const existing = await this.prisma.productSerial.findFirst({

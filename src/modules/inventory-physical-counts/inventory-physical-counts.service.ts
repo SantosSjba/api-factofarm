@@ -175,55 +175,83 @@ export class InventoryPhysicalCountsService {
     });
     if (!count) throw new NotFoundException('Conteo no encontrado o ya finalizado');
 
+    const claimed = await this.prisma.inventoryPhysicalCount.updateMany({
+      where: {
+        id: countId,
+        estado: InventoryPhysicalCountStatus.EN_PROCESO,
+        deletedAt: null,
+      },
+      data: { estado: InventoryPhysicalCountStatus.PROCESANDO, comentario: null },
+    });
+    if (claimed.count !== 1) {
+      throw new BadRequestException('El conteo ya está siendo finalizado o cambió de estado');
+    }
+
     let applied = 0;
     let pendingApproval = 0;
-    for (const item of count.items) {
-      const delta = item.stockContado.minus(item.stockSistema);
-      if (delta.isZero()) continue;
+    try {
+      for (const item of count.items) {
+        const delta = item.stockContado.minus(item.stockSistema);
+        if (delta.isZero()) continue;
 
-      const result = await this.movements.createAdjustment(
-        {
-          productId: item.productId,
-          warehouseId: count.warehouseId,
-          countedQuantity: Number(item.stockContado.toString()),
-          lotCode: item.codigoLote ?? undefined,
-          reason: `Conteo físico ${countId}`,
-        },
-        actor,
-      );
-      if (result.pendingApproval) pendingApproval += 1;
-      else if (result.applied) applied += 1;
-    }
+        const result = await this.movements.createAdjustment(
+          {
+            productId: item.productId,
+            warehouseId: count.warehouseId,
+            countedQuantity: Number(item.stockContado.toString()),
+            lotCode: item.codigoLote ?? undefined,
+            reason: `Conteo físico ${countId}`,
+          },
+          actor,
+        );
+        if (result.pendingApproval) pendingApproval += 1;
+        else if (result.applied) applied += 1;
+      }
 
-    if (pendingApproval > 0) {
+      if (pendingApproval > 0) {
+        await this.prisma.inventoryPhysicalCount.update({
+          where: { id: countId },
+          data: { estado: InventoryPhysicalCountStatus.EN_PROCESO },
+        });
+        return {
+          ok: true,
+          finalized: false,
+          applied,
+          pendingApproval,
+          message: `${applied} ajuste(s) aplicados; ${pendingApproval} pendiente(s) de aprobación. El conteo permanece en proceso hasta aprobar los ajustes.`,
+        };
+      }
+
+      await this.prisma.inventoryPhysicalCount.update({
+        where: { id: countId },
+        data: { estado: InventoryPhysicalCountStatus.FINALIZADO },
+      });
+
+      await this.audit.log({
+        userId: actor.sub,
+        action: 'FINALIZE',
+        entity: 'InventoryPhysicalCount',
+        entityId: countId,
+      });
+
       return {
         ok: true,
-        finalized: false,
+        finalized: true,
         applied,
-        pendingApproval,
-        message: `${applied} ajuste(s) aplicados; ${pendingApproval} pendiente(s) de aprobación. El conteo permanece en proceso hasta aprobar los ajustes.`,
+        pendingApproval: 0,
+        message: 'Conteo finalizado; ajustes generados según diferencias',
       };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al finalizar conteo';
+      await this.prisma.inventoryPhysicalCount.update({
+        where: { id: countId },
+        data: {
+          estado: InventoryPhysicalCountStatus.ERROR,
+          comentario: message.slice(0, 500),
+        },
+      });
+      throw err;
     }
-
-    await this.prisma.inventoryPhysicalCount.update({
-      where: { id: countId },
-      data: { estado: InventoryPhysicalCountStatus.FINALIZADO },
-    });
-
-    await this.audit.log({
-      userId: actor.sub,
-      action: 'FINALIZE',
-      entity: 'InventoryPhysicalCount',
-      entityId: countId,
-    });
-
-    return {
-      ok: true,
-      finalized: true,
-      applied,
-      pendingApproval: 0,
-      message: 'Conteo finalizado; ajustes generados según diferencias',
-    };
   }
 
   private async loadOpenCount(id: string, actor: JwtRequestUser) {

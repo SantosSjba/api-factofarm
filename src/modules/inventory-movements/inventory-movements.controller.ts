@@ -130,8 +130,12 @@ export class InventoryMovementsController {
   }
 
   @Post('sales/dispatch')
-  @RequirePermissions('inventory.write', 'nav.inventario_movimientos')
-  @ApiOperation({ summary: 'Despachar stock de venta con trazabilidad por lote' })
+  @RequirePermissions('inventory.adjust')
+  @ApiOperation({
+    summary: 'Despachar stock de venta con trazabilidad por lote',
+    description:
+      'Requiere saleId de una venta del establecimiento del actor. Uso interno (POS/hospital) llama al servicio sin este endpoint.',
+  })
   dispatchSaleStock(@Body() dto: DispatchSaleStockDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.dispatchSaleStock(dto, actor.sub, undefined, actor);
   }

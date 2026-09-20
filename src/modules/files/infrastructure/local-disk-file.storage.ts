@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createReadStream, existsSync } from 'fs';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, extname, join, resolve } from 'path';
 import { randomUUID } from 'crypto';
+import type { Readable } from 'stream';
 import type { Express } from 'express';
 import {
   DEFAULT_TIME_ZONE,
   formatDateYmdInTimeZone,
 } from '../../../common/utils/timezone.util';
+import type { IFileStorage, StoredFileRef } from '../domain/file.storage';
 
 @Injectable()
-export class LocalDiskFileStorage {
+export class LocalDiskFileStorage implements IFileStorage {
   private readonly uploadsRoot: string;
 
   constructor(config: ConfigService) {
@@ -19,16 +21,14 @@ export class LocalDiskFileStorage {
     this.uploadsRoot = resolve(dir);
   }
 
-  async saveBuffer(
-    file: Express.Multer.File,
-  ): Promise<{ id: string; rutaRelativa: string; ext: string }> {
+  async saveBuffer(file: Express.Multer.File): Promise<StoredFileRef> {
     return this.saveRawBuffer(file.buffer, file.originalname);
   }
 
   async saveRawBuffer(
     buffer: Buffer,
     originalName: string,
-  ): Promise<{ id: string; rutaRelativa: string; ext: string }> {
+  ): Promise<StoredFileRef> {
     const ymd = formatDateYmdInTimeZone(new Date(), DEFAULT_TIME_ZONE);
     const yearMonth = `${ymd.slice(0, 4)}/${ymd.slice(5, 7)}`;
     const ext = extname(originalName) || '';
@@ -47,11 +47,15 @@ export class LocalDiskFileStorage {
     return join(this.uploadsRoot, rutaRelativa);
   }
 
-  exists(rutaRelativa: string): boolean {
+  async exists(rutaRelativa: string): Promise<boolean> {
     return existsSync(this.resolveAbsolutePath(rutaRelativa));
   }
 
-  createReadStream(rutaRelativa: string) {
+  createReadStream(rutaRelativa: string): Readable {
     return createReadStream(this.resolveAbsolutePath(rutaRelativa));
+  }
+
+  async readBuffer(rutaRelativa: string): Promise<Buffer> {
+    return readFile(this.resolveAbsolutePath(rutaRelativa));
   }
 }

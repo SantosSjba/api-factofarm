@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
   AccountReceivableStatus,
   CashMovementType,
+  CashSessionStatus,
   DocumentSeriesType,
   PaymentMethod,
   Prisma,
@@ -37,7 +40,8 @@ import { RegulatedPriceService } from '../compliance/services/regulated-price.se
 import { RealtimeService } from '../realtime/realtime.service';
 import { LoyaltyService } from '../marketing/loyalty.service';
 import { PromotionsService } from '../marketing/promotions.service';
-import { LocalDiskFileStorage } from '../files/infrastructure/local-disk-file.storage';
+import { FILE_STORAGE } from '../files/domain/file.storage';
+import type { IFileStorage } from '../files/domain/file.storage';
 import { isValidPdfBuffer } from '../billing/utils/pdf-buffer.util';
 import { validateSalePayments } from './utils/payment-validation.util';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
@@ -55,7 +59,6 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
-import { readFile } from 'fs/promises';
 import { SunatDocumentStatus } from '../../generated/prisma/client';
 
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
@@ -67,6 +70,8 @@ const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
 
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(SalesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
@@ -81,7 +86,7 @@ export class SalesService {
     private readonly loyalty: LoyaltyService,
     private readonly promotions: PromotionsService,
     private readonly salePdf: SalePdfService,
-    private readonly fileStorage: LocalDiskFileStorage,
+    @Inject(FILE_STORAGE) private readonly fileStorage: IFileStorage,
     private readonly scope: EstablishmentScopeService,
   ) {}
 
@@ -360,8 +365,8 @@ export class SalesService {
         where: { id: osePdfId },
         select: { rutaRelativa: true, nombreOriginal: true },
       });
-      if (archivo && this.fileStorage.exists(archivo.rutaRelativa)) {
-        const buffer = await readFile(this.fileStorage.resolveAbsolutePath(archivo.rutaRelativa));
+      if (archivo && (await this.fileStorage.exists(archivo.rutaRelativa))) {
+        const buffer = await this.fileStorage.readBuffer(archivo.rutaRelativa);
         if (isValidPdfBuffer(buffer)) {
           return {
             buffer,
@@ -472,9 +477,9 @@ export class SalesService {
       where: { id: logoArchivoId },
       select: { rutaRelativa: true },
     });
-    if (!archivo || !this.fileStorage.exists(archivo.rutaRelativa)) return null;
+    if (!archivo || !(await this.fileStorage.exists(archivo.rutaRelativa))) return null;
     try {
-      return await readFile(this.fileStorage.resolveAbsolutePath(archivo.rutaRelativa));
+      return await this.fileStorage.readBuffer(archivo.rutaRelativa);
     } catch {
       return null;
     }
@@ -585,12 +590,36 @@ export class SalesService {
       const session = await this.prisma.cashSession.findFirst({
         where: {
           id: dto.cashSessionId,
-          estado: 'ABIERTA',
+          estado: CashSessionStatus.ABIERTA,
           cashRegister: { establishmentId: actor.establecimientoId },
         },
         select: { id: true },
       });
       if (!session) throw new BadRequestException('Sesión de caja no abierta');
+    }
+
+    if (dto.quotationId) {
+      const quotation = await this.prisma.quotation.findFirst({
+        where: {
+          id: dto.quotationId,
+          establishmentId: actor.establecimientoId,
+          deletedAt: null,
+        },
+        select: { id: true, estado: true },
+      });
+      if (!quotation) {
+        throw new NotFoundException('Cotización no encontrada en este establecimiento');
+      }
+      const convertible: QuotationStatus[] = [
+        QuotationStatus.BORRADOR,
+        QuotationStatus.ENVIADA,
+        QuotationStatus.ACEPTADA,
+      ];
+      if (!convertible.includes(quotation.estado)) {
+        throw new BadRequestException(
+          `La cotización no se puede convertir (estado: ${quotation.estado})`,
+        );
+      }
     }
 
     const resolvedAgreement = await this.resolveSaleAgreement(
@@ -672,8 +701,13 @@ export class SalesService {
         total,
       );
       if (promoDiscount.greaterThan(0)) {
+        const prevTotal = total;
+        const newTotal = Prisma.Decimal.max(total.minus(promoDiscount), new Prisma.Decimal(0));
+        const ratio = prevTotal.isZero() ? new Prisma.Decimal(0) : newTotal.div(prevTotal);
+        subtotal = subtotal.times(ratio);
+        igvTotal = igvTotal.times(ratio);
+        total = newTotal;
         descuentoTotal = descuentoTotal.plus(promoDiscount);
-        total = Prisma.Decimal.max(total.minus(promoDiscount), new Prisma.Decimal(0));
       }
     }
 
@@ -693,13 +727,14 @@ export class SalesService {
       dto.payments = [{ metodo: PaymentMethod.EFECTIVO, monto: 0 }];
     }
 
-    const { serie, numero } = await this.resolveDocumentNumber(
-      actor.establecimientoId,
-      dto.documentType,
-      dto.serie,
-    );
-
     const saleId = await this.prisma.$transaction(async (tx) => {
+      const { serie, numero } = await this.resolveDocumentNumber(
+        actor.establecimientoId,
+        dto.documentType,
+        dto.serie,
+        tx,
+      );
+
       // Stock + venta en la misma transacción: evita descuentos huérfanos si falla el create.
       const stockAllocations: Array<{
         index: number;
@@ -824,10 +859,25 @@ export class SalesService {
       }
 
       if (dto.quotationId) {
-        await tx.quotation.update({
-          where: { id: dto.quotationId },
+        const converted = await tx.quotation.updateMany({
+          where: {
+            id: dto.quotationId,
+            establishmentId: actor.establecimientoId,
+            estado: {
+              in: [
+                QuotationStatus.BORRADOR,
+                QuotationStatus.ENVIADA,
+                QuotationStatus.ACEPTADA,
+              ],
+            },
+          },
           data: { estado: QuotationStatus.CONVERTIDA },
         });
+        if (converted.count !== 1) {
+          throw new BadRequestException(
+            'La cotización ya no está disponible para convertir en este establecimiento',
+          );
+        }
       }
 
       if (dto.customerId && coberturaConvenio.greaterThan(0) && resolvedAgreement) {
@@ -890,7 +940,11 @@ export class SalesService {
       entityId: saleId,
     });
 
-    void this.billing.scheduleEmitFromSale(saleId).catch(() => undefined);
+    void this.billing.scheduleEmitFromSale(saleId).catch((err) => {
+      this.logger.error(
+        `Post-commit billing emit failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
 
     if (dto.prescriptionId) {
       void this.prescriptions
@@ -899,7 +953,11 @@ export class SalesService {
           pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
           actor.sub,
         )
-        .catch(() => undefined);
+        .catch((err) => {
+          this.logger.error(
+            `Post-commit prescription dispense failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }
 
     void this.pharmaceutical
@@ -909,7 +967,11 @@ export class SalesService {
         `Venta ${saleId}`,
         actor.sub,
       )
-      .catch(() => undefined);
+      .catch((err) => {
+        this.logger.error(
+          `Post-commit controlled ledger failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     const saleDetail = await this.findOne(saleId, actor.establecimientoId);
     this.realtime.emitSaleCompleted(actor.establecimientoId, {
@@ -930,7 +992,11 @@ export class SalesService {
           saleDetail.id,
           actor.sub,
         )
-        .catch(() => undefined);
+        .catch((err) => {
+          this.logger.error(
+            `Post-commit loyalty award failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }
     if (dto.promotionCode?.trim()) {
       void this.promotions
@@ -940,7 +1006,11 @@ export class SalesService {
           saleDetail.id,
           dto.customerId,
         )
-        .catch(() => undefined);
+        .catch((err) => {
+          this.logger.error(
+            `Post-commit promo redemption failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }
 
     return saleDetail;
@@ -988,6 +1058,7 @@ export class SalesService {
       where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
       include: {
         items: { include: { lotLines: true } },
+        payments: { select: { metodo: true, monto: true } },
         _count: { select: { returns: true } },
         electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
       },
@@ -1014,6 +1085,23 @@ export class SalesService {
     }
     if (sale.sellerId === actor.sub) {
       throw new ForbiddenException('Otro usuario debe autorizar la anulación');
+    }
+
+    if (cpe) {
+      try {
+        await this.billing.voidFromSale(
+          id,
+          actor.establecimientoId,
+          dto.reason.trim(),
+          actor.sub,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Fallo al anular CPE antes de void local saleId=${id} establishmentId=${actor.establecimientoId}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+        throw err;
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -1057,16 +1145,46 @@ export class SalesService {
         }
       }
 
+      await tx.accountReceivable.updateMany({
+        where: {
+          saleId: sale.id,
+          deletedAt: null,
+          estado: { not: AccountReceivableStatus.ANULADA },
+        },
+        data: {
+          estado: AccountReceivableStatus.ANULADA,
+          saldo: new Prisma.Decimal(0),
+        },
+      });
+
       if (sale.cashSessionId) {
-        await tx.cashMovement.create({
-          data: {
-            cashSessionId: sale.cashSessionId,
-            tipo: CashMovementType.ANULACION,
-            monto: sale.total.negated(),
-            saleId: sale.id,
-            comentario: dto.reason.trim(),
-          },
-        });
+        const cashTotal = sale.payments
+          .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
+          .reduce((acc, p) => acc.plus(p.monto), new Prisma.Decimal(0));
+        if (cashTotal.greaterThan(0)) {
+          const session = await tx.cashSession.findFirst({
+            where: {
+              id: sale.cashSessionId,
+              estado: CashSessionStatus.ABIERTA,
+            },
+            select: { id: true },
+          });
+          if (!session) {
+            throw new BadRequestException(
+              'La sesión de caja ya no está abierta; no se puede registrar la anulación de efectivo',
+            );
+          }
+          await tx.cashMovement.create({
+            data: {
+              cashSessionId: sale.cashSessionId,
+              tipo: CashMovementType.ANULACION,
+              monto: cashTotal.negated(),
+              metodoPago: PaymentMethod.EFECTIVO,
+              saleId: sale.id,
+              comentario: dto.reason.trim(),
+            },
+          });
+        }
       }
     });
 
@@ -1078,10 +1196,6 @@ export class SalesService {
     });
 
     this.realtime.emitStockUpdated(actor.establecimientoId, sale.warehouseId);
-
-    await this.billing
-      .voidFromSale(id, actor.establecimientoId, dto.reason.trim(), actor.sub)
-      .catch(() => undefined);
 
     return { ok: true, message: 'Venta anulada y stock revertido' };
   }
@@ -1244,6 +1358,7 @@ export class SalesService {
       where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
       include: {
         items: { include: { lotLines: true } },
+        payments: { select: { metodo: true, monto: true } },
         electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
         returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
       },
@@ -1397,22 +1512,82 @@ export class SalesService {
         },
       });
 
+      const ar = await tx.accountReceivable.findFirst({
+        where: {
+          saleId,
+          deletedAt: null,
+          estado: { not: AccountReceivableStatus.ANULADA },
+        },
+      });
+      if (ar && sale.total.greaterThan(0)) {
+        if (allItemsFullyReturned) {
+          await tx.accountReceivable.update({
+            where: { id: ar.id },
+            data: {
+              estado: AccountReceivableStatus.ANULADA,
+              saldo: new Prisma.Decimal(0),
+            },
+          });
+        } else {
+          const ratio = totalDevuelto.div(sale.total);
+          const reduceBy = Prisma.Decimal.min(ar.saldo, ar.montoTotal.times(ratio));
+          const newSaldo = Prisma.Decimal.max(ar.saldo.minus(reduceBy), new Prisma.Decimal(0));
+          const newMontoTotal = Prisma.Decimal.max(
+            ar.montoTotal.minus(ar.montoTotal.times(ratio)),
+            ar.montoPagado,
+          );
+          await tx.accountReceivable.update({
+            where: { id: ar.id },
+            data: {
+              montoTotal: newMontoTotal,
+              saldo: newSaldo,
+              estado: newSaldo.lessThanOrEqualTo(0)
+                ? AccountReceivableStatus.PAGADA
+                : ar.montoPagado.greaterThan(0)
+                  ? AccountReceivableStatus.PARCIAL
+                  : AccountReceivableStatus.PENDIENTE,
+            },
+          });
+        }
+      }
+
+      if (sale.cashSessionId) {
+        const cashPaid = sale.payments
+          .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
+          .reduce((acc, p) => acc.plus(p.monto), new Prisma.Decimal(0));
+        if (cashPaid.greaterThan(0) && sale.total.greaterThan(0)) {
+          const cashRefund = cashPaid.times(totalDevuelto).div(sale.total);
+          if (cashRefund.greaterThan(0)) {
+            const session = await tx.cashSession.findFirst({
+              where: {
+                id: sale.cashSessionId,
+                estado: CashSessionStatus.ABIERTA,
+              },
+              select: { id: true },
+            });
+            if (!session) {
+              throw new BadRequestException(
+                'La sesión de caja ya no está abierta; no se puede registrar el egreso de efectivo',
+              );
+            }
+            await tx.cashMovement.create({
+              data: {
+                cashSessionId: sale.cashSessionId,
+                tipo: CashMovementType.EGRESO,
+                monto: cashRefund.negated(),
+                metodoPago: PaymentMethod.EFECTIVO,
+                saleId: sale.id,
+                comentario: `Devolución: ${dto.motivo.trim()}`,
+              },
+            });
+          }
+        }
+      }
+
       return created;
     });
 
     this.realtime.emitStockUpdated(actor.establecimientoId, sale.warehouseId);
-
-    if (sale.cashSessionId) {
-      await this.prisma.cashMovement.create({
-        data: {
-          cashSessionId: sale.cashSessionId,
-          tipo: CashMovementType.EGRESO,
-          monto: totalDevuelto.negated(),
-          saleId: sale.id,
-          comentario: `Devolución: ${dto.motivo.trim()}`,
-        },
-      });
-    }
 
     const electronicDocumentId = await this.billing
       .scheduleEmitFromReturn(saleReturn.id)
@@ -1935,13 +2110,18 @@ export class SalesService {
       }
     }
 
-    const { serie, numero } = await this.resolveDocumentNumber(
-      establishmentId,
-      nextType,
-    );
-    await this.prisma.sale.update({
-      where: { id: sale.id },
-      data: { documentType: nextType, serie, numero },
+    const { serie, numero } = await this.prisma.$transaction(async (tx) => {
+      const allocated = await this.resolveDocumentNumber(
+        establishmentId,
+        nextType,
+        undefined,
+        tx,
+      );
+      await tx.sale.update({
+        where: { id: sale.id },
+        data: { documentType: nextType, serie: allocated.serie, numero: allocated.numero },
+      });
+      return allocated;
     });
     await this.audit.log({
       userId: actorId,
@@ -1972,16 +2152,26 @@ export class SalesService {
     establishmentId: string,
     documentType: SaleDocumentType,
     serieInput?: string,
+    tx?: Prisma.TransactionClient,
   ) {
+    const db = tx ?? this.prisma;
     const seriesType = DOC_SERIES_MAP[documentType];
-    const series = await this.prisma.establishmentSeries.findFirst({
+    const series = await db.establishmentSeries.findFirst({
       where: { establishmentId, documentType: seriesType },
       orderBy: { numero: 'asc' },
       select: { numero: true },
     });
     const serie = serieInput?.trim() || series?.numero || 'NV01';
 
-    const last = await this.prisma.sale.findFirst({
+    if (tx) {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${`sale-doc:${establishmentId}:${documentType}:${serie}`})
+        )
+      `;
+    }
+
+    const last = await db.sale.findFirst({
       where: { establishmentId, documentType, serie },
       orderBy: { numero: 'desc' },
       select: { numero: true },

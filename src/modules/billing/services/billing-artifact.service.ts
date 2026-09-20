@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { FILE_REPOSITORY } from '../../files/domain/file.repository';
 import type { IFileRepository } from '../../files/domain/file.repository';
-import { LocalDiskFileStorage } from '../../files/infrastructure/local-disk-file.storage';
+import { FILE_STORAGE } from '../../files/domain/file.storage';
+import type { IFileStorage } from '../../files/domain/file.storage';
 
 @Injectable()
 export class BillingArtifactService {
   constructor(
     @Inject(FILE_REPOSITORY) private readonly files: IFileRepository,
-    private readonly storage: LocalDiskFileStorage,
+    @Inject(FILE_STORAGE) private readonly storage: IFileStorage,
   ) {}
 
   async saveText(name: string, mimeType: string, content: string): Promise<string> {

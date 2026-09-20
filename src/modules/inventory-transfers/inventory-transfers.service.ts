@@ -128,6 +128,26 @@ export class InventoryTransfersService {
       }
     }
 
+    const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    for (const productId of productIds) {
+      await this.scope.assertProductInTenant(actor, productId);
+    }
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      select: { id: true, manejaLotes: true, nombre: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+    for (const item of dto.items) {
+      const product = productById.get(item.productId);
+      if (!product) throw new NotFoundException('Producto no encontrado');
+      const lotCode = item.codigoLote?.trim() || null;
+      if (product.manejaLotes && !lotCode) {
+        throw new BadRequestException(
+          `El producto ${product.nombre} maneja lotes: indique código de lote`,
+        );
+      }
+    }
+
     const created = await this.prisma.inventoryStockTransfer.create({
       data: {
         fromWarehouseId: dto.fromWarehouseId,
@@ -163,6 +183,8 @@ export class InventoryTransfersService {
     if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
       throw new BadRequestException('Solo se pueden despachar transferencias en borrador');
     }
+
+    await this.assertTransferLots(transfer.items);
 
     const outReason = await this.prisma.inventoryTransferReason.findFirst({
       where: { codigo: TRANSFER_OUT_CODE, deletedAt: null, activo: true },
@@ -213,6 +235,8 @@ export class InventoryTransfersService {
     if (transfer.estado !== InventoryTransferStatus.EN_TRANSITO) {
       throw new BadRequestException('Solo se pueden recibir transferencias en tránsito');
     }
+
+    await this.assertTransferLots(transfer.items);
 
     const inReason = await this.prisma.inventoryTransferReason.findFirst({
       where: { codigo: TRANSFER_IN_CODE, deletedAt: null, activo: true },
@@ -275,6 +299,26 @@ export class InventoryTransfersService {
     });
 
     return { ok: true, message: 'Transferencia anulada' };
+  }
+
+  private async assertTransferLots(
+    items: Array<{ productId: string; codigoLote: string | null }>,
+  ) {
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      select: { id: true, manejaLotes: true, nombre: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+    for (const item of items) {
+      const product = productById.get(item.productId);
+      if (!product) throw new NotFoundException('Producto no encontrado');
+      if (product.manejaLotes && !item.codigoLote?.trim()) {
+        throw new BadRequestException(
+          `El producto ${product.nombre} maneja lotes: indique código de lote`,
+        );
+      }
+    }
   }
 
   private async loadTransfer(id: string, actor: JwtRequestUser) {

@@ -8,6 +8,24 @@ if (!connectionString) {
   throw new Error('DATABASE_URL es obligatoria para el seed.');
 }
 
+function assertSeedAllowed(dbUrl: string) {
+  const nodeEnv = (process.env.NODE_ENV ?? '').toLowerCase();
+  const normalized = dbUrl.toLowerCase();
+  const looksProd =
+    nodeEnv === 'production' ||
+    normalized.includes('prod') ||
+    normalized.includes('production') ||
+    normalized.includes('coolify') ||
+    /[?&]sslmode=require/.test(normalized);
+  if (looksProd && process.env.SEED_ALLOW_PRODUCTION !== 'true') {
+    throw new Error(
+      'Seed bloqueado: entorno/DB parece producción. Defina SEED_ALLOW_PRODUCTION=true para forzar (peligroso).',
+    );
+  }
+}
+
+assertSeedAllowed(connectionString);
+
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 

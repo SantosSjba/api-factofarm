@@ -11,6 +11,7 @@ import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
 import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
+import { PermissionsCacheService } from '../../../common/permissions/permissions-cache.service';
 import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
@@ -36,6 +37,7 @@ export class UsersService {
     private readonly audit: AuditLogService,
     private readonly tenants: TenantsService,
     private readonly integrity: EntityIntegrityService,
+    private readonly permissionsCache: PermissionsCacheService,
   ) {}
 
   async create(dto: CreateUserDto, actor?: JwtRequestUser): Promise<UserSnapshot> {
@@ -172,6 +174,9 @@ export class UsersService {
     }
 
     const updated = await this.users.update(id, patch);
+    if (patch.permissionCodes !== undefined || patch.role !== undefined) {
+      await this.permissionsCache.invalidate(id);
+    }
     await this.audit.log({
       userId: actor?.sub,
       action: 'UPDATE',
@@ -198,6 +203,7 @@ export class UsersService {
     }
 
     const updated = await this.users.syncPermissions(id, normalized);
+    await this.permissionsCache.invalidate(id);
     await this.audit.log({
       userId: actor?.sub,
       action: 'UPDATE_PERMISSIONS',

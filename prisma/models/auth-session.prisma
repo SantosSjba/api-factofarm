@@ -7,6 +7,12 @@ model RefreshToken {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
+  /// Sesión de soporte FactoSys: al refrescar se re-emite con el mismo contexto tenant.
+  supportSession              Boolean   @default(false)
+  supportTenantId             String?
+  supportEstablishmentId      String?
+  supportRole                 UserRole?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])

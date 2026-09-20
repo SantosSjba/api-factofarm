@@ -6,27 +6,41 @@ export async function seedEstablishments(
   tenantId: string,
 ): Promise<void> {
   for (const row of establishmentsData) {
-    const establishment = await prisma.establishment.upsert({
-      where: { codigo: row.codigo },
-      update: {
-        tenantId,
-        nombre: row.nombre,
-        activo: row.activo,
-        pais: row.pais ?? 'PERU',
-        direccionFiscal: row.direccionFiscal,
-        correoContacto: row.correoContacto,
-      },
-      create: {
-        tenantId,
-        nombre: row.nombre,
-        codigo: row.codigo,
-        activo: row.activo,
-        pais: row.pais ?? 'PERU',
-        direccionFiscal: row.direccionFiscal,
-        correoContacto: row.correoContacto,
-      },
-      select: { id: true, nombre: true, codigo: true },
+    const byCodigo = await prisma.establishment.findFirst({
+      where: { codigo: row.codigo, deletedAt: null },
+      select: { id: true, tenantId: true },
     });
+
+    if (byCodigo && byCodigo.tenantId !== tenantId) {
+      throw new Error(
+        `Seed establecimientos: código ${row.codigo} ya pertenece a otro tenant (${byCodigo.tenantId}). No se sobrescribe tenantId.`,
+      );
+    }
+
+    const establishment = byCodigo
+      ? await prisma.establishment.update({
+          where: { id: byCodigo.id },
+          data: {
+            nombre: row.nombre,
+            activo: row.activo,
+            pais: row.pais ?? 'PERU',
+            direccionFiscal: row.direccionFiscal,
+            correoContacto: row.correoContacto,
+          },
+          select: { id: true, nombre: true, codigo: true },
+        })
+      : await prisma.establishment.create({
+          data: {
+            tenantId,
+            nombre: row.nombre,
+            codigo: row.codigo,
+            activo: row.activo,
+            pais: row.pais ?? 'PERU',
+            direccionFiscal: row.direccionFiscal,
+            correoContacto: row.correoContacto,
+          },
+          select: { id: true, nombre: true, codigo: true },
+        });
 
     await prisma.warehouse.upsert({
       where: {

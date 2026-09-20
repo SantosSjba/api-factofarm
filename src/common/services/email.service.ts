@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
@@ -7,6 +7,25 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   constructor(private readonly config: ConfigService) {}
+
+  private isProduction(): boolean {
+    return this.config.get<string>('NODE_ENV') === 'production';
+  }
+
+  private requireSmtpHostOrDevLog(context: string, fallbackLog: () => void): string | null {
+    const host = this.config.get<string>('SMTP_HOST')?.trim();
+    if (host) return host;
+    if (this.isProduction()) {
+      throw new ServiceUnavailableException({
+        code: 'SMTP_NOT_CONFIGURED',
+        message:
+          'El servicio de correo no está configurado. Contacte al administrador (SMTP_HOST).',
+        details: { context },
+      });
+    }
+    fallbackLog();
+    return null;
+  }
 
   async sendPasswordReset(to: string, resetUrl: string): Promise<void> {
     const subject = 'FactoFarm — Recuperación de contraseña';
@@ -19,12 +38,11 @@ export class EmailService {
       'Si no solicitaste este cambio, ignora este correo.',
     ].join('\n');
 
-    const host = this.config.get<string>('SMTP_HOST')?.trim();
-    if (!host) {
+    const host = this.requireSmtpHostOrDevLog('password_reset', () => {
       this.logger.warn(`[DEV] Sin SMTP_HOST — enlace de recuperación para ${to}:`);
       this.logger.warn(resetUrl);
-      return;
-    }
+    });
+    if (!host) return;
 
     const port = Number(this.config.get<string>('SMTP_PORT', '587'));
     const user = this.config.get<string>('SMTP_USER');
@@ -43,12 +61,11 @@ export class EmailService {
   }
 
   async sendTransactional(to: string, subject: string, text: string): Promise<void> {
-    const host = this.config.get<string>('SMTP_HOST')?.trim();
-    if (!host) {
+    const host = this.requireSmtpHostOrDevLog('transactional', () => {
       this.logger.warn(`[DEV] Sin SMTP_HOST — correo a ${to}: ${subject}`);
       this.logger.warn(text);
-      return;
-    }
+    });
+    if (!host) return;
 
     const port = Number(this.config.get<string>('SMTP_PORT', '587'));
     const user = this.config.get<string>('SMTP_USER');

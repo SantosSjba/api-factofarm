@@ -44,7 +44,8 @@ export class DataRetentionController {
   @Post('audit/purge')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({
-    summary: 'Purgar AuditLog antiguos (requiere DATA_RETENTION_PURGE_ENABLED=true)',
+    summary:
+      'Purgar AuditLog antiguos (requiere DATA_RETENTION_PURGE_ENABLED=true y DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND)',
   })
   async auditPurge(@CurrentUser() actor: JwtRequestUser) {
     this.retention.assertPlatformAdmin(actor);

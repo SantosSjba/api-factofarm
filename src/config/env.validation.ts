@@ -22,6 +22,13 @@ export const envValidationSchema = Joi.object({
         'DATABASE_URL debe ser una URL postgres/postgresql (ej. postgresql://user:pass@host:5432/db)',
     }),
   UPLOADS_DIR: Joi.string().default('uploads'),
+  /** Si S3_ENDPOINT + keys están definidos, se usa MinIO/S3 en lugar del disco local. */
+  S3_ENDPOINT: Joi.string().uri().optional().allow(''),
+  S3_ACCESS_KEY: Joi.string().optional().allow(''),
+  S3_SECRET_KEY: Joi.string().optional().allow(''),
+  S3_BUCKET: Joi.string().default('factofarm'),
+  S3_REGION: Joi.string().default('us-east-1'),
+  S3_KEY_PREFIX: Joi.string().default('uploads'),
   THROTTLE_TTL_MS: Joi.number().integer().min(1000).default(60_000),
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(120),
   THROTTLE_LOGIN_LIMIT: Joi.number().integer().min(1).default(10),
@@ -56,6 +63,7 @@ export const envValidationSchema = Joi.object({
   REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).optional().allow(''),
   CACHE_TTL_MS: Joi.number().integer().min(10_000).default(300_000),
   PASSWORD_RESET_EXPIRES_MINUTES: Joi.number().integer().min(5).max(1440).default(60),
+  /** En producción el envío real exige SMTP_HOST; sin él, forgot-password falla en runtime (no bloquea boot). */
   SMTP_HOST: Joi.string().optional().allow(''),
   SMTP_PORT: Joi.number().port().default(587),
   SMTP_USER: Joi.string().optional().allow(''),
@@ -76,6 +84,11 @@ export const envValidationSchema = Joi.object({
   DATA_RETENTION_AUDIT_DAYS: Joi.number().integer().min(30).max(3650).default(730),
   /** Permite borrado real de AuditLog (dry-run siempre disponible). */
   DATA_RETENTION_PURGE_ENABLED: Joi.boolean().default(false),
+  /**
+   * Confirmación explícita para hard-delete de AuditLog (B-LOG-20).
+   * Debe ser exactamente `I_UNDERSTAND` cuando PURGE_ENABLED=true.
+   */
+  DATA_RETENTION_PURGE_CONFIRM: Joi.string().optional().allow(''),
   /** Cron del job de retención (formato standard). */
   DATA_RETENTION_CRON: Joi.string().default('0 3 * * *'),
   /** Tamaño de lote al borrar AuditLog / archivar. */

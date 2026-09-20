@@ -11,7 +11,8 @@ import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { FILE_REPOSITORY } from '../domain/file.repository';
 import type { IFileRepository } from '../domain/file.repository';
-import { LocalDiskFileStorage } from '../infrastructure/local-disk-file.storage';
+import { FILE_STORAGE } from '../domain/file.storage';
+import type { IFileStorage } from '../domain/file.storage';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -19,7 +20,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 export class FilesService {
   constructor(
     @Inject(FILE_REPOSITORY) private readonly files: IFileRepository,
-    private readonly storage: LocalDiskFileStorage,
+    @Inject(FILE_STORAGE) private readonly storage: IFileStorage,
   ) {}
 
   async saveUploaded(
@@ -60,35 +61,16 @@ export class FilesService {
     };
   }
 
-  async getForStream(id: string, actor: JwtRequestUser): Promise<{
-    absPath: string;
-    mimeType: string;
-    nombreOriginal: string;
-  }> {
-    const row = await this.files.findById(id);
-    if (row) {
-      this.assertFileTenantAccess(actor, row.tenantId);
-    }
-    if (!row || !this.storage.exists(row.rutaRelativa)) {
-      throw new NotFoundException('Archivo no encontrado');
-    }
-    return {
-      absPath: this.storage.resolveAbsolutePath(row.rutaRelativa),
-      mimeType: row.mimeType,
-      nombreOriginal: row.nombreOriginal,
-    };
-  }
-
   async createReadStreamForId(id: string, actor: JwtRequestUser) {
     const row = await this.files.findById(id);
     if (row) {
       this.assertFileTenantAccess(actor, row.tenantId);
     }
-    if (!row || !this.storage.exists(row.rutaRelativa)) {
+    if (!row || !(await this.storage.exists(row.rutaRelativa))) {
       throw new NotFoundException('Archivo no encontrado');
     }
     return {
-      stream: this.storage.createReadStream(row.rutaRelativa),
+      stream: await this.storage.createReadStream(row.rutaRelativa),
       mimeType: row.mimeType,
       nombreOriginal: row.nombreOriginal,
     };

@@ -137,26 +137,104 @@ export class AuthService {
       },
     });
 
-    if (
-      !stored ||
-      stored.revokedAt ||
-      stored.expiresAt < new Date() ||
-      stored.user.deletedAt
-    ) {
+    if (!stored || stored.user.deletedAt) {
       throw new UnauthorizedException({
         code: 'INVALID_REFRESH_TOKEN',
         message: 'Sesión expirada; inicie sesión nuevamente',
       });
     }
 
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
+    // Reuso de refresh ya revocado → posible robo: invalidar todas las sesiones del usuario
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Sesión expirada; inicie sesión nuevamente',
+      });
+    }
+
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Sesión expirada; inicie sesión nuevamente',
+      });
+    }
+
+    if (
+      stored.supportSession &&
+      stored.supportTenantId &&
+      stored.supportEstablishmentId &&
+      stored.supportRole
+    ) {
+      return this.rotateSupportRefresh(stored);
+    }
 
     await this.assertTenantAccessAllowed(stored.user);
+    return this.issueTokens(stored.user, { revokeTokenId: stored.id });
+  }
 
-    return this.issueTokens(stored.user);
+  private async rotateSupportRefresh(stored: {
+    id: string;
+    userId: string;
+    supportTenantId: string | null;
+    supportEstablishmentId: string | null;
+    supportRole: UserRole | null;
+    user: {
+      id: string;
+      email: string;
+      nombre: string;
+      role: UserRole;
+      deletedAt: Date | null;
+    };
+  }): Promise<AuthTokensView> {
+    const tenantId = stored.supportTenantId!;
+    const establishmentId = stored.supportEstablishmentId!;
+    const supportRole = stored.supportRole!;
+
+    if (!isPlatformAdmin(stored.user.role)) {
+      throw new UnauthorizedException({
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Sesión expirada; inicie sesión nuevamente',
+      });
+    }
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null },
+      select: authTenantSelect,
+    });
+    if (!tenant || tenant.status === TenantStatus.SUSPENDED) {
+      throw new UnauthorizedException({
+        code: 'TENANT_SUSPENDED',
+        message: 'La cuenta de la farmacia no está disponible',
+      });
+    }
+
+    const permissionCodes = resolveUserPermissionCodes({
+      role: supportRole,
+      permissionCodes: expandUserPermissionCodes(
+        getDefaultNavCodesForRole(supportRole),
+        supportRole,
+      ),
+      tenant,
+    });
+
+    return this.issueSupportTokens(
+      {
+        actorId: stored.user.id,
+        email: stored.user.email,
+        nombre: stored.user.nombre,
+        role: supportRole,
+        tenantId: tenant.id,
+        establecimientoId: establishmentId,
+        permissionCodes,
+        tenantNombre: tenant.nombre,
+        tenantStatus: tenant.status,
+      },
+      { revokeTokenId: stored.id },
+    );
   }
 
   private async assertTenantAccessAllowed(user: {
@@ -555,6 +633,7 @@ export class AuthService {
       tenant?: AuthTenantSnapshot | null;
       permissions: { permission: { code: string } }[];
     },
+    opts?: { revokeTokenId?: string },
   ): Promise<AuthTokensView> {
     const permissionCodes = this.resolvePermissionCodes(user);
     const payload: AuthJwtPayload = {
@@ -580,8 +659,16 @@ export class AuthService {
     const refreshDays = Number(this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '7'));
     const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
 
-    await this.prisma.refreshToken.create({
-      data: { userId: user.id, tokenHash, expiresAt },
+    await this.prisma.$transaction(async (tx) => {
+      if (opts?.revokeTokenId) {
+        await tx.refreshToken.update({
+          where: { id: opts.revokeTokenId },
+          data: { revokedAt: new Date() },
+        });
+      }
+      await tx.refreshToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
     });
 
     return {
@@ -595,17 +682,20 @@ export class AuthService {
     };
   }
 
-  private async issueSupportTokens(input: {
-    actorId: string;
-    email: string;
-    nombre: string;
-    role: UserRole;
-    tenantId: string;
-    establecimientoId: string;
-    permissionCodes: string[];
-    tenantNombre: string;
-    tenantStatus: string;
-  }): Promise<AuthTokensView> {
+  private async issueSupportTokens(
+    input: {
+      actorId: string;
+      email: string;
+      nombre: string;
+      role: UserRole;
+      tenantId: string;
+      establecimientoId: string;
+      permissionCodes: string[];
+      tenantNombre: string;
+      tenantStatus: string;
+    },
+    opts?: { revokeTokenId?: string },
+  ): Promise<AuthTokensView> {
     const payload: AuthJwtPayload = {
       sub: input.actorId,
       email: input.email,
@@ -625,8 +715,24 @@ export class AuthService {
     const tokenHash = this.hashToken(refreshPlain);
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
-    await this.prisma.refreshToken.create({
-      data: { userId: input.actorId, tokenHash, expiresAt },
+    await this.prisma.$transaction(async (tx) => {
+      if (opts?.revokeTokenId) {
+        await tx.refreshToken.update({
+          where: { id: opts.revokeTokenId },
+          data: { revokedAt: new Date() },
+        });
+      }
+      await tx.refreshToken.create({
+        data: {
+          userId: input.actorId,
+          tokenHash,
+          expiresAt,
+          supportSession: true,
+          supportTenantId: input.tenantId,
+          supportEstablishmentId: input.establecimientoId,
+          supportRole: input.role,
+        },
+      });
     });
 
     return {

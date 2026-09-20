@@ -20,9 +20,12 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--experimental-require-module
+# Persistencia de archivos (logos, adjuntos). Coolify debe montar un volumen aquí.
+ENV UPLOADS_DIR=/app/uploads
 # curl: Coolify HEALTHCHECK lo necesita dentro del contenedor Alpine
 RUN apk add --no-cache curl \
-    && corepack enable && corepack prepare pnpm@10.12.1 --activate
+    && corepack enable && corepack prepare pnpm@10.12.1 --activate \
+    && mkdir -p /app/uploads
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/.npmrc /app/pnpm-workspace.yaml ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
@@ -30,6 +33,9 @@ COPY --from=build /app/prisma.config.ts ./
 COPY --from=build /app/docs ./docs
 COPY --from=build /app/node_modules ./node_modules
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh \
+    && chmod +x ./docker-entrypoint.sh
+# I-INF-01: montar almacenamiento persistente en Coolify → /app/uploads
+VOLUME ["/app/uploads"]
 EXPOSE 3000
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "./docker-entrypoint.sh"]

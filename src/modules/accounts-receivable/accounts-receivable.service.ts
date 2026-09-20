@@ -91,19 +91,12 @@ export class AccountsReceivableService {
     }
 
     const monto = new Prisma.Decimal(dto.amount);
-    if (monto.greaterThan(ar.saldo)) {
-      throw new BadRequestException('El monto excede el saldo pendiente');
+    if (monto.lessThanOrEqualTo(0)) {
+      throw new BadRequestException('El monto debe ser mayor a cero');
     }
 
-    const nuevoPagado = ar.montoPagado.plus(monto);
-    const nuevoSaldo = ar.saldo.minus(monto);
-    const nuevoEstado =
-      nuevoSaldo.lessThanOrEqualTo(0)
-        ? AccountReceivableStatus.PAGADA
-        : AccountReceivableStatus.PARCIAL;
-
-    await this.prisma.$transaction([
-      this.prisma.accountReceivablePayment.create({
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.accountReceivablePayment.create({
         data: {
           accountReceivableId: id,
           monto,
@@ -111,16 +104,44 @@ export class AccountsReceivableService {
           referencia: dto.referencia?.trim() || null,
           createdById: userId,
         },
-      }),
-      this.prisma.accountReceivable.update({
-        where: { id },
-        data: {
-          montoPagado: nuevoPagado,
-          saldo: Prisma.Decimal.max(nuevoSaldo, new Prisma.Decimal(0)),
-          estado: nuevoEstado,
+      });
+
+      const updated = await tx.accountReceivable.updateMany({
+        where: {
+          id,
+          establishmentId,
+          deletedAt: null,
+          saldo: { gte: monto },
+          estado: {
+            notIn: [AccountReceivableStatus.PAGADA, AccountReceivableStatus.ANULADA],
+          },
         },
-      }),
-    ]);
+        data: {
+          montoPagado: { increment: monto },
+          saldo: { decrement: monto },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException(
+          'El monto excede el saldo pendiente o la cuenta ya está cerrada',
+        );
+      }
+
+      const arAfter = await tx.accountReceivable.findUniqueOrThrow({
+        where: { id },
+        select: { saldo: true },
+      });
+      const nuevoEstado =
+        arAfter.saldo.lessThanOrEqualTo(0)
+          ? AccountReceivableStatus.PAGADA
+          : AccountReceivableStatus.PARCIAL;
+      await tx.accountReceivable.update({
+        where: { id },
+        data: { estado: nuevoEstado },
+      });
+
+      return Prisma.Decimal.max(arAfter.saldo, new Prisma.Decimal(0));
+    });
 
     await this.audit.log({
       userId,
@@ -129,6 +150,6 @@ export class AccountsReceivableService {
       entityId: id,
     });
 
-    return { ok: true, saldo: Prisma.Decimal.max(nuevoSaldo, new Prisma.Decimal(0)).toString() };
+    return { ok: true, saldo: result.toString() };
   }
 }

@@ -2,7 +2,7 @@
 
 Backend REST de **FactoFarm**: sistema farmacéutico integral para Perú — POS, inventario, recetas, facturación electrónica SUNAT, cumplimiento DIGEMID/LPDP, finanzas y más. Expone API REST bajo el prefijo `/api` con autenticación JWT, RBAC por permisos y documentación OpenAPI (Scalar).
 
-**Alcance:** 48 módulos de dominio en `src/modules/` (Fases 0–11 implementadas). Ver [ROADMAP.md](../ROADMAP.md) y [AUDITORIA-SISTEMA.md](../AUDITORIA-SISTEMA.md).
+**Alcance:** 48 módulos de dominio en `src/modules/` (Fases 0–11 implementadas). Ver [AUDITORIA-HALLAZGOS.md](./docs/AUDITORIA-HALLAZGOS.md) (inventario de defectos UX/UI/lógica/persistencia/infra) y [BETA-LAUNCH-CHECKLIST.md](./docs/BETA-LAUNCH-CHECKLIST.md).
 
 ---
 

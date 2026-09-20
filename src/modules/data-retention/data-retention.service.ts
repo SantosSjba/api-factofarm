@@ -52,6 +52,15 @@ export class DataRetentionService {
     return value === true || value === 'true';
   }
 
+  /** Soft-protect hard delete (B-LOG-20): requires explicit confirm token. */
+  isPurgeConfirmed(): boolean {
+    return this.config.get<string>('DATA_RETENTION_PURGE_CONFIRM') === 'I_UNDERSTAND';
+  }
+
+  canPurge(): boolean {
+    return this.isPurgeEnabled() && this.isPurgeConfirmed();
+  }
+
   isArchiveEnabled(): boolean {
     const value = this.config.get<boolean | string>('DATA_RETENTION_ARCHIVE_ENABLED');
     return value === true || value === 'true';
@@ -135,6 +144,8 @@ export class DataRetentionService {
         auditRetentionDays: this.getAuditRetentionDays(),
         archiveDays: this.getArchiveDays(),
         purgeEnabled: this.isPurgeEnabled(),
+        purgeConfirmed: this.isPurgeConfirmed(),
+        canPurge: this.canPurge(),
         archiveEnabled: this.isArchiveEnabled(),
         cron: this.getCronExpression(),
         archiveCron: this.getArchiveCronExpression(),
@@ -154,9 +165,19 @@ export class DataRetentionService {
   }
 
   async runAuditRetention(mode: RetentionMode) {
-    if (mode === 'purge' && !this.isPurgeEnabled()) {
-      throw new ForbiddenException(
-        'Purga deshabilitada. Configure DATA_RETENTION_PURGE_ENABLED=true tras validar dry-run y backups.',
+    if (mode === 'purge') {
+      if (!this.isPurgeEnabled()) {
+        throw new ForbiddenException(
+          'Purga deshabilitada. Configure DATA_RETENTION_PURGE_ENABLED=true tras validar dry-run y backups.',
+        );
+      }
+      if (!this.isPurgeConfirmed()) {
+        throw new ForbiddenException(
+          'Purga bloqueada. Configure DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND (además de PURGE_ENABLED=true).',
+        );
+      }
+      this.logger.warn(
+        'DATA_RETENTION HARD PURGE: AuditLog deleteMany habilitado (PURGE_ENABLED + CONFIRM=I_UNDERSTAND). Asegure backups antes de continuar.',
       );
     }
 
@@ -195,8 +216,8 @@ export class DataRetentionService {
             where: { id: { in: batch.map((row) => row.id) } },
           });
           deletedCount += result.count;
-          this.logger.log(
-            `AuditLog purge lote: ${result.count} (acumulado ${deletedCount})`,
+          this.logger.warn(
+            `AuditLog HARD PURGE lote: ${result.count} (acumulado ${deletedCount}) cutoff=${cutoffAt.toISOString()}`,
           );
         }
       }

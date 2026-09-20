@@ -235,6 +235,13 @@ export class PurchasesService {
     }
 
     const itemMap = new Map(po.items.map((i) => [i.id, i]));
+    const productIds = [...new Set(po.items.map((i) => i.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      select: { id: true, manejaLotes: true, nombre: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+
     let receiptTotal = new Prisma.Decimal(0);
     const receiptLines: Array<{
       purchaseOrderItemId: string;
@@ -256,6 +263,13 @@ export class PurchasesService {
           `Cantidad excede lo pendiente para ${poItem.productId}: pendiente ${pending.toString()}`,
         );
       }
+      const product = productById.get(poItem.productId);
+      const codigoLote = line.lotCode?.trim() || null;
+      if (product?.manejaLotes && qty.greaterThan(0) && !codigoLote) {
+        throw new BadRequestException(
+          `El producto ${product.nombre} maneja lotes: indique código de lote`,
+        );
+      }
       const cost = line.unitCost != null
         ? new Prisma.Decimal(line.unitCost)
         : poItem.precioUnitario;
@@ -264,7 +278,7 @@ export class PurchasesService {
         purchaseOrderItemId: poItem.id,
         productId: poItem.productId,
         cantidad: qty,
-        codigoLote: line.lotCode?.trim() || null,
+        codigoLote,
         fechaVencimiento: line.expirationDate ? new Date(line.expirationDate) : null,
         costoUnitario: cost,
         poItem,
@@ -503,33 +517,55 @@ export class PurchasesService {
     }
 
     const monto = new Prisma.Decimal(dto.amount);
-    if (monto.greaterThan(ap.saldo)) {
-      throw new BadRequestException('El pago excede el saldo pendiente');
+    if (monto.lessThanOrEqualTo(0)) {
+      throw new BadRequestException('El monto debe ser mayor a cero');
     }
 
-    const newPagado = ap.montoPagado.plus(monto);
-    const newSaldo = ap.saldo.minus(monto);
-    const newEstado = newSaldo.isZero()
-      ? AccountPayableStatus.PAGADA
-      : AccountPayableStatus.PARCIAL;
-
-    await this.prisma.$transaction([
-      this.prisma.accountPayablePayment.create({
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.accountPayablePayment.create({
         data: {
           accountPayableId: id,
           monto,
           metodo: dto.metodo?.trim() || null,
           referencia: dto.referencia?.trim() || null,
         },
-      }),
-      this.prisma.accountPayable.update({
+      });
+
+      const updated = await tx.accountPayable.updateMany({
+        where: {
+          id,
+          establishmentId,
+          deletedAt: null,
+          saldo: { gte: monto },
+          estado: {
+            notIn: [AccountPayableStatus.PAGADA, AccountPayableStatus.ANULADA],
+          },
+        },
+        data: {
+          montoPagado: { increment: monto },
+          saldo: { decrement: monto },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException('El pago excede el saldo pendiente o la cuenta ya está cerrada');
+      }
+
+      const apAfter = await tx.accountPayable.findUniqueOrThrow({
         where: { id },
-        data: { montoPagado: newPagado, saldo: newSaldo, estado: newEstado },
-      }),
-    ]);
+        select: { saldo: true, montoPagado: true },
+      });
+      const newEstado = apAfter.saldo.lessThanOrEqualTo(0)
+        ? AccountPayableStatus.PAGADA
+        : AccountPayableStatus.PARCIAL;
+      await tx.accountPayable.update({
+        where: { id },
+        data: { estado: newEstado },
+      });
+      return { saldo: apAfter.saldo, estado: newEstado };
+    });
 
     await this.audit.log({ userId: actorId, action: 'PAY', entity: 'AccountPayable', entityId: id });
-    return { ok: true, saldo: newSaldo.toString(), estado: newEstado };
+    return { ok: true, saldo: result.saldo.toString(), estado: result.estado };
   }
 
   // —— Notas de crédito proveedor ——

@@ -55,6 +55,14 @@ export class DispatchSaleStockDto {
   @Type(() => ManualSaleLotLineDto)
   manualLots?: ManualSaleLotLineDto[];
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Venta del establecimiento (obligatorio en POST /sales/dispatch)',
+  })
+  @IsOptional()
+  @IsUUID()
+  saleId?: string;
+
   @ApiPropertyOptional({ description: 'Referencia de venta (ej. número de comprobante)' })
   @IsOptional()
   @IsString()

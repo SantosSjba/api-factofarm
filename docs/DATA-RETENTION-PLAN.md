@@ -144,6 +144,7 @@ DATA_RETENTION_ARCHIVE_ENABLED=true
 - Truncar kardex / lotes.
 - Aplicar particionado (Fase 4) en caliente sin mantenimiento.
 - Dejar flags de purge/archive en `true` sin backup.
+- Activar `DATA_RETENTION_PURGE_ENABLED` sin `DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND` (B-LOG-20 soft-protect).
 
 ---
 

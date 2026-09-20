@@ -31,7 +31,13 @@ export class DataRetentionScheduler implements OnModuleInit {
   }
 
   private async handleAuditCron(): Promise<void> {
-    const mode = this.retention.isPurgeEnabled() ? 'purge' : 'dry-run';
+    // B-LOG-20: purge only when ENABLED + CONFIRM=I_UNDERSTAND; otherwise dry-run.
+    const mode = this.retention.canPurge() ? 'purge' : 'dry-run';
+    if (this.retention.isPurgeEnabled() && !this.retention.isPurgeConfirmed()) {
+      this.logger.warn(
+        'DATA_RETENTION_PURGE_ENABLED=true pero falta DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND — ejecutando dry-run.',
+      );
+    }
     try {
       const result = await this.retention.runAuditRetention(mode);
       this.logger.log(

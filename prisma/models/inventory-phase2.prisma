@@ -31,7 +31,9 @@ enum InventoryLotAllocationMethod {
 
 enum InventoryPhysicalCountStatus {
   EN_PROCESO
+  PROCESANDO
   FINALIZADO
+  ERROR
   ANULADO
 }
 

@@ -39,6 +39,8 @@ function buildService() {
     },
     saleReturn: { create: jest.fn() },
     cashMovement: { create: jest.fn() },
+    cashSession: { findFirst: jest.fn() },
+    accountReceivable: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findFirst: jest.fn() },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
   };
   const audit = { log: jest.fn() };
@@ -230,6 +232,7 @@ describe('SalesService', () => {
       sellerId: 'u1',
       establishmentId: 'est-1',
       items: [],
+      payments: [],
       serie: 'B001',
       numero: '1',
       warehouseId: 'w1',
@@ -263,6 +266,7 @@ describe('SalesService', () => {
           lotLines: [{ codigoLote: 'L1', cantidad: new Prisma.Decimal(2) }],
         },
       ],
+      payments: [{ metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) }],
       serie: 'B001',
       numero: '1',
       warehouseId: 'w1',
@@ -281,7 +285,8 @@ describe('SalesService', () => {
     expect(result.ok).toBe(true);
     expect(prisma.sale.updateMany).toHaveBeenCalled();
     expect(inventory.executeAdjustmentDelta).toHaveBeenCalled();
-    expect(billing.voidFromSale).toHaveBeenCalled();
+    expect(billing.voidFromSale).not.toHaveBeenCalled();
+    expect(prisma.accountReceivable.updateMany).toHaveBeenCalled();
     expect(realtime.emitStockUpdated).toHaveBeenCalledWith('est-1', 'w1');
   });
 

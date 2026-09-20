@@ -16,6 +16,9 @@ model Archivo {
   serviceImagen Service? @relation("ServiceImagen")
   compoundProductImagen CompoundProduct? @relation("CompoundProductImagen")
   prescriptionImagen Prescription? @relation("PrescriptionImagen")
+  electronicDocumentsXml ElectronicDocument[] @relation("ElectronicDocumentXml")
+  electronicDocumentsPdf ElectronicDocument[] @relation("ElectronicDocumentPdf")
+  electronicDocumentsCdr ElectronicDocument[] @relation("ElectronicDocumentCdr")
 
   createdAt DateTime @default(now())
 

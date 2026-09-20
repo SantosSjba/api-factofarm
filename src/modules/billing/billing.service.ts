@@ -853,28 +853,47 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (this.processing) return;
     this.processing = true;
     try {
-      const jobs = await this.prisma.billingJob.findMany({
+      const candidates = await this.prisma.billingJob.findMany({
         where: {
           status: BillingJobStatus.PENDIENTE,
           scheduledAt: { lte: new Date() },
         },
         orderBy: { scheduledAt: 'asc' },
         take: 10,
-        include: {
-          electronicDocument: {
-            include: {
-              lines: { orderBy: { lineNumber: 'asc' } },
-              establishment: { select: { id: true, nombre: true } },
-            },
-          },
-        },
+        select: { id: true },
       });
 
-      for (const job of jobs) {
-        await this.prisma.billingJob.update({
-          where: { id: job.id },
+      for (const candidate of candidates) {
+        // Claim atómico: solo una instancia gana el job (evita doble emisión OSE).
+        const claimed = await this.prisma.billingJob.updateMany({
+          where: { id: candidate.id, status: BillingJobStatus.PENDIENTE },
           data: { status: BillingJobStatus.PROCESANDO, attempts: { increment: 1 } },
         });
+        if (claimed.count !== 1) continue;
+
+        const job = await this.prisma.billingJob.findUnique({
+          where: { id: candidate.id },
+          include: {
+            electronicDocument: {
+              include: {
+                lines: { orderBy: { lineNumber: 'asc' } },
+                establishment: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+        });
+        if (!job?.electronicDocument) {
+          await this.prisma.billingJob.update({
+            where: { id: candidate.id },
+            data: {
+              status: BillingJobStatus.FALLIDO,
+              lastError: 'Documento electrónico no encontrado',
+              processedAt: new Date(),
+            },
+          });
+          continue;
+        }
+
         try {
           await this.processEmitJob(job.electronicDocument);
           await this.prisma.billingJob.update({

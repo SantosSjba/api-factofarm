@@ -27,7 +27,8 @@ model Establishment {
   tenantId        String
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   nombre          String
-  codigo          String?  @unique
+  /// Código interno único por tenant (no global).
+  codigo          String?
   activo          Boolean  @default(true)
   pais            String   @default("PERU")
   /// Zona horaria IANA del local (calendario de negocio, PDFs, reportes). Default Perú.
@@ -113,6 +114,7 @@ model Establishment {
   shippingVehicles    ShippingVehicle[]
   departureAddresses  DepartureAddress[]
 
+  @@unique([tenantId, codigo])
   @@index([titularPharmacistLicenseId])
   @@index([departmentId])
   @@index([provinceId])

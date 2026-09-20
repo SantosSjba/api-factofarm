@@ -13,7 +13,7 @@ export class LoginAttemptService {
     const since = new Date(Date.now() - WINDOW_MS);
     const normalized = email.trim().toLowerCase();
 
-    const failures = await this.prisma.loginAttempt.count({
+    const emailFailures = await this.prisma.loginAttempt.count({
       where: {
         email: normalized,
         success: false,
@@ -21,14 +21,29 @@ export class LoginAttemptService {
       },
     });
 
-    if (failures >= MAX_ATTEMPTS) {
+    if (emailFailures >= MAX_ATTEMPTS) {
       throw new UnauthorizedException({
         code: 'ACCOUNT_LOCKED',
         message: `Demasiados intentos fallidos. Intente de nuevo en ${LOCKOUT_MS / 60000} minutos.`,
       });
     }
 
-    void ipAddress;
+    // Throttle adicional por IP (ataques distribuidos sobre muchos emails).
+    if (ipAddress?.trim()) {
+      const ipFailures = await this.prisma.loginAttempt.count({
+        where: {
+          ipAddress: ipAddress.trim(),
+          success: false,
+          createdAt: { gte: since },
+        },
+      });
+      if (ipFailures >= MAX_ATTEMPTS) {
+        throw new UnauthorizedException({
+          code: 'IP_LOCKED',
+          message: `Demasiados intentos fallidos desde esta red. Intente de nuevo en ${LOCKOUT_MS / 60000} minutos.`,
+        });
+      }
+    }
   }
 
   async recordAttempt(

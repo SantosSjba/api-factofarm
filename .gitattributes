@@ -1,0 +1,3 @@
+# Force LF for shell scripts (avoid Coolify "no such file" from CRLF)
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf

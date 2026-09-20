@@ -106,6 +106,9 @@ model ElectronicDocument {
   inventoryTransfer InventoryStockTransfer? @relation(fields: [inventoryTransferId], references: [id], onDelete: SetNull)
   relatedDocument ElectronicDocument?  @relation("BillingRelatedDoc", fields: [relatedDocumentId], references: [id], onDelete: SetNull)
   derivedDocs     ElectronicDocument[] @relation("BillingRelatedDoc")
+  xmlArchivo      Archivo?             @relation("ElectronicDocumentXml", fields: [xmlArchivoId], references: [id], onDelete: SetNull)
+  pdfArchivo      Archivo?             @relation("ElectronicDocumentPdf", fields: [pdfArchivoId], references: [id], onDelete: SetNull)
+  cdrArchivo      Archivo?             @relation("ElectronicDocumentCdr", fields: [cdrArchivoId], references: [id], onDelete: SetNull)
   lines           ElectronicDocumentLine[]
   taxLines        ElectronicDocumentTax[]
   responses       SunatResponse[]

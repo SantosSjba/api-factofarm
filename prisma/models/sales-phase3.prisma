@@ -241,6 +241,7 @@ model Sale {
   @@index([deletedAt])
   @@index([archivedAt])
   @@index([establishmentId, archivedAt, createdAt])
+  @@unique([establishmentId, documentType, serie, numero])
 }
 
 model SaleItem {

@@ -1521,13 +1521,21 @@ export class ProductsService {
         const esGenerico = this.toBooleanSiNo(row['Es Generico'], false);
         const codigoLote = this.cellString(row, 'Código lote');
         const fechaVencimiento = this.toDateIso(row['Fec. Vencimiento']);
-        const manejaLotes = !!(codigoLote || fechaVencimiento);
+        let manejaLotes = !!(codigoLote || fechaVencimiento);
 
         if (precioVenta === null || precioVenta < 0) {
           throw new BadRequestException('Precio Unitario Venta inválido.');
         }
         if (precioCompra !== null && precioCompra < 0) {
           throw new BadRequestException('Precio Unitario Compra inválido.');
+        }
+        if (stock > 0 && manejaLotes && !codigoLote) {
+          throw new BadRequestException(
+            'Código lote obligatorio cuando el producto maneja lotes y tiene stock inicial.',
+          );
+        }
+        if (stock > 0 && codigoLote) {
+          manejaLotes = true;
         }
 
         const current = await this.prisma.product.findFirst({
@@ -1619,6 +1627,11 @@ export class ProductsService {
 
         // Stock solo en alta inicial. En actualización no se sobrescribe (kardex).
         if (!current) {
+          if (stock > 0 && manejaLotes && !codigoLote) {
+            throw new BadRequestException(
+              'Código lote obligatorio para crear stock de productos con manejo de lotes.',
+            );
+          }
           await this.prisma.productWarehouseStock.create({
             data: {
               productId: product.id,
@@ -1626,6 +1639,17 @@ export class ProductsService {
               cantidad: new Prisma.Decimal(stock),
             },
           });
+          if (manejaLotes && codigoLote && stock > 0) {
+            await this.prisma.productLotStock.create({
+              data: {
+                productId: product.id,
+                warehouseId: defaultWarehouse.id,
+                codigoLote,
+                stock: new Prisma.Decimal(stock),
+                fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+              },
+            });
+          }
         } else if (stock > 0) {
           const existingStock = await this.prisma.productWarehouseStock.findUnique({
             where: {
