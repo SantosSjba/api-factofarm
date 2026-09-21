@@ -127,6 +127,7 @@ export class InventoryPhysicalCountsService {
 
   async upsertItem(countId: string, dto: UpsertPhysicalCountItemDto, actor: JwtRequestUser) {
     const count = await this.loadOpenCount(countId, actor);
+    await this.scope.assertProductInTenant(actor, dto.productId);
     const systemQty = await this.resolveSystemQty(
       count.warehouseId,
       dto.productId,

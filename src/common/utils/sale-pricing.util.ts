@@ -83,3 +83,23 @@ export function applySaleLevelDiscount(
     descuento: discount,
   };
 }
+
+export function explodePackSaleItems(
+  packQty: Prisma.Decimal,
+  packUnitPrice: Prisma.Decimal,
+  items: Array<{ productId: string; cantidad: Prisma.Decimal; precioUnitario: Prisma.Decimal; total: Prisma.Decimal }>,
+): Array<{ productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal }> {
+  if (!items.length) return [];
+  const packTotal = packUnitPrice.times(packQty);
+  const weights = items.map((it) => {
+    const weight = it.total.gt(0) ? it.total : it.precioUnitario.times(it.cantidad);
+    return weight.gt(0) ? weight : new Prisma.Decimal(1);
+  });
+  const weightSum = weights.reduce((acc, w) => acc.plus(w), new Prisma.Decimal(0));
+  return items.map((it, idx) => {
+    const componentQty = it.cantidad.times(packQty);
+    const share = packTotal.times(weights[idx]!).div(weightSum);
+    const unitPrice = componentQty.gt(0) ? share.div(componentQty) : new Prisma.Decimal(0);
+    return { productId: it.productId, quantity: componentQty, unitPrice };
+  });
+}

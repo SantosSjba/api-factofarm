@@ -141,7 +141,7 @@ export class InventoryMovementsController {
   }
 
   @Get('catalogs/warehouses')
-  @RequirePermissions('inventory.read')
+  @RequirePermissions('inventory.read', 'sales.read', 'nav.punto_venta')
   @ApiOperation({ summary: 'Listar almacenes para importación de inventario' })
   listWarehouses(@CurrentUser() actor: JwtRequestUser) {
     return this.service.listWarehouses(actor);

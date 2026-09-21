@@ -33,7 +33,14 @@ export function resolveUserPermissionCodes(input: {
     return allowedNav.has(code);
   });
 
-  const result = new Set(filtered.filter((code) => !code.startsWith('nav.')));
+  // Los permisos derivados pueden estar persistidos en UserPermission. No deben
+  // sobrevivir cuando se deshabilita el módulo que los concedía; reconstruirlos
+  // desde la intersección de módulos asignados y contratados conserva también
+  // los permisos compartidos que otro módulo vigente necesita.
+  const modulePermissions = new Set(Object.values(NAV_TO_RBAC_EXPANSION).flat());
+  const result = new Set(
+    filtered.filter((code) => !code.startsWith('nav.') && !modulePermissions.has(code)),
+  );
   for (const navCode of allowedNav) {
     if (filtered.includes(navCode)) {
       result.add(navCode);
@@ -46,6 +53,5 @@ export function resolveUserPermissionCodes(input: {
     }
   }
 
-  result.add('users.read');
   return [...result].sort();
 }

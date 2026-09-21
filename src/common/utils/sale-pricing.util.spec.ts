@@ -2,6 +2,7 @@ import { DiscountType, Prisma } from '../../generated/prisma/client';
 import {
   applySaleLevelDiscount,
   computeSaleLineTotals,
+  explodePackSaleItems,
   isTaxGravado,
 } from './sale-pricing.util';
 
@@ -65,5 +66,30 @@ describe('sale-pricing.util', () => {
     );
     expect(result.total.toString()).toBe('90');
     expect(result.descuento.toString()).toBe('10');
+  });
+
+  it('reparte el precio del pack entre componentes sin alterar el total', () => {
+    const lines = explodePackSaleItems(
+      new Prisma.Decimal(1),
+      new Prisma.Decimal(5),
+      [
+        {
+          productId: 'a',
+          cantidad: new Prisma.Decimal(1),
+          precioUnitario: new Prisma.Decimal(3),
+          total: new Prisma.Decimal(3),
+        },
+        {
+          productId: 'b',
+          cantidad: new Prisma.Decimal(1),
+          precioUnitario: new Prisma.Decimal(2),
+          total: new Prisma.Decimal(2),
+        },
+      ],
+    );
+    const sum = lines.reduce((acc, row) => acc.plus(row.unitPrice.times(row.quantity)), new Prisma.Decimal(0));
+    expect(sum.toNumber()).toBeCloseTo(5, 4);
+    expect(lines[0]!.quantity.toString()).toBe('1');
+    expect(lines[1]!.quantity.toString()).toBe('1');
   });
 });

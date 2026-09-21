@@ -42,6 +42,7 @@ import {
   InventoryLotAllocationService,
   type LotAllocationLine,
 } from './inventory-lot-allocation.service';
+import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
 const ADJUST_OUT_CODE = 'OUT_AJUSTE_DIFERENCIA';
 const ADJUST_IN_CODE = 'INGRESO_OTROS';
@@ -141,6 +142,32 @@ export class InventoryMovementsService {
   }
 
   async listWarehouses(actor: JwtRequestUser) {
+    const codes = actor.permissionCodes ?? [];
+    const canListTenantWarehouses =
+      codes.includes('inventory.read') ||
+      codes.includes('nav.inventario_movimientos') ||
+      codes.includes('nav.traslados');
+
+    // POS (sales.read / nav.punto_venta sin inventario): solo sede de sesión.
+    if (!canListTenantWarehouses) {
+      if (!actor.establecimientoId) {
+        throw new ForbiddenException('Usuario sin establecimiento asignado');
+      }
+      await this.scope.assertEstablishmentInTenant(actor, actor.establecimientoId);
+      return this.prisma.warehouse.findMany({
+        where: {
+          deletedAt: null,
+          establishmentId: actor.establecimientoId,
+        },
+        orderBy: [{ nombre: 'asc' }],
+        select: {
+          id: true,
+          nombre: true,
+          establishment: { select: { id: true, nombre: true, codigo: true } },
+        },
+      });
+    }
+
     const establishmentIds = await this.scope.establishmentIdsForActor(actor);
     return this.prisma.warehouse.findMany({
       where: {
@@ -635,22 +662,27 @@ export class InventoryMovementsService {
       throw new ForbiddenException('Otro usuario debe aprobar el ajuste');
     }
 
-    await this.executeAdjustmentDelta({
-      productId: pending.productId,
-      warehouseId: pending.warehouseId,
-      lotCode: pending.codigoLote,
-      delta: pending.cantidadAjuste,
-      reason: pending.motivo,
-      userId: actorId,
-    });
-
-    await this.prisma.inventoryPendingAdjustment.update({
-      where: { id },
-      data: {
-        estado: InventoryPendingAdjustmentStatus.APROBADO,
-        approvedById: actorId,
-        approvedAt: new Date(),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.inventoryPendingAdjustment.updateMany({
+        where: { id, estado: InventoryPendingAdjustmentStatus.PENDIENTE, deletedAt: null },
+        data: {
+          estado: InventoryPendingAdjustmentStatus.APROBADO,
+          approvedById: actorId,
+          approvedAt: new Date(),
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('El ajuste ya fue procesado por otro usuario');
+      }
+      await this.executeAdjustmentDelta({
+        productId: pending.productId,
+        warehouseId: pending.warehouseId,
+        lotCode: pending.codigoLote,
+        delta: pending.cantidadAjuste,
+        reason: pending.motivo,
+        userId: actorId,
+        tx,
+      });
     });
 
     await this.audit.log({
@@ -682,14 +714,18 @@ export class InventoryMovementsService {
       throw new ForbiddenException('Otro usuario debe rechazar el ajuste');
     }
 
-    await this.prisma.inventoryPendingAdjustment.update({
-      where: { id },
+    const rejected = await this.prisma.inventoryPendingAdjustment.updateMany({
+      where: { id, estado: InventoryPendingAdjustmentStatus.PENDIENTE, deletedAt: null },
       data: {
         estado: InventoryPendingAdjustmentStatus.RECHAZADO,
         approvedById: actorId,
         approvedAt: new Date(),
       },
     });
+
+    if (rejected.count !== 1) {
+      throw new BadRequestException('El ajuste ya fue procesado por otro usuario');
+    }
 
     return { ok: true, message: 'Ajuste rechazado' };
   }
@@ -918,6 +954,7 @@ export class InventoryMovementsService {
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
     if (!transferReason) throw new NotFoundException('Motivo de traslado no encontrado');
+    await assertActiveColdZoneForRefrigeratedProducts(this.prisma, dto.warehouseId, [dto.productId]);
 
     const amount = new Prisma.Decimal(dto.quantity);
     const fechaVencimiento = dto.expirationDate ? new Date(dto.expirationDate) : null;

@@ -27,6 +27,7 @@ import { EstablishmentScopeService } from '../../common/scoping/establishment-sc
 import {
   applySaleLevelDiscount,
   computeSaleLineTotals,
+  explodePackSaleItems,
 } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -48,6 +49,7 @@ import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-alloc
 import {
   CreateSaleDto,
   CreateSaleDebitNoteDto,
+  CreateSaleItemDto,
   CreateSaleReturnDto,
   SyncSalesDto,
   VoidSaleDto,
@@ -60,6 +62,7 @@ import {
 } from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
 import { SunatDocumentStatus } from '../../generated/prisma/client';
+import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
   BOLETA: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
@@ -147,6 +150,7 @@ export class SalesService {
           descuentoTotal: true,
           igvTotal: true,
           total: true,
+          moneda: true,
           archivedAt: true,
           createdAt: true,
           customer: { select: { id: true, nombre: true } },
@@ -628,6 +632,13 @@ export class SalesService {
       dto.agreementId,
     );
 
+    dto.items = await this.expandCompoundSaleItems(dto.items, establishment.tenantId);
+    await assertActiveColdZoneForRefrigeratedProducts(
+      this.prisma,
+      dto.warehouseId,
+      dto.items.map((item) => item.productId),
+    );
+
     const pricedItems = await this.buildPricedItems(
       dto,
       actor.establecimientoId,
@@ -651,22 +662,21 @@ export class SalesService {
     );
 
     const requiresRx = pricedItems.some((item) => item.necesitaRecetaMedica);
-    if (requiresRx) {
-      if (dto.prescriptionId) {
-        await this.prescriptions.validateForSale(
-          dto.prescriptionId,
-          actor.establecimientoId,
-          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
-          dto.substitutions?.map((s) => ({
-            originalProductId: s.originalProductId,
-            substituteProductId: s.substituteProductId,
-          })),
-        );
-      } else if (!dto.prescriptionValidated) {
-        throw new BadRequestException(
-          'La venta incluye productos con receta obligatoria. Seleccione una receta o valide manualmente.',
-        );
-      }
+    if (dto.prescriptionId) {
+      await this.prescriptions.validateForSale(
+        dto.prescriptionId,
+        actor.establecimientoId,
+        pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+        dto.substitutions?.map((s) => ({
+          originalProductId: s.originalProductId,
+          substituteProductId: s.substituteProductId,
+        })),
+        dto.customerId ?? '',
+      );
+    } else if (requiresRx && !dto.prescriptionValidated) {
+      throw new BadRequestException(
+        'La venta incluye productos con receta obligatoria. Seleccione una receta o valide manualmente.',
+      );
     }
 
     let subtotal = new Prisma.Decimal(0);
@@ -699,6 +709,7 @@ export class SalesService {
         dto.promotionCode.trim(),
         pricedItems,
         total,
+        true,
       );
       if (promoDiscount.greaterThan(0)) {
         const prevTotal = total;
@@ -773,6 +784,7 @@ export class SalesService {
           descuentoTotal,
           igvTotal,
           total,
+          moneda: dto.moneda === 'USD' ? 'USD' : 'PEN',
           saleDiscountType: dto.saleDiscountType ?? null,
           saleDiscountValue:
             dto.saleDiscountValue !== undefined
@@ -938,6 +950,7 @@ export class SalesService {
           tx,
           actor.establecimientoId,
           dto.substitutions,
+          dto.customerId,
         );
       }
       return sale.id;
@@ -1759,7 +1772,7 @@ export class SalesService {
       warehouseId,
     );
 
-    return products
+    const rows = products
       .map((p) => {
         const warehouseStock = p.warehouseStocks[0]?.cantidad ?? new Prisma.Decimal(0);
         const sellable = p.manejaLotes
@@ -1782,6 +1795,136 @@ export class SalesService {
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const packs = await this.listSellablePacks(establishmentId, warehouseId, term);
+    return [...rows, ...packs];
+  }
+
+  private async listSellablePacks(
+    establishmentId: string,
+    warehouseId: string,
+    term?: string,
+  ) {
+    const establishment = await this.prisma.establishment.findFirst({
+      where: { id: establishmentId, deletedAt: null },
+      select: { tenantId: true },
+    });
+    if (!establishment) return [];
+
+    const packs = await this.prisma.compoundProduct.findMany({
+      where: {
+        tenantId: establishment.tenantId,
+        deletedAt: null,
+        ...(term
+          ? {
+              OR: [
+                { nombre: { contains: term, mode: 'insensitive' } },
+                { codigoInterno: { contains: term, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      take: 20,
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        nombre: true,
+        codigoInterno: true,
+        precioUnitarioVenta: true,
+        items: { select: { productId: true, cantidad: true } },
+      },
+    });
+
+    const componentIds = [...new Set(packs.flatMap((p) => p.items.map((i) => i.productId)))];
+    if (!componentIds.length) return [];
+
+    const stocks = await this.prisma.productWarehouseStock.findMany({
+      where: { warehouseId, productId: { in: componentIds } },
+      select: { productId: true, cantidad: true },
+    });
+    const stockByProduct = new Map(stocks.map((s) => [s.productId, s.cantidad]));
+    const lotIds = (
+      await this.prisma.product.findMany({
+        where: { id: { in: componentIds }, manejaLotes: true, deletedAt: null },
+        select: { id: true },
+      })
+    ).map((p) => p.id);
+    const eligibleLots = await this.lotAllocation.batchSumEligibleStock(lotIds, warehouseId);
+
+    return packs
+      .map((pack) => {
+        if (!pack.items.length) return null;
+        let sellable = new Prisma.Decimal(Number.MAX_SAFE_INTEGER);
+        for (const item of pack.items) {
+          const available = lotIds.includes(item.productId)
+            ? (eligibleLots.get(item.productId) ?? new Prisma.Decimal(0))
+            : (stockByProduct.get(item.productId) ?? new Prisma.Decimal(0));
+          const perPack = item.cantidad.gt(0) ? available.div(item.cantidad) : new Prisma.Decimal(0);
+          if (perPack.lt(sellable)) sellable = perPack;
+        }
+        if (sellable.lt(1)) return null;
+        return {
+          id: pack.id,
+          nombre: pack.nombre,
+          codigoInterno: pack.codigoInterno,
+          codigoBarra: null as string | null,
+          precio: pack.precioUnitarioVenta.toString(),
+          stock: sellable.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN).toString(),
+          warehouseStock: sellable.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN).toString(),
+          necesitaRecetaMedica: false,
+          manejaLotes: false,
+          esControlado: false,
+          imagenArchivoId: null as string | null,
+          esPack: true,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+  }
+
+  private async expandCompoundSaleItems(items: CreateSaleItemDto[], tenantId: string) {
+    const expanded: CreateSaleItemDto[] = [];
+    for (const line of items) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: line.productId, deletedAt: null },
+        select: { id: true },
+      });
+      if (product) {
+        expanded.push(line);
+        continue;
+      }
+
+      const pack = await this.prisma.compoundProduct.findFirst({
+        where: { id: line.productId, tenantId, deletedAt: null },
+        select: {
+          id: true,
+          precioUnitarioVenta: true,
+          items: {
+            select: { productId: true, cantidad: true, precioUnitario: true, total: true },
+          },
+        },
+      });
+      if (!pack?.items.length) {
+        throw new NotFoundException(`Producto no encontrado: ${line.productId}`);
+      }
+
+      const exploded = explodePackSaleItems(
+        new Prisma.Decimal(line.quantity),
+        new Prisma.Decimal(line.unitPrice ?? pack.precioUnitarioVenta.toString()),
+        pack.items,
+      );
+      for (const row of exploded) {
+        expanded.push({
+          productId: row.productId,
+          quantity: Number(row.quantity.toString()),
+          unitPrice: Number(row.unitPrice.toFixed(4)),
+          discountType: line.discountType,
+          discountValue: line.discountValue,
+          lotAllocationMode: line.lotAllocationMode,
+          manualLots: line.manualLots,
+        });
+      }
+    }
+    return expanded;
   }
 
   async suggestGenericSubstitutes(
@@ -2045,8 +2188,8 @@ export class SalesService {
       documentType === SaleDocumentType.FACTURA ||
       documentType === SaleDocumentType.TICKET;
     if (!needsOse) return;
-    const hasOse = await this.billing.establishmentHasRealOse(establishmentId);
-    if (!hasOse) {
+    const canEmit = await this.billing.establishmentCanEmitCpe(establishmentId);
+    if (!canEmit) {
       throw new BadRequestException(
         'Sin facturación electrónica configurada solo puede registrar notas de venta. Configure el OSE en Mi farmacia para boletas y facturas.',
       );
@@ -2065,8 +2208,8 @@ export class SalesService {
   ) {
     const nextType =
       targetType === 'FACTURA' ? SaleDocumentType.FACTURA : SaleDocumentType.BOLETA;
-    const hasOse = await this.billing.establishmentHasRealOse(establishmentId);
-    if (!hasOse) {
+    const canEmit = await this.billing.establishmentCanEmitCpe(establishmentId);
+    if (!canEmit) {
       throw new BadRequestException(
         'Configure facturación electrónica (OSE) en Mi farmacia antes de migrar a boleta/factura.',
       );
@@ -2181,18 +2324,21 @@ export class SalesService {
     code: string,
     items: { cantidad: Prisma.Decimal; totalLinea: Prisma.Decimal }[],
     saleTotal: Prisma.Decimal,
+    requireValidCode = false,
   ) {
     const promo = await this.prisma.promotion.findFirst({
       where: {
         establishmentId,
-        codigo: code,
+        codigo: code.trim().toUpperCase(),
         activo: true,
         deletedAt: null,
         OR: [{ validFrom: null }, { validFrom: { lte: new Date() } }],
       },
     });
-    if (!promo) return new Prisma.Decimal(0);
-    if (promo.validTo && promo.validTo.getTime() < Date.now()) {
+    if (!promo || (promo.validTo && promo.validTo.getTime() < Date.now())) {
+      if (requireValidCode) {
+        throw new BadRequestException('Código promocional no válido o vencido');
+      }
       return new Prisma.Decimal(0);
     }
 
@@ -2221,6 +2367,7 @@ export class SalesService {
     descuentoTotal: Prisma.Decimal;
     igvTotal: Prisma.Decimal;
     total: Prisma.Decimal;
+    moneda?: string | null;
     prescriptionValidated: boolean;
     prescriptionNote: string | null;
     comentario: string | null;
@@ -2249,6 +2396,7 @@ export class SalesService {
       descuentoTotal: sale.descuentoTotal.toString(),
       igvTotal: sale.igvTotal.toString(),
       total: sale.total.toString(),
+      moneda: sale.moneda ?? 'PEN',
       prescriptionValidated: sale.prescriptionValidated,
       prescriptionNote: sale.prescriptionNote,
       comentario: sale.comentario,

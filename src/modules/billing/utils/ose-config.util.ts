@@ -17,3 +17,14 @@ export function hasRealOseConfigured(config: OseConfigLike | null | undefined): 
   if (!config) return false;
   return REAL_OSE_PROVIDERS.has(config.provider) && !!config.apiTokenEncrypted?.trim();
 }
+
+/** En no-producción MOCK puede emitir CPE local (ACEPTADO mock) para QA. */
+export function canEmitElectronicDocuments(
+  config: OseConfigLike | null | undefined,
+  nodeEnv: string | undefined,
+): boolean {
+  if (hasRealOseConfigured(config)) return true;
+  if (nodeEnv === 'production') return false;
+  const provider = config?.provider ?? BillingProviderType.MOCK;
+  return provider === BillingProviderType.MOCK;
+}

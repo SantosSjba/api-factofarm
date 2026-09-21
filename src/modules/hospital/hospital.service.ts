@@ -20,6 +20,7 @@ import {
   HospitalAreaListQueryDto,
   HospitalConsumptionListQueryDto,
 } from './dto/hospital.dto';
+import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
 @Injectable()
 export class HospitalService {
@@ -164,6 +165,11 @@ export class HospitalService {
     for (const item of dto.items) {
       await this.scope.assertProductInTenant(actor, item.productId);
     }
+    await assertActiveColdZoneForRefrigeratedProducts(
+      this.prisma,
+      dto.warehouseId,
+      dto.items.map((item) => item.productId),
+    );
 
     const row = await this.prisma.hospitalInternalConsumption.create({
       data: {

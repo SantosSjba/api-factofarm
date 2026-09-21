@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   formatDateYmdInTimeZone,
   monthBoundsInTimeZone,
   normalizeTimeZone,
+  parseYearMonth,
 } from '../../../common/utils/timezone.util';
 
 type PleBook = '14.1' | '8.1' | '13.1';
@@ -15,7 +16,7 @@ export class PleService {
 
   async buildTxt(establishmentId: string, period: string, book: PleBook) {
     const tz = await this.resolveTimeZone(establishmentId);
-    const { start: from, end: to } = monthBoundsInTimeZone(period, tz);
+    const { start: from, end: to } = this.periodBounds(period, tz);
 
     if (book === '14.1') {
       return this.buildSalesBook(establishmentId, from, to, period, book, tz);
@@ -28,7 +29,7 @@ export class PleService {
 
   async accountantSummary(establishmentId: string, period: string) {
     const tz = await this.resolveTimeZone(establishmentId);
-    const { start: from, end: to } = monthBoundsInTimeZone(period, tz);
+    const { start: from, end: to } = this.periodBounds(period, tz);
 
     const sales = await this.prisma.sale.aggregate({
       where: {
@@ -289,14 +290,19 @@ export class PleService {
   }
 
   private parsePeriod(period: string) {
-    const match = /^(\d{4})-(\d{2})$/.exec(period.trim());
-    if (!match) {
-      throw new Error('Periodo inválido. Use formato YYYY-MM');
+    try {
+      return parseYearMonth(period);
+    } catch {
+      throw new BadRequestException('Periodo inválido. Use YYYY-MM o YYYYMM');
     }
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    if (month < 1 || month > 12) throw new Error('Mes inválido');
-    return { year, month };
+  }
+
+  private periodBounds(period: string, tz: string) {
+    try {
+      return monthBoundsInTimeZone(period, tz);
+    } catch {
+      throw new BadRequestException('Periodo inválido. Use YYYY-MM o YYYYMM');
+    }
   }
 
   private async resolveTimeZone(establishmentId: string): Promise<string> {
@@ -309,5 +315,6 @@ export class PleService {
 }
 
 function yearMonthFile(period: string): string {
-  return period.replace('-', '');
+  const { year, month } = parseYearMonth(period);
+  return `${String(year).padStart(4, '0')}${String(month).padStart(2, '0')}`;
 }

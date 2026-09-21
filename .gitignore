@@ -54,6 +54,9 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+**/__pycache__/
+*.pyc
+docs/planes de prueba/**/_*
 
 # Runtime data
 pids

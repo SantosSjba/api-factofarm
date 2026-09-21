@@ -84,7 +84,13 @@ export class EstablishmentsController {
   }
 
   @Get('pharmacy-profile')
-  @RequirePermissions('establishments.read', 'nav.establecimientos', 'establishments.write')
+  @RequirePermissions(
+    'establishments.read',
+    'nav.establecimientos',
+    'establishments.write',
+    'sales.read',
+    'nav.punto_venta',
+  )
   @ApiOperation({
     summary: 'Perfil de farmacia del establecimiento activo (logo, contacto y datos de facturación)',
   })

@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -125,6 +126,11 @@ export class CreateSaleDto {
   @ApiProperty({ enum: SaleDocumentType, example: 'BOLETA' })
   @IsEnum(SaleDocumentType)
   documentType!: SaleDocumentType;
+
+  @ApiPropertyOptional({ enum: ['PEN', 'USD'], default: 'PEN' })
+  @IsOptional()
+  @IsIn(['PEN', 'USD'])
+  moneda?: 'PEN' | 'USD';
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -111,7 +111,10 @@ export function expandUserPermissionCodes(codes: string[], role: UserRole): stri
     }
   }
 
-  set.add('users.read');
+  // users.read solo vía nav.usuarios (no otorgar a todos los roles).
+  if (!set.has('nav.usuarios')) {
+    set.delete('users.read');
+  }
   if (hasChainScope(role)) {
     set.add('users.write');
   }

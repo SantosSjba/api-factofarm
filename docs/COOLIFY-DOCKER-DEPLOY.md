@@ -121,6 +121,18 @@ S3_KEY_PREFIX=uploads
 
 Si esas variables están definidas, la API usa `S3MinioFileStorage` (SDK S3 path-style) y **no** depende del disco del contenedor. Consola MinIO: `https://admin-storage.factosysperu.com`.
 
+**Redis compartido — FACTOSYS PERU → `db-redis` (mismo VPS):**
+
+- Recurso: `db-redis` UUID `tdsuggtdfwfgauonnt0dcqoz` (no público; red interna Coolify).
+- En `api-factofarm` → Environment, pegar la **Internal URL** de ese Redis:
+
+```env
+REDIS_URL=redis://:PASSWORD@tdsuggtdfwfgauonnt0dcqoz:6379/0
+REDIS_KEY_PREFIX=factofarm
+```
+
+PASSWORD sale de Coolify → `db-redis` → Configuration (no commitear). Las claves de FactoFarm van con prefijo `factofarm:` para convivir con otras apps. Tras guardar, **Restart** (no hace falta rebuild si la imagen ya tiene el prefijo).
+
 **Alternativa — volumen local:**
 
 - `UPLOADS_DIR=/app/uploads` + `VOLUME /app/uploads` en Coolify persistent storage.

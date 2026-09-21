@@ -61,6 +61,8 @@ export const envValidationSchema = Joi.object({
   }),
   /** URL Redis opcional para cache distribuido (catálogos, permisos). */
   REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).optional().allow(''),
+  /** Prefijo de claves en Redis compartido (FACTOSYS PERU db-redis). */
+  REDIS_KEY_PREFIX: Joi.string().max(40).default('factofarm'),
   CACHE_TTL_MS: Joi.number().integer().min(10_000).default(300_000),
   PASSWORD_RESET_EXPIRES_MINUTES: Joi.number().integer().min(5).max(1440).default(60),
   /** En producción el envío real exige SMTP_HOST; sin él, forgot-password falla en runtime (no bloquea boot). */

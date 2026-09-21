@@ -35,12 +35,30 @@ describe('billing-capabilities.util', () => {
   it('MOCK permitido como modo sin OSE (solo notas de venta)', () => {
     const caps = getBillingProviderCapabilities(BillingProviderType.MOCK, 'production');
     expect(caps.mockAllowed).toBe(true);
+    expect(caps.supportedSpecialDocuments).toEqual([]);
+    expect(caps.unsupportedSpecialDocuments).toHaveLength(4);
     expect(caps.notes.join(' ')).toMatch(/nota de venta/i);
+  });
+
+  it('MOCK en desarrollo permite especiales para QA', () => {
+    const caps = getBillingProviderCapabilities(BillingProviderType.MOCK, 'development');
+    expect(caps.supportedSpecialDocuments).toHaveLength(4);
+    expect(caps.unsupportedSpecialDocuments).toEqual([]);
   });
 
   it('assertSpecialDocumentSupported lanza en Factiliza', () => {
     expect(() =>
       assertSpecialDocumentSupported(BillingProviderType.FACTILIZA, 'RETENCION'),
     ).toThrow(/Factiliza/);
+  });
+
+  it('assertSpecialDocumentSupported permite MOCK GR transportista fuera de producción', () => {
+    expect(() =>
+      assertSpecialDocumentSupported(
+        BillingProviderType.MOCK,
+        'GUIA_REMISION_TRANSPORTISTA',
+        'development',
+      ),
+    ).not.toThrow();
   });
 });

@@ -130,18 +130,35 @@ export function dayBoundsInTimeZone(
 }
 
 
-/** Primer día del mes civil (YYYY-MM) y fin exclusivo del mes en la zona. */
+/** Acepta `YYYY-MM` (ISO) o `YYYYMM` (periodo SUNAT/PLE). */
+export function parseYearMonth(yearMonth: string): { year: number; month: number } {
+  const raw = yearMonth.trim();
+  const dashed = /^(\d{4})-(\d{1,2})$/.exec(raw);
+  const compact = /^(\d{6})$/.exec(raw);
+  let year: number;
+  let month: number;
+  if (dashed) {
+    year = Number(dashed[1]);
+    month = Number(dashed[2]);
+  } else if (compact) {
+    year = Number(compact[1].slice(0, 4));
+    month = Number(compact[1].slice(4, 6));
+  } else {
+    throw new Error(`Invalid yearMonth: ${yearMonth}`);
+  }
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    throw new Error(`Invalid yearMonth: ${yearMonth}`);
+  }
+  return { year, month };
+}
+
+/** Primer día del mes civil (YYYY-MM o YYYYMM) y fin exclusivo del mes en la zona. */
 export function monthBoundsInTimeZone(
   yearMonth: string,
   timeZone = DEFAULT_TIME_ZONE,
 ): { start: Date; end: Date; fromYmd: string; toYmd: string } {
   const tz = normalizeTimeZone(timeZone);
-  const [ys, ms] = yearMonth.split('-');
-  const y = Number(ys);
-  const m = Number(ms);
-  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
-    throw new Error(`Invalid yearMonth: ${yearMonth}`);
-  }
+  const { year: y, month: m } = parseYearMonth(yearMonth);
   const fromYmd = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-01`;
   const nextY = m === 12 ? y + 1 : y;
   const nextM = m === 12 ? 1 : m + 1;

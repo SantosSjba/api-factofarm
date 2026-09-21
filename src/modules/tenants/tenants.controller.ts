@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   ConvertTenantLeadDto,
@@ -38,7 +39,8 @@ export class TenantsController {
   @Get()
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Listar clientes SaaS (plataforma FactoFarm)' })
-  findAll(@Query() query: TenantListQueryDto) {
+  findAll(@Query() query: TenantListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.findAll({
       search: query.search,
       status: query.status,
@@ -51,7 +53,8 @@ export class TenantsController {
   @Get('leads')
   @RequirePermissions('tenants.read', 'nav.platform_leads')
   @ApiOperation({ summary: 'Listar leads comerciales' })
-  listLeads(@Query() query: TenantListQueryDto) {
+  listLeads(@Query() query: TenantListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.listLeads({
       status: query.status,
       page: query.page,
@@ -67,6 +70,7 @@ export class TenantsController {
     @Body() dto: UpdateTenantLeadDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.tenants.updateLead(id, dto, actor.sub);
   }
 
@@ -78,13 +82,15 @@ export class TenantsController {
     @Body() dto: ConvertTenantLeadDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.tenants.convertLead(id, dto, actor.sub);
   }
 
   @Get('complaints')
   @RequirePermissions('complaints.read', 'nav.platform_reclamaciones')
   @ApiOperation({ summary: 'Listar reclamos del libro virtual' })
-  listComplaints(@Query() query: ComplaintListQueryDto) {
+  listComplaints(@Query() query: ComplaintListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.complaints.findAll({
       search: query.search,
       status: query.status,
@@ -96,7 +102,8 @@ export class TenantsController {
   @Get('complaints/:id')
   @RequirePermissions('complaints.read', 'nav.platform_reclamaciones')
   @ApiOperation({ summary: 'Detalle de reclamo' })
-  getComplaint(@Param('id', ParseUUIDPipe) id: string) {
+  getComplaint(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.complaints.findOne(id);
   }
 
@@ -108,13 +115,15 @@ export class TenantsController {
     @Body() dto: UpdateComplaintDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.complaints.update(id, dto, actor.sub);
   }
 
   @Get(':id')
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Detalle de cliente SaaS' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.findOne(id);
   }
 
@@ -122,6 +131,7 @@ export class TenantsController {
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Crear cliente SaaS' })
   create(@Body() dto: CreateTenantDto, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.create(dto, actor.sub);
   }
 
@@ -133,6 +143,7 @@ export class TenantsController {
     @Body() dto: UpdateTenantDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.tenants.update(id, dto, actor.sub);
   }
 
@@ -140,6 +151,7 @@ export class TenantsController {
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Activar cliente' })
   activate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.activate(id, actor.sub);
   }
 
@@ -147,6 +159,7 @@ export class TenantsController {
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Suspender cliente' })
   suspend(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+    assertPlatformAdmin(actor);
     return this.tenants.suspend(id, actor.sub);
   }
 
@@ -159,6 +172,7 @@ export class TenantsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.auth.createTenantPanelHandoff(actor, id);
   }
 
@@ -170,6 +184,7 @@ export class TenantsController {
     @Body() dto: ProvisionTenantDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.tenants.provision(id, dto, actor.sub);
   }
 }

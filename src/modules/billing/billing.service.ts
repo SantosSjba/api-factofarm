@@ -37,7 +37,7 @@ import { BillingArtifactService } from './services/billing-artifact.service';
 import { UblBuilderService } from './services/ubl-builder.service';
 import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
 import { getBillingProviderCapabilities } from './utils/billing-capabilities.util';
-import { hasRealOseConfigured } from './utils/ose-config.util';
+import { canEmitElectronicDocuments, hasRealOseConfigured } from './utils/ose-config.util';
 import { isValidPdfBuffer } from './utils/pdf-buffer.util';
 import { resolveSaleActionFlags } from '../sales/utils/sale-action-rules.util';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -354,8 +354,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (!emitable) return null;
     if (!options?.force && config && !config.autoEmitOnSale) return null;
 
-    // Sin OSE real: no encola CPE. La venta/nota de venta queda registrada en ventas.
-    if (!hasRealOseConfigured(config)) return null;
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    if (!canEmitElectronicDocuments(config, nodeEnv)) return null;
 
     if (existingCpe) return existingCpe.id;
 
@@ -466,8 +466,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId: sale.establishmentId },
     });
-    // NC por devolución siempre se encola si hay OSE (no depende de autoEmitOnSale).
-    if (!hasRealOseConfigured(config)) return null;
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    if (!canEmitElectronicDocuments(config, nodeEnv)) return null;
 
     const { serie, numero } = await this.resolveCreditNoteNumber(
       sale.establishmentId,
@@ -572,8 +572,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId: sale.establishmentId },
     });
-    // ND manual siempre se encola si hay OSE (no depende de autoEmitOnSale).
-    if (!hasRealOseConfigured(config)) return null;
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    if (!canEmitElectronicDocuments(config, nodeEnv)) return null;
 
     const total = new Prisma.Decimal(dto.total);
     if (total.lte(0)) return null;
@@ -668,7 +668,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         flags.emitBlockedReason ?? 'No se puede emitir esta venta a SUNAT',
       );
     }
-    if (!(await this.establishmentHasRealOse(establishmentId))) {
+    if (!(await this.establishmentCanEmitCpe(establishmentId))) {
       throw new BadRequestException(
         'Configure facturación electrónica (OSE) en Mi farmacia para emitir a SUNAT.',
       );
@@ -690,6 +690,15 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       select: { provider: true, apiTokenEncrypted: true },
     });
     return hasRealOseConfigured(config);
+  }
+
+  /** Real OSE o MOCK de QA (fuera de producción). */
+  async establishmentCanEmitCpe(establishmentId: string): Promise<boolean> {
+    const config = await this.prisma.establishmentBillingConfig.findUnique({
+      where: { establishmentId },
+      select: { provider: true, apiTokenEncrypted: true },
+    });
+    return canEmitElectronicDocuments(config, this.config.get<string>('NODE_ENV'));
   }
 
   async retryDocument(id: string, establishmentId: string, actorId?: string) {
@@ -1226,9 +1235,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!config || config.provider === BillingProviderType.MOCK) {
-      throw new BadRequestException(
-        'No hay proveedor OSE configurado. En Mi farmacia elija Factiliza, Nubefact o APIsPERU e ingrese el token, o use Nota de venta.',
-      );
+      if (nodeEnv === 'production') {
+        throw new BadRequestException(
+          'No hay proveedor OSE configurado. En Mi farmacia elija Factiliza, Nubefact o APIsPERU e ingrese el token, o use Nota de venta.',
+        );
+      }
+      return this.mockProvider;
     }
     if (config.provider === BillingProviderType.BIZLINKS) {
       throw new BadRequestException(

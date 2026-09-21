@@ -15,9 +15,9 @@ describe('nav-permission-expansion', () => {
         'products.read',
         'products.write',
         'products.delete',
-        'users.read',
       ]),
     );
+    expect(result).not.toContain('users.read');
     expect(result).not.toContain('users.write');
   });
 
@@ -27,10 +27,32 @@ describe('nav-permission-expansion', () => {
     expect(result).toContain('customers.delete');
   });
 
+  it('expande nav.usuarios a users.read/write', () => {
+    const result = expandUserPermissionCodes(['nav.usuarios'], UserRole.GERENTE_SUCURSAL);
+    expect(result).toEqual(
+      expect.arrayContaining(['nav.usuarios', 'users.read', 'users.write', 'audit.read']),
+    );
+  });
+
   it('cada módulo Fase 1 con API tiene expansión RBAC', () => {
     for (const code of Object.keys(NAV_TO_RBAC_EXPANSION)) {
       expect(MENU_NAV_LEAF_CODES).toContain(code);
     }
+  });
+
+  it('reexpande sales.write si queda nav.punto_venta aunque se quiten códigos sales.*', () => {
+    const result = expandUserPermissionCodes(
+      ['nav.punto_venta', 'nav.caja_chica_pos', 'cash.open'],
+      UserRole.CAJERO,
+    );
+    expect(result).toContain('sales.write');
+    expect(result).toContain('sales.read');
+  });
+
+  it('revoca ventas al quitar nav.punto_venta', () => {
+    const result = expandUserPermissionCodes(['nav.caja_chica_pos'], UserRole.CAJERO);
+    expect(result).not.toContain('sales.write');
+    expect(result).toContain('cash.open');
   });
 
   it('extractNavPermissionCodes filtra solo nav.*', () => {

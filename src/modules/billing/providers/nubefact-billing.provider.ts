@@ -12,6 +12,7 @@ import type {
   VoidDocumentResult,
 } from '../domain/billing-provider.port';
 import { assertOseCredentialsOrThrow } from '../utils/billing-provider-guard.util';
+import { buildNubefactAuthHeader, nubefactEmissionDate } from '../utils/nubefact.helpers';
 import { MockBillingProvider } from './mock-billing.provider';
 
 type NubefactResponse = {
@@ -64,6 +65,8 @@ export class NubefactBillingProvider implements IBillingProvider {
       cliente_tipo_de_documento: Number.parseInt(input.receptor.tipoDoc, 10) || 0,
       cliente_numero_de_documento: input.receptor.numeroDoc,
       cliente_denominacion: input.receptor.nombre,
+      cliente_direccion: input.receptor.direccion?.trim() || '-',
+      fecha_de_emision: nubefactEmissionDate(input.fechaEmision, input.timeZone),
       moneda: input.moneda === 'PEN' ? 1 : 2,
       porcentaje_de_igv: 18,
       total_gravada: Number(input.subtotal),
@@ -170,7 +173,10 @@ export class NubefactBillingProvider implements IBillingProvider {
     this.logger.log(`Nubefact POST ${url}`);
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: buildNubefactAuthHeader(this.apiToken ?? ''),
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) {

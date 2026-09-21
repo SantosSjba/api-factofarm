@@ -51,6 +51,285 @@ npm test -- --testPathPatterns=timezone.util.spec
 | QA-UI-10 | Usuarios completo + compactación | **PASS** | Densidad H1/filas/cards; CRUD QA; 390/768/1440 |
 | QA-UI-11 | Usuarios validación Número/celular + QA live | **PASS** | DNI `eds` → error; API 400; árbol permisos; builds OK |
 | QA-UI-12 | Foto usuario + MinIO/storage | **PASS** | upload+GET Bearer; preview `blob:`; `users.write` en upload |
+| QA-CAMPANA-01 | CAJERO → `/punto-venta` UI | **fixed** | warehouses + pharmacy-profile aceptan `sales.read`/`nav.punto_venta` |
+| QA-CAMPANA-02 | CAJERO `GET /users` | **fixed** | sin `users.read` incondicional; cajero → 403; admin → 200 |
+| QA-CAMPANA-03 | Campaña planes 01–84 + E2E | **DONE smoke** | Copia `docs/planes de prueba/ejecucion-2026-09-20/` |
+| QA-CAMPANA-04 | 2.º almacén Oficina Principal | **fixed** | seed `Almacén secundario` en código `0000` |
+| QA-CAMPANA-05 | Cajero E2E NV | **PASS** | NV01-00000001; caja 100→103; stock 9911→9910 |
+| QA-CAMPANA-06 | E2E05 traslado | **PASS** | race receive 201+400; Kardex/valorizado 200 |
+| QA-CAMPANA-07 | POS warehouses scope sesión | **fixed** | almacenes del establecimiento de sesión para roles sin inventario (`inventory-movements.service`) |
+| QA-CAMPANA-08 | E2E02 compra/recepción/CxP | **PASS** | F001 11 + F002 16.5 + GR 7.50 PAGADAS |
+| QA-CAMPANA-09 | E2E04 anulación + NC NV | **PASS** | Cajero void 403; gerente void 201; doble 400; NC NV 400; stock restaurado |
+| QA-CAMPANA-10 | E2E08 NV vs BOLETA MOCK | **PASS** | NV OK; BOLETA 400 sin OSE |
+| QA-CAMPANA-11 | E2E13 personal/comisión | **PASS** | NV01-00000006 + void; comisión vendedor 0 post-anulación |
+| QA-CAMPANA-12 | E2E15 plantillas + import | **PASS** parcial | 8 GET xlsx; import 1 fila DNI 70485888 + cleanup; RWD/red BLOQUEADO |
+| QA-CAMPANA-13 | E2E03 crédito/mixto | **PASS** | MIX/CREDIT + PDF generado 144 KB `%PDF-` |
+| QA-CAMPANA-14 | E2E06 receta/dispensación | **PASS** parcial | RX-000001 + NV01-00000016; exceso/vencida 400; titular OK NV01-00000022 |
+| QA-CAMPANA-15 | Receta paciente ajeno | **fixed** | POST /sales ahora 400 «La receta no pertenece al cliente de la venta» |
+| QA-CAMPANA-16 | E2E10 pack/promo/convenio | **PASS** | cupón 10% + convenio 50% + pack NV01-00000023 |
+| QA-CAMPANA-17 | Cupón vencido no rechaza | **fixed** | POST /sales con código inválido/vencido → 400 |
+| QA-CAMPANA-18 | Pack no vendible en POS | **fixed** | pack se expande a componentes; NV01-00000023 total 4.5 |
+| QA-CAMPANA-19 | E2E14 ARCO + reclamo | **PASS** | ARCO COMPLETADA; LR-20260920-BPECJ0 IN_REVIEW; audit OK |
+| QA-CAMPANA-20 | E2E05 conteo físico | **PASS** | conteo `b6f5653c-…` WH2 3→2 applied=1; umbral −80 pending `a47a37ca-…` auto 403 |
+| QA-CAMPANA-21 | E2E07 cadena de frío | **PASS** | lecturas 4.5/12.8; lote vencido; cuarentena CAMPANA-36 |
+| QA-CAMPANA-22 | E2E02 CxP cierre | **PASS** | F001/F002 + `3569e7e1-…` GR 7.50→0 PAGADA |
+| QA-CAMPANA-23 | ADMIN lista/ve tenants SaaS | **fixed** | `assertPlatformAdmin` en `/tenants`; ADMINISTRADOR ya no bypass a consola |
+| QA-CAMPANA-24 | Revocar sales.* no quita POS | **esperado** | `nav.punto_venta` reexpande `sales.write`; POST /sales es OR |
+| QA-CAMPANA-25 | PLE period YYYYMM → 500 | **fixed** | `parseYearMonth` acepta YYYYMM/YYYY-MM; inválido → 400 |
+| QA-CAMPANA-26 | Special CPE `lines` rechazado | **fixed** | `EmitSpecialDocumentLineDto` + `@ValidateNested`; MOCK sigue 400 por OSE |
+| QA-CAMPANA-27 | E2E06 consumo hospitalario | **PASS** | `9997ff11-…` DISPENSADO stock −1; cancel `5e8f108c-…`; dups 400 |
+| QA-CAMPANA-28 | UI hospital/frío/RC + reportes | **PASS** | pantallas live; tax calc 30; DIGEMID top/ABC/BPA/lote 200 |
+| QA-CAMPANA-29 | `{{ row.numero` sin cerrar | **fixed** | Anulaciones/CPE/médicos/proveedores; retest NV01-00000023 + T001-00000003 |
+| QA-CAMPANA-30 | UI percepción/SIRE/GR/CIE/RX | **PASS** | percepciones + SIRE compras 3/S/62.50 + CIE J06.9 + recetas |
+| QA-CAMPANA-31 | UI lotes/traslados/CxC/CxP/mayor | **PASS** | lotes QA-EXP-2020; CxP 3; mayor 55/62.70; promos 3 |
+| QA-CAMPANA-32 | UI OC/kardex/NV/banco/convenio | **PASS** | OC-00001/00002; kardex Paracetamol; NV01-00000024; banco 20/5 |
+| QA-CAMPANA-33 | UI envío/inventario/finanzas/contab | **PASS** | CxP GR 7.50 PAGADA; sugerido 17+8; balance 58.50; pagos 7.50 |
+| QA-CAMPANA-34 | MOCK bloquea especiales en QA | **fixed** | GR transportista V001-00000001 RECHAZADO; CxC 5/5 PAGADA |
+| QA-CAMPANA-35 | UI plataforma SUPER_ADMIN + retención | **PASS** | 2 tenants; lead NEW; LR IN_REVIEW; dry-run 201 |
+| QA-CAMPANA-36 | Zona frío inactiva no bloqueaba refrigerado | **fixed** | venta/inbound/hospital 400 cuarentena |
+| QA-CAMPANA-37 | Provision SaaS creaba GERENTE sin POS | **fixed** | ADMINISTRADOR + POS gerente; NV01-00000002 |
+| QA-CAMPANA-38 | MOCK no emitía boleta/NC/RC en QA | **fixed** | B001-00000001 + BC01 + RC ACEPTADO mock |
+| QA-CAMPANA-39 | CreateSaleDto rechazaba moneda | **fixed** | NV01-00000026 USD; EUR 400 |
+| QA-CAMPANA-40 | OSE sandbox público | **closed** | Nubefact demo muerta; SUNAT beta WSDL 200; CPE QA = MOCK |
+
+---
+
+## Campaña planes de prueba 2026-09-20
+
+| Campo | Valor |
+|-------|-------|
+| **Copia** | `docs/planes de prueba/ejecucion-2026-09-20/` |
+| **Front / API** | `localhost:4200` / `localhost:3000` (health ok) |
+| **Roles** | SUPER_ADMIN + ADMINISTRADOR + CAJERO (seed) |
+| **Alcance** | Criterios PRE/NAV + 84 opciones + E2E01–15 (casillas marcadas) |
+| **P0 nuevos** | Ninguno en smoke read-only |
+| **P1 nuevos** | QA-CAMPANA-01, QA-CAMPANA-02 — **fixed** 2026-09-20 |
+| **Gaps** | CPE QA = MOCK ACEPTADO. OSE REST sin token público vigente (CAMPANA-40). SUNAT beta SOAP oficial sí responde. P1 15/17/18/23/25/26/29/34/36/37/38/39 **fixed**. |
+| **Conteo orientativo** | E2E: PASÓ 15 · PASÓ parcial 0 · BLOQUEADO 0 |
+| **Evidencia** | `ejecucion-2026-09-20/EVIDENCIA-CAMPANA.md` |
+
+### QA-CAMPANA-01 — Cajero no opera POS en UI — **fixed**
+- Causa: bootstrap POS llamaba `GET …/catalogs/warehouses` (`inventory.read`) y `GET …/pharmacy-profile` (solo establishments).
+- Fix: OR-in `sales.read` + `nav.punto_venta` en ambos GET ([`inventory-movements.controller.ts`](../src/modules/inventory-movements/inventory-movements.controller.ts), [`establishments.controller.ts`](../src/modules/establishments/establishments.controller.ts)).
+- QA: cajero → warehouses/pharmacy-profile **200**; admin POS intacto.
+
+### QA-CAMPANA-02 — Listado de usuarios excesivo para CAJERO — **fixed**
+- Causa: `expandUserPermissionCodes` / `resolveUserPermissionCodes` inyectaban `users.read` a todos los roles.
+- Fix: quitar grant incondicional; strip `users.read` si no hay `nav.usuarios`; tests actualizados; seed re-sync.
+- QA: cajero `GET /users` **403**; admin **200**.
+
+### QA-CAMPANA-04 — Segundo almacén Oficina Principal — **fixed**
+- Seed: `Almacén secundario` en establecimiento `0000` ([`establishments.ts`](../prisma/seed/steps/establishments.ts)).
+- QA: `GET /warehouses` admin sesión 0000 → total **2**.
+
+### QA-CAMPANA-05 — Cajero E2E NV — **PASS**
+- Live 2026-09-20: NV01-00000001 total 3; stock 9911→9910; caja apertura 100 → saldo 103.
+
+### QA-CAMPANA-06 — E2E05 traslado — **PASS**
+- WH: Almacén principal `74a035e4-8a91-4874-aa2b-88e543c656ba` → Almacén secundario `86cef972-113d-4a20-b162-5e50965eb84e`.
+- Producto Paracetamol `acee61fa-515e-4b11-b0aa-340b5345f2fd`.
+- Transfer `ac63640f-0e58-44e7-8409-a614afe17ac0` create→dispatch→receive; stock FROM 9908 (−3), TO 3 (+3).
+- Conteo físico / umbral aprobación: no corridos (BLOQUEADO).
+
+### QA-CAMPANA-07 — POS warehouses scoped a establecimiento de sesión — **fixed**
+- Roles sin inventario veían/eligían almacenes fuera del establecimiento de sesión.
+- Fix en `inventory-movements.service` (scope por establecimiento de sesión); documentado como fixed (código aplicado en paralelo).
+
+### QA-CAMPANA-08 — E2E02 compra / recepción / lotes / CxP — **PASS**
+- Proveedor `b2bd8ac9-99fa-4898-b4cc-d300e918db5b` (RUC 20552103816).
+- Producto lot-managed `71535c4f-f676-4887-8142-ed06a556c04b` stock 0 → recepción.
+- OC `efcee033-47ee-45f8-abb4-c261006cd355` / `OC-2026-00001`: BORRADOR→APROBADA→ENVIADA→PARCIALMENTE_RECIBIDA→RECIBIDA.
+- Recepción 2 u QA-L1 + 3 u QA-L2; over-receive **400**.
+- CxP 2 filas (totales 11 y 16.5); abono parcial amount 5 → saldo 6 **PARCIAL**; cierre 6 → **PAGADA** (`c0e941d4-…`).
+- Veredicto flujo: PASÓ parcial (2.ª CxP 16.5 abierta).
+
+### QA-CAMPANA-09 — E2E04 anulación + NC sobre NV — **PASS**
+- Cajero `NV01-00000002` `90e7b042-…`; `POST /sales/:id/void` → **403**.
+- Gerente misma sucursal → **201** ANULADA + stock restaurado (9910).
+- Segundo void → **400**. Admin `POST /returns` sobre `NV01-00000013` → **400**.
+
+### QA-CAMPANA-10 — E2E08 NV vs BOLETA MOCK — **PASS**
+- NV permitida; `documentType=BOLETA` → **400** (MOCK / sin OSE). Confirmado QA-RULE-03.
+
+### QA-CAMPANA-11 — E2E13 personal / productividad / comisión — **PASS** parcial
+- Gerente sucursal 0001; vendedor `f4e60cfb-31a4-4b2f-ad7b-205153e93011` horario Lun 08-17; check-in/out `ee4d8c67-…`; licencia `c5ef7cb1-…` VACACIONES APROBADO.
+- Comisión: regla 5% `ae795550-…`; productivity-report **200** (ventasCount 0 este periodo para la mayoría). Sin venta+void nueva del vendedor.
+- Cambio empleado: cajero `a1c49c06-…` horario Mar 09-18 distinto del vendedor Lun 08-17.
+- Veredicto flujo: PASÓ parcial.
+
+### QA-CAMPANA-12 — E2E15 plantillas + import — **PASS** parcial
+- 8 GET plantillas **200** `application/xlsx` (clientes, productos, packs, lotes/series, precios y menús correspondientes).
+- Import clientes live: preview created=1; persist DNI `70485888` `727d640f-…`; DELETE cleanup **200**.
+- RWD 390/tablet y interrupt de red: BLOQUEADO.
+- Veredicto flujo: PASÓ parcial.
+
+### QA-CAMPANA-13 — E2E03 crédito / mixto / CxC — **PASS** parcial
+- Cliente BUSTAMANTE `dc6323c9-9ad5-4e1b-a4a1-818f235954bc` diasCredito 30.
+- MIX NV01-00000014 `303213e2-833b-4440-a0c3-277304d688d9` EFECTIVO 1 + CREDITO 2 → AR saldo 2.
+- CREDIT NV01-00000015 `08180707-c75b-4c93-b596-cce7dab62190` CREDITO 3; AR `44b9624c-77d7-40f6-8c48-835828595c6d` abono 1 luego 2 → saldo 0.
+- Reimpresión/PDF BLOQUEADO; reportes comparados PASÓ parcial.
+- Veredicto flujo: PASÓ parcial.
+
+### QA-CAMPANA-14 — E2E06 receta / dispensación — **PASS** parcial
+- Médico `ae042a70-…` CMP QA820928; RX-000001 `d7452fc7-…` 1 u Paracetamol.
+- Dispensación POS NV01-00000016 → receta COMPLETADA (1/1).
+- Exceso, vencida y dispense duplicado → **400**. Sustituto no autorizado → **400**.
+- Paciente ajeno: ver QA-CAMPANA-15.
+- Producto demo no controlado; ledger vacío; reporte médico 200.
+
+### QA-CAMPANA-15 — Receta de paciente ajeno se dispensa — **fixed**
+- Antes: POST /sales cliente `c1faba8a-…` + receta de BUSTAMANTE → **201 NV01-00000017**.
+- Fix: `validateForSale` exige titular; `applyDispenseFromSale` filtra `customerId`; venta con `prescriptionId` siempre valida (no solo si el SKU exige receta).
+- Retest: RX-000004 + cliente ARCO → **400** «La receta no pertenece al cliente de la venta». Titular NV01-00000022 **201**.
+
+### QA-CAMPANA-16 — E2E10 pack / promo / convenio — **PASS**
+- Pack `9bde3e08-…` persistido; promo `QA10625` NV01-00000018 total 2.7 desc 0.3.
+- Convenio `QAAG711` 50%: NV01-00000020 copago 1.5 + CxC 1.5; NV01-00000021 precio 2.5 copago 1.25 + CxC 1.25.
+- Pack + cupón: NV01-00000023 total 4.5 desc 0.5 (componentes 3+2).
+- Void propia **403**; gerente otra sucursal **404**.
+
+### QA-CAMPANA-17 — Cupón vencido no rechaza venta — **fixed**
+- Antes: validate=false pero POST /sales `QAEX912` → **201** descuento 0.
+- Fix: `applyPromotion(..., requireValidCode)` lanza 400 si el código no existe, está inactivo o venció (código normalizado a mayúsculas).
+- Retest: POST /sales `QAEX912` → **400** «Código promocional no válido o vencido».
+
+### QA-CAMPANA-18 — Pack compuesto no vendible en POS — **fixed**
+- Antes: POST /sales con id de pack → **404**.
+- Fix: `expandCompoundSaleItems` explota el pack a componentes (precio repartido); `pos-catalog` lista packs con stock = min de componentes.
+- Retest: NV01-00000023 `0fbe1d66-…` pack `9bde3e08-…` + `QA10625` total **4.5** desc 0.5; líneas 1×3 + 1×2.
+
+### QA-CAMPANA-19 — E2E14 ARCO + reclamo público — **PASS**
+- Cliente consentimiento + ARCO ACCESO `55bcf95c-…` COMPLETADA; export 200.
+- Público `LR-20260920-BPECJ0` → plataforma IN_REVIEW.
+- Auditoría entity=ArcoRequest; retención candidates=[] (sin purge; no se afirma cumplimiento legal).
+
+### QA-CAMPANA-20 — E2E05 conteo físico — **PASS**
+- Primer conteo `b5b1f761-…` WH secundario 3=3 finalize applied=0.
+- Segundo conteo `b6f5653c-…` 3→2 finalize applied=1 (delta −1 < umbral 50).
+- Ajuste −80 u pending `a47a37ca-…`; auto-aprobar admin → 403; gerente 0001 → 403 (sin inventory.adjust). Stock principal no cambió.
+
+### QA-CAMPANA-21 — E2E07 cadena de frío — **PASS** parcial
+- Zona `abb5623b-…` REFRIGERADO; lecturas 4.5 (`3bd9f681-…`) y 12.8 (`1652748c-…`).
+- Cuarentena / venta de lote restringido no ejercida.
+
+### QA-CAMPANA-22 — E2E02 CxP cierre — **PASS**
+- CxP `c0e941d4-e42e-4a3d-9ec8-2cd648683346` saldo 6 PARCIAL → pago 6 → **PAGADA** saldo 0.
+- Segunda CxP `93c3fd61-…` 16.5 → pago total **PAGADA** saldo 0; tercer pago **400** «Esta cuenta ya está cerrada».
+
+### QA-CAMPANA-23 — ADMINISTRADOR ve clientes SaaS — **fixed**
+- `PermissionsGuard` hace bypass a `ADMINISTRADOR` (`hasChainScope`) y `GET /tenants` no exigía rol de plataforma.
+- Live: ADMIN GET `/tenants/:id` de Venta Addin (`21762d36-…`) → **200**.
+- Fix: `assertPlatformAdmin` (solo `SUPER_ADMIN`) en todos los handlers de `TenantsController`.
+- Retest live: ADMIN GET `/tenants` y `/tenants/:id` tenant B → **403**. SUPER_ADMIN lista → **200** (`Venta Addin`, `FactoFarm Demo`).
+
+### QA-CAMPANA-24 — Quitar `sales.*` no revoca POS — **esperado**
+- PATCH permisos del cajero filtrando `sales.*` pero dejando `nav.punto_venta` → POST `/sales` **201** (token viejo y login nuevo).
+- Causa: `expandUserPermissionCodes` reañade `sales.write` y el endpoint acepta `sales.write` **o** `nav.punto_venta`.
+- No es defect: para revocar venta hay que quitar `nav.punto_venta`. La caché live (30 s) sí se invalida en el PATCH.
+- Retest: sin `nav.punto_venta` → POST `/sales` **403** (token viejo y login nuevo). Restore `CAJERO_NAV` OK.
+
+### QA-CAMPANA-25 — PLE `period=202609` devolvía 500 — **fixed**
+- `monthBoundsInTimeZone` solo partía `YYYY-MM`; el periodo SUNAT `YYYYMM` lanzaba Error → HTTP 500.
+- Fix: `parseYearMonth` acepta ambos; periodo inválido → **400**.
+- Retest: `14.1?period=202609` y `2026-09` → **200** `LE…202609141.txt`; `period=2026` → **400**.
+
+### QA-CAMPANA-26 — `POST /billing/documents/special` rechazaba `lines` — **fixed**
+- `EmitSpecialDocumentDto.lines` no tenía decoradores class-validator → `forbidNonWhitelisted` **400** «property lines should not exist».
+- Fix: `EmitSpecialDocumentLineDto` + `@IsArray` `@ValidateNested` `@Type`.
+- Retest: el 400 pasa a «Configure Factiliza…» (MOCK). Emisión real sigue BLOQUEADA sin OSE.
+
+### QA-CAMPANA-27 — Consumo hospitalario live — **PASS**
+- POST `/hospital/consumptions` **201** `9997ff11-…` SOLICITADO → PATCH dispense **200** DISPENSADO; stock Almacén principal Paracetamol 9896→9895.
+- Segundo dispense **400** «La solicitud ya fue procesada».
+- Consumo `5e8f108c-…` cancel **200**; segundo cancel **400**.
+- Inbound `QA-FRIO-2027` **201**; DTO sin zona/cuarentena (brecha E2E07, no defect).
+
+### QA-CAMPANA-28 — UI hospital / cadena de frío / resúmenes + reportes — **PASS**
+- `/hospital-dispensacion` lista CANCELADO + DISPENSADO. `/cadena-frio` form + sucursal. `/resumenes` Enviar RC.
+- `POST /compliance/tax-withholding/calculate` 1000×3 → 30. Listas retención/percepción/detracción `[]`. Sync detracciones `synced=0`.
+- Cotización `290a87ef-…` ENVIADA; no hay `convert-to-sale`.
+- `pharmaceutical/reports` top/ABC/BPA/lot-trace `QA-FRIO-2027` **200**.
+
+### QA-CAMPANA-29 — Interpolación `{{ row.numero` sin `}}` — **fixed**
+- `/anulaciones` mostraba `NOTA_VENTA NV01-{{ row.numero }`. Misma omisión en CPE, médicos y proveedores.
+- Fix: cerrar `}}` y `</td>`. Retest: `NV01-00000023` / `00000022` visibles.
+- Front `pnpm run build` OK.
+- Retest UI: CPE `T001-00000003`; médicos `JUAN PEREZ GARCIA`; proveedores `RUC · 20552103816`.
+
+### QA-CAMPANA-30 — UI percepción / SIRE compras / GR transportista / CIE / recetas — **PASS**
+- `/percepciones` tasas 2% y 0.5% + aviso OSE.
+- `/sire-compras` 3 recepciones / S/ 62.50; PLE 8.1.
+- `/gr-transportista` form con maestros (carrier/driver/vehicle/partida).
+- `/cie-10` búsqueda `J06` → J06.9. `/recetas` RX-000005…000002.
+
+### QA-CAMPANA-31 — UI lotes / traslados / delivery / CxC / CxP / mayor / reportes — **PASS**
+- `/lotes` QA-EXP-2020 vencido + LOTZBC001/002. `/traslados` 3 RECIBIDO.
+- `/ordenes-pedido` D202609200001 ENTREGADO / 0002 CANCELADO.
+- `/cuentas-cobrar` NV01-00000020/21 PENDIENTE. `/cuentas-pagar` F001/F002/GR-1789942009084 las 3 PAGADA S/ 0.00.
+- `/libro-mayor` debe 55 / haber 62.70. `/reportes` hub. `/promociones-campanas` QA10625/QAEX912/QAOFF56.
+
+### QA-CAMPANA-32 — UI OC / recepción / kardex / NV / banco / convenio — **PASS**
+- `/ordenes-compra` OC-2026-00001 RECIBIDA 27.50; 00002 RECIBIDA 7.50. Recepción: sin pendientes.
+- Kardex Paracetamol: TRANSFERENCIA ±3 + SALIDA venta.
+- NV: NV01-00000024 ANULADA / 000023 COMPLETADA 4.50.
+- Conciliación: INGRESO 20 + EGRESO 5 Conciliado. Convenio QAAG711 50%.
+- Finance cash-flow/margen/medios **200** con from/to; sin fechas **400**.
+
+### QA-CAMPANA-33 — UI envío / inventario / finanzas / contabilidad + CxP GR — **PASS**
+- `/conductores` Luis QA Chofer 45881233; `/vehiculos` QA9E09 Volvo FH; `/direcciones-partida` QA-749812 Av. QA 100 Lima.
+- Inventario: movimientos Paracetamol 9,895/3; kardex/reporte PEPS 9,895; sugerido 17 + 8; comparativo vacío; salida lotes FEFO; devolución form.
+- Finanzas: balance venta 58.50 / 100%; pagos CxP GR 7.50 19:05; flujo 57.70/−6.30; banco 20/5; medios 191.90/41/150.90.
+- Caja POS sesión S/ 50.00. LPDP matriz + QA E2E14. Establecimientos 0000/0001 no hospital. `/platform/*` admin redirige `/dashboard`.
+- Contabilidad: Excel CSV 200; resumen 58.50; PLE 14.1/8.1/13.1; resumido 57.70.
+- CxP `3569e7e1-…` GR-1789942009084 7.50 → PAGADA (`metodo=EFECTIVO`); UI 3/3 saldo 0.
+
+### QA-CAMPANA-34 — MOCK bloqueaba especiales en desarrollo — **fixed**
+- Causa: `getBillingProviderCapabilities(MOCK)` llenaba `unsupportedSpecialDocuments` siempre; `assertSpecialDocumentSupported` hardcodeaba `'production'`.
+- Fix: en no-producción MOCK `unsupported=[]` y `supported` = retención/percepción/liquidación/GR transportista; assert usa `NODE_ENV`.
+- Retest: POST `/billing/documents/special` GUIA_REMISION_TRANSPORTISTA **201** `010490f0-…` V001-00000001 → RECHAZADO (MOCK). UI CPE lo lista.
+- CxC `322ed972-…` 1.50 + `a59ff802-…` 1.25 + `09b4e076-…` 2.00 → PAGADA (5/5 saldo 0).
+- SUPER_ADMIN: tenants Venta Addin + FactoFarm Demo; `/tenants/leads` + `/tenants/complaints` 200 (LR-20260920-BPECJ0).
+- Jest `billing-capabilities.util.spec` 7 passed. `npm run build` OK.
+
+### QA-CAMPANA-35 — UI plataforma SUPER_ADMIN + retención dry-run — **PASS**
+- `/platform/dashboard`: 2 clientes activos, 1 lead, 1 reclamo, 10 usuarios, 2 sucursales. Venta Addin BOTICA + FactoFarm Demo CADENA.
+- `/platform/clientes`: Venta Addin 0/3 usuarios · 0/1 sedes; Demo 10/50 · 2/20.
+- `/platform/leads`: 1 NEW `ad` / `a@a.com` / farmacia aa (06/09).
+- `/platform/reclamaciones`: LR-20260920-BPECJ0 Maria Lopez QA En revisión.
+- POST `/platform/data-retention/audit/dry-run` **201** `71b18bf5-…` deletedCount=0; purgeEnabled=false.
+- USD: POST /sales `moneda=USD` → **400** «property moneda should not exist» (`CreateSaleDto` solo PEN). Catálogo `products/catalogs/currencies` PEN+USD.
+- Zona frío `abb5623b-…` `activo=false` no bloquea venta: NV01-00000025 **201**; zona reactivada. Cuarentena sigue sin API.
+
+### QA-CAMPANA-36 — Zona de frío inactiva no bloqueaba refrigerado — **fixed**
+- Causa: `WarehouseZone.activo=false` no se consultaba en venta, inbound ni consumo hospitalario. Producto lote `71535c4f-…` no tenía `esRefrigerado` (NV01-00000025 **201** pre-fix).
+- Fix: `assertActiveColdZoneForRefrigeratedProducts` — si hay `esRefrigerado` exige zona `tipo=REFRIGERADO` + `activo=true` en el almacén; si no, **400** cuarentena. Hook en `sales.service`, inbound y `hospital.createConsumption`.
+- Retest live: flag `esRefrigerado=true` + zona `abb5623b-…` off → POST `/sales` **400**, inbound **400**, hospital consume **400** («Producto refrigerado bloqueado…»). Zona y flag restaurados.
+- Jest `assert-refrigerated-zone.spec` 3 passed. API `npm run build` OK.
+
+### QA-CAMPANA-37 — Provision SaaS creaba GERENTE sin POS/caja — **fixed**
+- Causa: `tenants.provision` asignaba `GERENTE_SUCURSAL` sin `nav.punto_venta` / `nav.caja_chica_pos` → caja **403**; plantilla gerente tampoco tenía POS.
+- Fix: provision crea `ADMINISTRADOR` (acceso tenant, no plataforma). Gerente gana `POS_NAV`.
+- Retest: tenant `e17dc1e2-…` QA E2E01 Farmacia ACTIVE; admin `qa.e2e01.1789951262207@test.local`; almacén `472dad94-…`; caja `6610a07e-…` 50→55; producto `eafb6633-…`; inbound 3; NV01-00000001 (sin caja) + **00000002** con `cashSessionId` **201**; kardex 3→1.
+- Aislamiento: demo GET venta/producto nuevos **404**; demo GET tenant **403**. Tenant pre-fix `d4f41ac0-…` SUSPENDED.
+- Jest role-templates 2 passed. API `npm run build` OK.
+
+### QA-CAMPANA-38 — MOCK no emitía boleta/NC/RC en QA — **fixed**
+- Causa: `assertDocumentTypeAllowed` y `resolveProvider` exigían OSE real; MOCK lanzaba 400.
+- Fix: `canEmitElectronicDocuments` permite MOCK fuera de producción; `resolveProvider` usa `MockBillingProvider`.
+- Retest: Boleta `B001-00000001` `ffab0eee-…` emit `e05a8eca-…` **ACEPTADO**. NC `BC01-00000001` `a974427f-…` **ACEPTADO**. RC `6c69529c-…` RC-MOCK-2026-09-20 **ACEPTADO**.
+- Producción sigue sin CPE si no hay OSE real.
+
+### QA-CAMPANA-39 — Venta USD rechazada por DTO — **fixed**
+- Causa: `CreateSaleDto` no tenía `moneda` (forbidNonWhitelisted).
+- Fix: `moneda` PEN|USD + columna `Sale.moneda` (migración `20260921010000_sale_moneda`).
+- Retest: EUR **400**. USD NV01-00000026 `afbe2022-…` **201**.
+
+### QA-CAMPANA-40 — Credenciales OSE sandbox públicas — **closed**
+- Nubefact publica en su ZIP oficial de integración (`PHP-INTEGRACION-CON-NUBEFACT-EJEMPLO-CODIGO-JSON`) una RUTA `demo.nubefact.com/api/v1/03989d1a-…` + TOKEN. **2026-09-20:** `demo.nubefact.com` = NXDOMAIN. El mismo UUID en `www.nubefact.com` / `api.nubefact.com` responde **codigo 11** (ruta no existe). Login web ya no es email+password de un paso; la API de cuenta propia exige activación por soporte.
+- Factiliza `apife-qa.factiliza.com` **404** sin token; no hay Bearer público. APIsPERU `facturacion.apisperu.com` **405** (vivo, pide token de panel/WhatsApp).
+- SUNAT **sí** publica sandbox SOAP: `https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService?wsdl` **HTTP 200**. Auth oficial: usuario `[RUC]MODDATOS` / password `MODDATOS` ([pautas beta](https://orientacion.sunat.gob.pe/12-pautas-servicio-beta)). FactoFarm emite por OSE REST, no por ese SOAP.
+- Fix de integración: `NubefactBillingProvider` ahora envía `Authorization: Token token="…"` + `fecha_de_emision` `DD-MM-YYYY` (el conector anterior no autenticaba). Listo para RUTA/TOKEN propios de Mi farmacia.
+- CPE de campaña permanece **MOCK ACEPTADO** (B001/BC01/RC). No se commitean tokens.
 
 ---
 
@@ -322,14 +601,21 @@ npm test -- --testPathPatterns=timezone.util.spec
 | 2026-09-20 | QA-UI-10 Usuarios completo + compactación | PASS + build OK |
 | 2026-09-20 | QA-UI-11 Usuarios validación Número/celular | PASS + API 400 DNI eds + builds OK |
 | 2026-09-20 | QA-UI-12 Foto usuario + MinIO/storage | PASS + blob preview + users.write + builds OK |
+| 2026-09-20 | Campaña planes 01–84 + E2E (smoke) | DONE copia ejecucion; P1 cajero POS + users list |
+| 2026-09-20 | Fix QA-CAMPANA-01/02/04 | warehouses+pharmacy POS; users.read strip; almacén secundario + seed + builds |
+| 2026-09-20 | Cajero E2E NV + E2E05 traslado | NV01-00000001 (caja 100→103); transfer `ac63640f-…` PASS; CAMPANA-05/06/07 |
+| 2026-09-20 | E2E02 compra/recepción/CxP live | OC-2026-00001 `efcee033-…`; proveedor `b2bd8ac9-…`; producto `71535c4f-…`; QA-L1/L2; CxP abono 5→6 PARCIAL; CAMPANA-08 PASS |
+| 2026-09-20 | E2E04 anulación + E2E08 MOCK | NV01-00000002 void cajero 403 / gerente 201 / dup 400; NC NV 400; BOLETA 400; CAMPANA-09/10 |
+| 2026-09-20 | E2E13 personal + E2E15 plantillas + E2E03 crédito | vendedor `f4e60cfb-…` + licencia `c5ef7cb1-…`; 8 GET xlsx 200; MIX NV01-00000014 / CREDIT NV01-00000015 CxC→0; CAMPANA-11/12/13 |
 
 ---
 
 ## Próximos (opcional)
 
-1. Redeploy front + API (QA-UI-01…10; DTO ubigeo).
+1. Redeploy front + API (QA-UI-01…12; CAMPANA-01/02/04/07).
 2. E2E devolución con stock restore cuando haya OSE de prueba.
 3. E2E filtro “hoy” cerca de medianoche Lima (instante fijo).
-4. Seguir barrido opción por opción (inventario, comprobantes, fármacos).
+4. Re-run profundo de casillas BLOQUEADO (conteo/ARCO, abono CxP total, import-into-POS, BRS).
 5. Probar pestañas Catálogo/Carrito en dispositivo real &lt;768px.
-6. Revisar permisos POS del rol CAJERO seed/QA si “No tiene permisos” reaparece fuera de dashboard.
+6. CPE OSE real: pegar RUTA+TOKEN propios de Nubefact/Factiliza/APIsPERU (no hay token REST público vigente). SUNAT beta SOAP = `e-beta` + `[RUC]MODDATOS` / `MODDATOS`.
+7. Matriz RWD 390/tablet (E2E15) e interrupt de red en dispositivo real.

@@ -10,6 +10,9 @@ uploads
 *.md
 !docs/
 !docs/**
+docs/**/__pycache__
+docs/**/*.pyc
+docs/planes de prueba/**/_*
 *.tsbuildinfo
 .DS_Store
 .vscode

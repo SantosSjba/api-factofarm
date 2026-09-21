@@ -182,6 +182,7 @@ model Sale {
   descuentoTotal        Decimal          @default(0) @db.Decimal(18, 4)
   igvTotal              Decimal          @default(0) @db.Decimal(18, 4)
   total                 Decimal          @db.Decimal(18, 4)
+  moneda                String           @default("PEN") @db.VarChar(3)
   saleDiscountType      DiscountType?
   saleDiscountValue     Decimal?         @db.Decimal(18, 4)
   promotionCode         String?          @db.VarChar(40)

@@ -50,6 +50,8 @@ function buildService() {
     voidFromSale: jest.fn().mockResolvedValue(undefined),
     scheduleEmitFromReturn: jest.fn().mockResolvedValue('doc-nc'),
     scheduleDebitNoteFromSale: jest.fn().mockResolvedValue('doc-nd'),
+    establishmentCanEmitCpe: jest.fn().mockResolvedValue(false),
+    establishmentHasRealOse: jest.fn().mockResolvedValue(false),
   };
   const realtime = { emitStockUpdated: jest.fn(), emitSaleCompleted: jest.fn() };
   const service = new SalesService(

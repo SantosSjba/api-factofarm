@@ -58,6 +58,7 @@ export function getBillingProviderCapabilities(
       unsupportedSpecialDocuments: [],
       notes: [
         'Prerrequisito: en Nubefact, Configuración → API (Integración) ya debe mostrar RUTA y TOKEN del local.',
+        'La cuenta demo publicada en su ejemplo PHP (demo.nubefact.com + UUID 03989d1a) ya no resuelve; use una cuenta propia.',
         'Aquí pega esa RUTA y TOKEN; FactoFarm emite CPE, RC, baja y comprobantes especiales.',
       ],
     };
@@ -81,17 +82,21 @@ export function getBillingProviderCapabilities(
     };
   }
 
-  // MOCK / sin OSE: ventas con nota de venta; sin boleta/factura SUNAT.
+  // MOCK / sin OSE: ventas con nota de venta. En no-producción permite
+  // especiales (retención/percepción/liquidación/GR transportista) para QA.
+  const mockCpeReason =
+    'Configure Factiliza, Nubefact o APIsPERU en Mi farmacia (con credenciales de su panel) para CPE.';
   return {
     mockAllowed: true,
     supportsDailySummary: !isProduction,
     supportsVoidDocument: !isProduction,
     supportedSpecialDocuments: isProduction ? [] : [...FACTILIZA_UNSUPPORTED_SPECIAL],
-    unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
-      documentType,
-      reason:
-        'Configure Factiliza, Nubefact o APIsPERU en Mi farmacia (con credenciales de su panel) para CPE.',
-    })),
+    unsupportedSpecialDocuments: isProduction
+      ? FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
+          documentType,
+          reason: mockCpeReason,
+        }))
+      : [],
     notes: [
       'Sin OSE: puede vender con nota de venta (no va a SUNAT).',
       'Para CPE: primero configure el panel del proveedor, luego pegue URL/token aquí.',
@@ -102,8 +107,9 @@ export function getBillingProviderCapabilities(
 export function assertSpecialDocumentSupported(
   provider: BillingProviderType,
   documentType: BillingSpecialDocumentType,
+  nodeEnv = process.env.NODE_ENV,
 ): void {
-  const caps = getBillingProviderCapabilities(provider, 'production');
+  const caps = getBillingProviderCapabilities(provider, nodeEnv);
   const blocked = caps.unsupportedSpecialDocuments.find((row) => row.documentType === documentType);
   if (blocked) {
     throw new Error(blocked.reason);

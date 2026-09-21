@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { BillingProviderType, SunatDocumentStatus } from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
@@ -74,6 +84,45 @@ export class UpsertBillingConfigDto {
   autoEmitGuiaOnTransfer?: boolean;
 }
 
+class EmitSpecialDocumentLineDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(500)
+  descripcion!: string;
+
+  @ApiProperty()
+  @IsString()
+  cantidad!: string;
+
+  @ApiProperty()
+  @IsString()
+  precioUnitario!: string;
+
+  @ApiProperty()
+  @IsString()
+  subtotalLinea!: string;
+
+  @ApiProperty()
+  @IsString()
+  igvLinea!: string;
+
+  @ApiProperty()
+  @IsString()
+  totalLinea!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  codigoProducto?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  unidadMedida?: string;
+}
+
 export class EmitSpecialDocumentDto {
   @ApiProperty({
     enum: ['RETENCION', 'PERCEPCION', 'LIQUIDACION_COMPRA', 'GUIA_REMISION_TRANSPORTISTA'],
@@ -112,17 +161,11 @@ export class EmitSpecialDocumentDto {
   @IsString()
   total!: string;
 
-  @ApiProperty({ type: [Object] })
-  lines!: Array<{
-    descripcion: string;
-    cantidad: string;
-    precioUnitario: string;
-    subtotalLinea: string;
-    igvLinea: string;
-    totalLinea: string;
-    codigoProducto?: string;
-    unidadMedida?: string;
-  }>;
+  @ApiProperty({ type: [EmitSpecialDocumentLineDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EmitSpecialDocumentLineDto)
+  lines!: EmitSpecialDocumentLineDto[];
 }
 
 export class BillingDocumentListQueryDto extends PaginationQueryDto {

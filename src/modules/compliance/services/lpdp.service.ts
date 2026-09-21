@@ -12,6 +12,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EstablishmentScopeService } from '../../../common/scoping/establishment-scope.service';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import { actorFromJwt, tenantWhere } from '../../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
@@ -111,9 +112,10 @@ export class LpdpService {
   async createArcoRequest(
     customerId: string,
     requestType: ArcoRequestType,
-    details?: string,
-    actorId?: string,
+    details: string | undefined,
+    actor: JwtRequestUser,
   ) {
+    await this.scope.assertCustomerInTenant(actor, customerId);
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, deletedAt: null },
       select: { id: true },
@@ -128,7 +130,7 @@ export class LpdpService {
       },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'CREATE',
       entity: 'ArcoRequest',
       entityId: created.id,
@@ -141,9 +143,7 @@ export class LpdpService {
     return this.prisma.arcoRequest.findMany({
       where: {
         ...(status ? { status } : {}),
-        ...(!isPlatformAdmin(actor.role) && actor.tenantId
-          ? { customer: { tenantId: actor.tenantId } }
-          : {}),
+        customer: tenantWhere(actorFromJwt(actor)),
       },
       include: {
         customer: { select: { id: true, nombre: true, numeroDocumento: true } },
@@ -163,30 +163,30 @@ export class LpdpService {
     const row = await this.prisma.arcoRequest.findFirst({
       where: {
         id,
-        ...(!isPlatformAdmin(actor.role) && actor.tenantId
-          ? { customer: { tenantId: actor.tenantId } }
-          : {}),
+        customer: tenantWhere(actorFromJwt(actor)),
       },
     });
     if (!row) throw new NotFoundException('Solicitud ARCO no encontrada');
 
-    const updated = await this.prisma.arcoRequest.update({
-      where: { id },
-      data: {
-        status,
-        responseNotes: responseNotes?.trim() || null,
-        processedById: actor.sub,
-        processedAt: new Date(),
-      },
-    });
-
-    if (status === ArcoRequestStatus.COMPLETADA && row.requestType === ArcoRequestType.CANCELACION) {
-      await this.scope.assertCustomerInTenant(actor, row.customerId);
-      await this.prisma.customer.update({
-        where: { id: row.customerId },
-        data: { deletedAt: new Date(), activo: false, habilitado: false },
+    await this.scope.assertCustomerInTenant(actor, row.customerId);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const request = await tx.arcoRequest.update({
+        where: { id },
+        data: {
+          status,
+          responseNotes: responseNotes?.trim() || null,
+          processedById: actor.sub,
+          processedAt: new Date(),
+        },
       });
-    }
+      if (status === ArcoRequestStatus.COMPLETADA && row.requestType === ArcoRequestType.CANCELACION) {
+        await tx.customer.update({
+          where: { id: row.customerId },
+          data: { deletedAt: new Date(), activo: false, habilitado: false },
+        });
+      }
+      return request;
+    });
 
     await this.audit.log({
       userId: actor.sub,

@@ -107,7 +107,7 @@ export class ComplianceController {
       dto.customerId,
       dto.requestType,
       dto.details,
-      actor.sub,
+      actor,
     );
   }
 

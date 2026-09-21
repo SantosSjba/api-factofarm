@@ -235,6 +235,7 @@ export class PrescriptionsService {
     establishmentId: string,
     saleItems: Array<{ productId: string; cantidad: Prisma.Decimal }>,
     substitutions?: Array<{ originalProductId: string; substituteProductId: string }>,
+    customerId?: string,
   ) {
     const prescription = await this.prisma.prescription.findFirst({
       where: {
@@ -246,6 +247,14 @@ export class PrescriptionsService {
       include: { items: true },
     });
     if (!prescription) throw new BadRequestException('Receta no válida o no activa');
+    if (customerId !== undefined) {
+      if (!customerId) {
+        throw new BadRequestException('La venta con receta requiere el cliente titular');
+      }
+      if (prescription.customerId !== customerId) {
+        throw new BadRequestException('La receta no pertenece al cliente de la venta');
+      }
+    }
     if (prescription.validUntil && prescription.validUntil < new Date()) {
       throw new BadRequestException('La receta está vencida');
     }
@@ -272,12 +281,14 @@ export class PrescriptionsService {
     transaction?: Prisma.TransactionClient,
     establishmentId?: string,
     substitutions?: Array<{ originalProductId: string; substituteProductId: string }>,
+    customerId?: string,
   ) {
     const dispense = async (tx: Prisma.TransactionClient) => {
       const claimed = await tx.prescription.updateMany({
         where: {
           id: prescriptionId,
           ...(establishmentId ? { establishmentId } : {}),
+          ...(customerId ? { customerId } : {}),
           deletedAt: null,
           estado: { in: [PrescriptionStatus.ACTIVA, PrescriptionStatus.PARCIALMENTE_DISPENSADA] },
           OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],

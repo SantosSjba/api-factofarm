@@ -254,8 +254,8 @@ export class TenantsService {
 
     const passwordHash = await bcrypt.hash(dto.adminPassword, BCRYPT_ROUNDS);
     const permissionCodes = expandUserPermissionCodes(
-      getDefaultNavCodesForRole(UserRole.GERENTE_SUCURSAL),
-      UserRole.GERENTE_SUCURSAL,
+      getDefaultNavCodesForRole(UserRole.ADMINISTRADOR),
+      UserRole.ADMINISTRADOR,
     );
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -276,7 +276,7 @@ export class TenantsService {
           nombre: dto.adminNombre.trim(),
           email,
           passwordHash,
-          role: UserRole.GERENTE_SUCURSAL,
+          role: UserRole.ADMINISTRADOR,
           tenantId: tenant.id,
           establecimientoId: establishment.id,
         },

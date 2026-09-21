@@ -47,4 +47,52 @@ describe('Dispensación atómica de recetas', () => {
     await expect(service.applyDispenseFromSale('rx', [{ productId: 'original', cantidad: new Prisma.Decimal(1) }], 'actor', tx as never, 'est')).rejects.toThrow(/Receta no válida/);
     expect(tx.prescriptionItem.updateMany).not.toHaveBeenCalled();
   });
+
+  it('rechaza receta de otro cliente en validateForSale', async () => {
+    const prisma = {
+      prescription: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'rx',
+          customerId: 'cust-a',
+          validUntil: null,
+          items: [
+            {
+              productId: 'p',
+              cantidadPrescrita: new Prisma.Decimal(1),
+              cantidadDispensada: new Prisma.Decimal(0),
+            },
+          ],
+        }),
+      },
+    };
+    const service = new PrescriptionsService(
+      prisma as never,
+      { log: jest.fn() } as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(
+      service.validateForSale(
+        'rx',
+        'est',
+        [{ productId: 'p', cantidad: new Prisma.Decimal(1) }],
+        undefined,
+        'cust-b',
+      ),
+    ).rejects.toThrow(/no pertenece al cliente/);
+  });
+
+  it('filtra por cliente titular al dispensar desde venta', async () => {
+    const { service, tx } = setup();
+    await service.applyDispenseFromSale(
+      'rx',
+      [{ productId: 'original', cantidad: new Prisma.Decimal(1) }],
+      'actor',
+      tx as never,
+      'est',
+      undefined,
+      'customer-a',
+    );
+    expect(tx.prescription.updateMany.mock.calls[0][0].where.customerId).toBe('customer-a');
+  });
 });

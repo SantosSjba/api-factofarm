@@ -99,6 +99,9 @@ S3_SECRET_KEY=...
 S3_BUCKET=factofarm
 S3_REGION=us-east-1
 S3_KEY_PREFIX=uploads
+# Redis compartido FACTOSYS PERU (db-redis, red interna Coolify)
+REDIS_URL=redis://:PASSWORD@tdsuggtdfwfgauonnt0dcqoz:6379/0
+REDIS_KEY_PREFIX=factofarm
 # Alternativa disco: montar volumen Coolify → /app/uploads
 ```
 

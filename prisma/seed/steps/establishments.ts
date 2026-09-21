@@ -56,6 +56,22 @@ export async function seedEstablishments(
       },
     });
 
+    if (establishment.codigo === '0000') {
+      await prisma.warehouse.upsert({
+        where: {
+          establishmentId_nombre: {
+            establishmentId: establishment.id,
+            nombre: 'Almacén secundario',
+          },
+        },
+        update: { deletedAt: null },
+        create: {
+          establishmentId: establishment.id,
+          nombre: 'Almacén secundario',
+        },
+      });
+    }
+
     await prisma.productLocation.upsert({
       where: {
         establishmentId_nombre: {
