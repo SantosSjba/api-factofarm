@@ -148,7 +148,10 @@ export class PrismaUserRepository implements IUserRepository {
     const data: Prisma.UserUpdateInput = {};
     if (userPatch.nombre !== undefined) data.nombre = userPatch.nombre;
     if (userPatch.email !== undefined) data.email = userPatch.email;
-    if (userPatch.passwordHash !== undefined) data.passwordHash = userPatch.passwordHash;
+    if (userPatch.passwordHash !== undefined) {
+      data.passwordHash = userPatch.passwordHash;
+      data.authVersion = { increment: 1 };
+    }
     if (userPatch.role !== undefined) data.role = userPatch.role;
     if (userPatch.establecimientoId !== undefined) {
       data.establecimiento = {
@@ -161,6 +164,9 @@ export class PrismaUserRepository implements IUserRepository {
         await tx.user.update({ where: { id }, data });
       }
 
+      if (userPatch.passwordHash !== undefined) {
+        await tx.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      }
       if (profile !== undefined) {
         await tx.userProfile.upsert({
           where: { userId: id },

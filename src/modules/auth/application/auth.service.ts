@@ -1,3 +1,5 @@
+import { Optional } from '@nestjs/common';
+import { PlatformSettingsService } from '../../../common/settings/platform-settings.service';
 import {
   BadRequestException,
   ForbiddenException,
@@ -61,6 +63,7 @@ export class AuthService {
     private readonly loginAttempts: LoginAttemptService,
     private readonly email: EmailService,
     private readonly audit: AuditLogService,
+    @Optional() private readonly settings?: PlatformSettingsService,
   ) {}
 
   async login(
@@ -205,7 +208,7 @@ export class AuthService {
       where: { id: tenantId, deletedAt: null },
       select: authTenantSelect,
     });
-    if (!tenant || tenant.status === TenantStatus.SUSPENDED) {
+    if (!tenant || ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
       throw new UnauthorizedException({
         code: 'TENANT_SUSPENDED',
         message: 'La cuenta de la farmacia no está disponible',
@@ -254,7 +257,7 @@ export class AuthService {
         message: 'Cliente no encontrado o inactivo',
       });
     }
-    if (tenant.status === TenantStatus.SUSPENDED) {
+    if (![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
       throw new UnauthorizedException({
         code: 'TENANT_SUSPENDED',
         message: 'La cuenta de su farmacia está suspendida. Contacte a FactoFarm.',
@@ -333,7 +336,7 @@ export class AuthService {
       },
     });
     if (!tenant) throw new NotFoundException('Cliente SaaS no encontrado');
-    if (tenant.status === TenantStatus.SUSPENDED) {
+    if (![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
       throw new BadRequestException('No se puede ingresar a un cliente suspendido');
     }
     if (tenant.status === TenantStatus.PENDING) {
@@ -396,10 +399,11 @@ export class AuthService {
       });
     }
 
-    await this.prisma.platformPanelHandoff.update({
-      where: { id: handoff.id },
+    const consumed = await this.prisma.platformPanelHandoff.updateMany({
+      where: { id: handoff.id, usedAt: null, expiresAt: { gt: new Date() } },
       data: { usedAt: new Date() },
     });
+    if (consumed.count !== 1) throw new UnauthorizedException('Enlace de soporte ya utilizado');
 
     const [actor, tenant] = await Promise.all([
       this.prisma.user.findFirst({
@@ -415,7 +419,7 @@ export class AuthService {
     if (!actor || !isPlatformAdmin(actor.role)) {
       throw new UnauthorizedException('Operador de plataforma no válido');
     }
-    if (!tenant || tenant.status === TenantStatus.SUSPENDED) {
+    if (!tenant || ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
       throw new UnauthorizedException('Cliente no disponible');
     }
 
@@ -533,14 +537,9 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash },
-    });
-
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash, authVersion: { increment: 1 } } });
+      await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
     });
 
     return { ok: true };
@@ -562,14 +561,14 @@ export class AuthService {
 
     const plain = randomBytes(32).toString('hex');
     const tokenHash = this.hashToken(plain);
-    const minutes = Number(this.config.get<string>('PASSWORD_RESET_EXPIRES_MINUTES', '60'));
+    const minutes = Number(this.settings ? await this.settings.get('PASSWORD_RESET_EXPIRES_MINUTES') : this.config.get<string>('PASSWORD_RESET_EXPIRES_MINUTES', '60'));
     const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
 
     await this.prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    const frontendUrl = this.config.get<string>('FRONTEND_URL', 'http://localhost:4200');
+    const frontendUrl = this.settings ? await this.settings.get('PASSWORD_RESET_BASE_URL') : this.config.get<string>('FRONTEND_URL', 'http://localhost:4200');
     const resetUrl = `${frontendUrl.replace(/\/$/, '')}/auth/reset-password?token=${plain}`;
     await this.email.sendPasswordReset(user.email, resetUrl);
     return { ok: true };
@@ -607,12 +606,13 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: stored.userId },
-        data: { passwordHash },
+        data: { passwordHash, authVersion: { increment: 1 } },
       });
-      await tx.passwordResetToken.update({
-        where: { id: stored.id },
+      const consumed = await tx.passwordResetToken.updateMany({
+        where: { id: stored.id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() },
       });
+      if (consumed.count !== 1) throw new BadRequestException('Enlace inválido o expirado');
       await tx.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -632,12 +632,14 @@ export class AuthService {
       establecimientoId: string;
       tenant?: AuthTenantSnapshot | null;
       permissions: { permission: { code: string } }[];
+      authVersion?: number;
     },
     opts?: { revokeTokenId?: string },
   ): Promise<AuthTokensView> {
     const permissionCodes = this.resolvePermissionCodes(user);
     const payload: AuthJwtPayload = {
       sub: user.id,
+      authVersion: user.authVersion ?? 0,
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
@@ -646,7 +648,7 @@ export class AuthService {
     };
 
     const accessExpiresIn =
-      this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ??
+      (this.settings ? await this.settings.get('JWT_ACCESS_EXPIRES_IN') : this.config.get<string>('JWT_ACCESS_EXPIRES_IN')) ??
       this.config.get<string>('JWT_EXPIRES_IN') ??
       '15m';
     const accessToken = await this.jwtService.signAsync(
@@ -656,15 +658,16 @@ export class AuthService {
 
     const refreshPlain = randomBytes(48).toString('hex');
     const tokenHash = this.hashToken(refreshPlain);
-    const refreshDays = Number(this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '7'));
+    const refreshDays = Number(this.settings ? await this.settings.get('JWT_REFRESH_EXPIRES_DAYS') : this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '7'));
     const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
 
     await this.prisma.$transaction(async (tx) => {
       if (opts?.revokeTokenId) {
-        await tx.refreshToken.update({
-          where: { id: opts.revokeTokenId },
+        const revoked = await tx.refreshToken.updateMany({
+          where: { id: opts.revokeTokenId, revokedAt: null, expiresAt: { gt: new Date() } },
           data: { revokedAt: new Date() },
         });
+        if (revoked.count !== 1) throw new UnauthorizedException('Sesión de renovación ya utilizada');
       }
       await tx.refreshToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
@@ -696,8 +699,10 @@ export class AuthService {
     },
     opts?: { revokeTokenId?: string },
   ): Promise<AuthTokensView> {
+    const operator = await this.prisma.user.findUniqueOrThrow({ where: { id: input.actorId }, select: { authVersion: true } });
     const payload: AuthJwtPayload = {
       sub: input.actorId,
+      authVersion: operator.authVersion,
       email: input.email,
       role: input.role,
       tenantId: input.tenantId,
@@ -717,10 +722,11 @@ export class AuthService {
 
     await this.prisma.$transaction(async (tx) => {
       if (opts?.revokeTokenId) {
-        await tx.refreshToken.update({
-          where: { id: opts.revokeTokenId },
+        const revoked = await tx.refreshToken.updateMany({
+          where: { id: opts.revokeTokenId, revokedAt: null, expiresAt: { gt: new Date() } },
           data: { revokedAt: new Date() },
         });
+        if (revoked.count !== 1) throw new UnauthorizedException('Sesión de renovación ya utilizada');
       }
       await tx.refreshToken.create({
         data: {

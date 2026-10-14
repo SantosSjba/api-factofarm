@@ -19,7 +19,7 @@ export async function createE2eApp(): Promise<INestApplication<App>> {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      transformOptions: { enableImplicitConversion: true },
+      transformOptions: { enableImplicitConversion: false },
     }),
   );
   await app.init();

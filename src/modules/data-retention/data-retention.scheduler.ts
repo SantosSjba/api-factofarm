@@ -12,8 +12,16 @@ export class DataRetentionScheduler implements OnModuleInit {
     private readonly schedulerRegistry: SchedulerRegistry,
   ) {}
 
-  onModuleInit(): void {
-    const auditCron = this.retention.getCronExpression();
+  async onModuleInit(): Promise<void> {
+    this.retention.onSettingsChange(() => this.reloadJobs());
+    await this.reloadJobs();
+  }
+
+  private async reloadJobs(): Promise<void> {
+    for (const name of ['data-retention-audit', 'data-retention-archive']) {
+      if (this.schedulerRegistry.doesExist('cron', name)) this.schedulerRegistry.deleteCronJob(name);
+    }
+    const auditCron = (await this.retention.getCronExpression());
     const auditJob = new CronJob(auditCron, () => {
       void this.handleAuditCron();
     });
@@ -21,7 +29,7 @@ export class DataRetentionScheduler implements OnModuleInit {
     auditJob.start();
     this.logger.log(`Cron retención AuditLog: ${auditCron}`);
 
-    const archiveCron = this.retention.getArchiveCronExpression();
+    const archiveCron = (await this.retention.getArchiveCronExpression());
     const archiveJob = new CronJob(archiveCron, () => {
       void this.handleArchiveCron();
     });
@@ -32,8 +40,8 @@ export class DataRetentionScheduler implements OnModuleInit {
 
   private async handleAuditCron(): Promise<void> {
     // B-LOG-20: purge only when ENABLED + CONFIRM=I_UNDERSTAND; otherwise dry-run.
-    const mode = this.retention.canPurge() ? 'purge' : 'dry-run';
-    if (this.retention.isPurgeEnabled() && !this.retention.isPurgeConfirmed()) {
+    const mode = (await this.retention.canPurge()) ? 'purge' : 'dry-run';
+    if ((await this.retention.isPurgeEnabled()) && !(await this.retention.isPurgeConfirmed())) {
       this.logger.warn(
         'DATA_RETENTION_PURGE_ENABLED=true pero falta DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND — ejecutando dry-run.',
       );
@@ -51,7 +59,7 @@ export class DataRetentionScheduler implements OnModuleInit {
   }
 
   private async handleArchiveCron(): Promise<void> {
-    const mode = this.retention.isArchiveEnabled() ? 'archive' : 'dry-run';
+    const mode = (await this.retention.isArchiveEnabled()) ? 'archive' : 'dry-run';
     try {
       const sales = await this.retention.runSalesArchive(mode);
       const kardex = await this.retention.runKardexArchive(mode);

@@ -1,5 +1,5 @@
+import { PlatformSettingsService } from '../../common/settings/platform-settings.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../common/services/email.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { ContactRequestDto } from './dto/contact-request.dto';
@@ -9,7 +9,7 @@ export class PublicContactService {
   private readonly logger = new Logger(PublicContactService.name);
 
   constructor(
-    private readonly config: ConfigService,
+    private readonly settings: PlatformSettingsService,
     private readonly email: EmailService,
     private readonly tenants: TenantsService,
   ) {}
@@ -22,7 +22,7 @@ export class PublicContactService {
       email: dto.email,
       mensaje: dto.mensaje,
     });
-    const salesEmail = this.config.get<string>('SALES_CONTACT_EMAIL')?.trim();
+    const salesEmail = (await this.settings.get('SALES_CONTACT_EMAIL'))?.trim();
     const subject = `FactoFarm — Solicitud de cuenta: ${dto.farmacia.trim()}`;
     const text = [
       'Nueva solicitud desde la landing de FactoFarm',

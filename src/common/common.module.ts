@@ -1,3 +1,5 @@
+import { PlatformSettingsService } from './settings/platform-settings.service';
+import { PlatformSettingsController } from './settings/platform-settings.controller';
 import { Global, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AuditLogService } from './services/audit-log.service';
 import { EmailService } from './services/email.service';
@@ -11,7 +13,9 @@ import { EntityIntegrityService } from './services/entity-integrity.service';
 
 @Global()
 @Module({
+  controllers: [PlatformSettingsController],
   providers: [
+    PlatformSettingsService,
     AuditLogService,
     EmailService,
     RequestContextService,
@@ -22,6 +26,7 @@ import { EntityIntegrityService } from './services/entity-integrity.service';
     EntityIntegrityService,
   ],
   exports: [
+    PlatformSettingsService,
     AuditLogService,
     EmailService,
     RequestContextService,

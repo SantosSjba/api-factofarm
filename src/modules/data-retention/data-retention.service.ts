@@ -1,10 +1,10 @@
+import { PlatformSettingsService } from '../../common/settings/platform-settings.service';
 import {
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
@@ -30,8 +30,10 @@ export class DataRetentionService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    private readonly settings: PlatformSettingsService,
   ) {}
+
+  onSettingsChange(listener: () => Promise<void>): void { this.settings.onChange(listener); }
 
   assertPlatformAdmin(actor: JwtRequestUser): void {
     if (!isPlatformAdmin(actor.role)) {
@@ -39,54 +41,54 @@ export class DataRetentionService {
     }
   }
 
-  getAuditRetentionDays(): number {
-    return Number(this.config.get<number>('DATA_RETENTION_AUDIT_DAYS') ?? 730);
+  async getAuditRetentionDays(): Promise<number> {
+    return Number((await this.settings.get('DATA_RETENTION_AUDIT_DAYS')) ?? 730);
   }
 
-  getArchiveDays(): number {
-    return Number(this.config.get<number>('DATA_RETENTION_ARCHIVE_DAYS') ?? 1825);
+  async getArchiveDays(): Promise<number> {
+    return Number((await this.settings.get('DATA_RETENTION_ARCHIVE_DAYS')) ?? 1825);
   }
 
-  isPurgeEnabled(): boolean {
-    const value = this.config.get<boolean | string>('DATA_RETENTION_PURGE_ENABLED');
-    return value === true || value === 'true';
+  async isPurgeEnabled(): Promise<boolean> {
+    const value = (await this.settings.get('DATA_RETENTION_PURGE_ENABLED'));
+    return value === 'true';
   }
 
   /** Soft-protect hard delete (B-LOG-20): requires explicit confirm token. */
-  isPurgeConfirmed(): boolean {
-    return this.config.get<string>('DATA_RETENTION_PURGE_CONFIRM') === 'I_UNDERSTAND';
+  async isPurgeConfirmed(): Promise<boolean> {
+    return (await this.settings.get('DATA_RETENTION_PURGE_CONFIRM')) === 'I_UNDERSTAND';
   }
 
-  canPurge(): boolean {
-    return this.isPurgeEnabled() && this.isPurgeConfirmed();
+  async canPurge(): Promise<boolean> {
+    return (await this.isPurgeEnabled()) && (await this.isPurgeConfirmed());
   }
 
-  isArchiveEnabled(): boolean {
-    const value = this.config.get<boolean | string>('DATA_RETENTION_ARCHIVE_ENABLED');
-    return value === true || value === 'true';
+  async isArchiveEnabled(): Promise<boolean> {
+    const value = (await this.settings.get('DATA_RETENTION_ARCHIVE_ENABLED'));
+    return value === 'true';
   }
 
-  getBatchSize(): number {
-    return Number(this.config.get<number>('DATA_RETENTION_BATCH_SIZE') ?? 5000);
+  async getBatchSize(): Promise<number> {
+    return Number((await this.settings.get('DATA_RETENTION_BATCH_SIZE')) ?? 5000);
   }
 
-  getCronExpression(): string {
-    return this.config.get<string>('DATA_RETENTION_CRON') ?? '0 3 * * *';
+  async getCronExpression(): Promise<string> {
+    return (await this.settings.get('DATA_RETENTION_CRON')) ?? '0 3 * * *';
   }
 
-  getArchiveCronExpression(): string {
-    return this.config.get<string>('DATA_RETENTION_ARCHIVE_CRON') ?? '0 4 * * 0';
+  async getArchiveCronExpression(): Promise<string> {
+    return (await this.settings.get('DATA_RETENTION_ARCHIVE_CRON')) ?? '0 4 * * 0';
   }
 
-  cutoffForAudit(): Date {
+  async cutoffForAudit(): Promise<Date> {
     const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - this.getAuditRetentionDays());
+    cutoff.setUTCDate(cutoff.getUTCDate() - (await this.getAuditRetentionDays()));
     return cutoff;
   }
 
-  cutoffForArchive(): Date {
+  async cutoffForArchive(): Promise<Date> {
     const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - this.getArchiveDays());
+    cutoff.setUTCDate(cutoff.getUTCDate() - (await this.getArchiveDays()));
     return cutoff;
   }
 
@@ -141,15 +143,15 @@ export class DataRetentionService {
     return {
       generatedAt: new Date().toISOString(),
       config: {
-        auditRetentionDays: this.getAuditRetentionDays(),
-        archiveDays: this.getArchiveDays(),
-        purgeEnabled: this.isPurgeEnabled(),
-        purgeConfirmed: this.isPurgeConfirmed(),
-        canPurge: this.canPurge(),
-        archiveEnabled: this.isArchiveEnabled(),
-        cron: this.getCronExpression(),
-        archiveCron: this.getArchiveCronExpression(),
-        batchSize: this.getBatchSize(),
+        auditRetentionDays: (await this.getAuditRetentionDays()),
+        archiveDays: (await this.getArchiveDays()),
+        purgeEnabled: (await this.isPurgeEnabled()),
+        purgeConfirmed: (await this.isPurgeConfirmed()),
+        canPurge: (await this.canPurge()),
+        archiveEnabled: (await this.isArchiveEnabled()),
+        cron: (await this.getCronExpression()),
+        archiveCron: (await this.getArchiveCronExpression()),
+        batchSize: (await this.getBatchSize()),
       },
       hotPath: {
         sales: hotSales,
@@ -166,12 +168,12 @@ export class DataRetentionService {
 
   async runAuditRetention(mode: RetentionMode) {
     if (mode === 'purge') {
-      if (!this.isPurgeEnabled()) {
+      if (!(await this.isPurgeEnabled())) {
         throw new ForbiddenException(
           'Purga deshabilitada. Configure DATA_RETENTION_PURGE_ENABLED=true tras validar dry-run y backups.',
         );
       }
-      if (!this.isPurgeConfirmed()) {
+      if (!(await this.isPurgeConfirmed())) {
         throw new ForbiddenException(
           'Purga bloqueada. Configure DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND (además de PURGE_ENABLED=true).',
         );
@@ -181,8 +183,8 @@ export class DataRetentionService {
       );
     }
 
-    const cutoffAt = this.cutoffForAudit();
-    const batchSize = this.getBatchSize();
+    const cutoffAt = (await this.cutoffForAudit());
+    const batchSize = (await this.getBatchSize());
     const startedAt = new Date();
 
     const run = await this.prisma.dataRetentionRun.create({
@@ -230,14 +232,14 @@ export class DataRetentionService {
   }
 
   async runSalesArchive(mode: ArchiveMode) {
-    if (mode === 'archive' && !this.isArchiveEnabled()) {
+    if (mode === 'archive' && !(await this.isArchiveEnabled())) {
       throw new ForbiddenException(
         'Archivado deshabilitado. Configure DATA_RETENTION_ARCHIVE_ENABLED=true tras validar dry-run.',
       );
     }
 
-    const cutoffAt = this.cutoffForArchive();
-    const batchSize = this.getBatchSize();
+    const cutoffAt = (await this.cutoffForArchive());
+    const batchSize = (await this.getBatchSize());
     const startedAt = new Date();
     const run = await this.prisma.dataRetentionRun.create({
       data: {
@@ -320,14 +322,14 @@ export class DataRetentionService {
   }
 
   async runKardexArchive(mode: ArchiveMode) {
-    if (mode === 'archive' && !this.isArchiveEnabled()) {
+    if (mode === 'archive' && !(await this.isArchiveEnabled())) {
       throw new ForbiddenException(
         'Archivado deshabilitado. Configure DATA_RETENTION_ARCHIVE_ENABLED=true tras validar dry-run.',
       );
     }
 
-    const cutoffAt = this.cutoffForArchive();
-    const batchSize = this.getBatchSize();
+    const cutoffAt = (await this.cutoffForArchive());
+    const batchSize = (await this.getBatchSize());
     const startedAt = new Date();
     const run = await this.prisma.dataRetentionRun.create({
       data: {

@@ -1,14 +1,14 @@
+import { PlatformSettingsService } from '../../../common/settings/platform-settings.service';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 /** En Docker/prod: `/app/docs`. En monorepo local también puede resolverse desde cwd. */
 const DOCS_ROOT = join(process.cwd(), 'docs');
 
 @Injectable()
 export class LegalService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly settings: PlatformSettingsService) {}
 
   private readDoc(filename: string): string {
     try {
@@ -18,13 +18,13 @@ export class LegalService {
     }
   }
 
-  private getProviderInfo() {
+  private async getProviderInfo() {
     return {
       razonSocial:
-        this.config.get<string>('COMPANY_LEGAL_NAME')?.trim() || 'FACTOSYS PERU S.A.C.',
-      ruc: this.config.get<string>('COMPANY_RUC')?.trim() || '20614608952',
+        (await this.settings.get('COMPANY_LEGAL_NAME'))?.trim() || 'FACTOSYS PERU S.A.C.',
+      ruc: (await this.settings.get('COMPANY_RUC'))?.trim() || '20614608952',
       domicilio:
-        this.config.get<string>('COMPANY_ADDRESS')?.trim() ||
+        (await this.settings.get('COMPANY_ADDRESS'))?.trim() ||
         'Trujillo, La Libertad, Perú. Atendemos todo el Perú (24 departamentos y Callao).',
     };
   }
@@ -45,13 +45,13 @@ export class LegalService {
     };
   }
 
-  getComplaintsBook() {
+  async getComplaintsBook() {
     return {
       version: '2026-06-11',
       title: 'Libro de reclamaciones virtual',
       legalFramework: 'Ley N° 29571 — Código de Protección y Defensa del Consumidor',
       responseDeadlineDays: 15,
-      provider: this.getProviderInfo(),
+      provider: await this.getProviderInfo(),
       content: this.readDoc('LIBRO-RECLAMACIONES.md'),
     };
   }

@@ -1,4 +1,9 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { PlatformSettingsService } from '../settings/platform-settings.service';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
@@ -6,14 +11,20 @@ import * as nodemailer from 'nodemailer';
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly settings: PlatformSettingsService,
+  ) {}
 
   private isProduction(): boolean {
     return this.config.get<string>('NODE_ENV') === 'production';
   }
 
-  private requireSmtpHostOrDevLog(context: string, fallbackLog: () => void): string | null {
-    const host = this.config.get<string>('SMTP_HOST')?.trim();
+  private async requireSmtpHostOrDevLog(
+    context: string,
+    fallbackLog: () => void,
+  ): Promise<string | null> {
+    const host = (await this.settings.get('SMTP_HOST'))?.trim();
     if (host) return host;
     if (this.isProduction()) {
       throw new ServiceUnavailableException({
@@ -38,17 +49,20 @@ export class EmailService {
       'Si no solicitaste este cambio, ignora este correo.',
     ].join('\n');
 
-    const host = this.requireSmtpHostOrDevLog('password_reset', () => {
-      this.logger.warn(`[DEV] Sin SMTP_HOST — enlace de recuperación para ${to}:`);
+    const host = await this.requireSmtpHostOrDevLog('password_reset', () => {
+      this.logger.warn(
+        `[DEV] Sin SMTP_HOST — enlace de recuperación para ${to}:`,
+      );
       this.logger.warn(resetUrl);
     });
     if (!host) return;
 
-    const port = Number(this.config.get<string>('SMTP_PORT', '587'));
-    const user = this.config.get<string>('SMTP_USER');
-    const pass = this.config.get<string>('SMTP_PASS');
+    const port = Number(await this.settings.get('SMTP_PORT'));
+    const user = await this.settings.get('SMTP_USER');
+    const pass = await this.settings.get('SMTP_PASS');
     const from =
-      this.config.get<string>('SMTP_FROM')?.trim() ?? 'FactoFarm <noreply@factofarm.local>';
+      (await this.settings.get('SMTP_FROM'))?.trim() ||
+      'FactoFarm <noreply@factofarm.local>';
 
     const transporter = nodemailer.createTransport({
       host,
@@ -60,18 +74,23 @@ export class EmailService {
     await transporter.sendMail({ from, to, subject, text });
   }
 
-  async sendTransactional(to: string, subject: string, text: string): Promise<void> {
-    const host = this.requireSmtpHostOrDevLog('transactional', () => {
+  async sendTransactional(
+    to: string,
+    subject: string,
+    text: string,
+  ): Promise<void> {
+    const host = await this.requireSmtpHostOrDevLog('transactional', () => {
       this.logger.warn(`[DEV] Sin SMTP_HOST — correo a ${to}: ${subject}`);
       this.logger.warn(text);
     });
     if (!host) return;
 
-    const port = Number(this.config.get<string>('SMTP_PORT', '587'));
-    const user = this.config.get<string>('SMTP_USER');
-    const pass = this.config.get<string>('SMTP_PASS');
+    const port = Number(await this.settings.get('SMTP_PORT'));
+    const user = await this.settings.get('SMTP_USER');
+    const pass = await this.settings.get('SMTP_PASS');
     const from =
-      this.config.get<string>('SMTP_FROM')?.trim() ?? 'FactoFarm <noreply@factofarm.local>';
+      (await this.settings.get('SMTP_FROM'))?.trim() ||
+      'FactoFarm <noreply@factofarm.local>';
 
     const transporter = nodemailer.createTransport({
       host,

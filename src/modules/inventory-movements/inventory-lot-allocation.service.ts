@@ -32,8 +32,8 @@ export type LotAllocationLine = {
 export class InventoryLotAllocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPolicyFromWarehouse(warehouseId: string): Promise<EstablishmentInventoryPolicy> {
-    const warehouse = await this.prisma.warehouse.findFirst({
+  async getPolicyFromWarehouse(warehouseId: string, tx?: Prisma.TransactionClient): Promise<EstablishmentInventoryPolicy> {
+    const warehouse = await (tx ?? this.prisma).warehouse.findFirst({
       where: { id: warehouseId, deletedAt: null },
       select: {
         establishmentId: true,
@@ -57,10 +57,11 @@ export class InventoryLotAllocationService {
     productId: string,
     warehouseId: string,
     policy?: EstablishmentInventoryPolicy,
+    tx?: Prisma.TransactionClient,
   ): Promise<EligibleLotRow[]> {
-    const resolvedPolicy = policy ?? (await this.getPolicyFromWarehouse(warehouseId));
+    const resolvedPolicy = policy ?? (await this.getPolicyFromWarehouse(warehouseId, tx));
     const now = new Date();
-    const rows = await this.prisma.productLotStock.findMany({
+    const rows = await (tx ?? this.prisma).productLotStock.findMany({
       where: {
         productId,
         warehouseId,

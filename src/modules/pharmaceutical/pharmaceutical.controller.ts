@@ -1,3 +1,4 @@
+import { RequiredLotQueryDto } from '../../common/dto/required-report-query.dto';
 import {
   Body,
   Controller,
@@ -275,8 +276,8 @@ export class PharmaceuticalController {
 
   @Get('reports/lot-traceability')
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
-  async lotTraceability(@CurrentUser() actor: JwtRequestUser, @Query('codigoLote') codigoLote: string) {
-    return this.service.lotTraceabilityReport(await this.scope.resolve(actor), codigoLote);
+  async lotTraceability(@CurrentUser() actor: JwtRequestUser, @Query() query: RequiredLotQueryDto) {
+    return this.service.lotTraceabilityReport(await this.scope.resolve(actor), query.codigoLote);
   }
 
   @Get('reports/bpa-storage')

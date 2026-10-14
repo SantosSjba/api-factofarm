@@ -1,3 +1,4 @@
+import { RequiredPeriodQueryDto } from '../../common/dto/required-report-query.dto';
 import {
   Body,
   Controller,
@@ -220,10 +221,10 @@ export class ComplianceController {
   @ApiOperation({ summary: 'Exportar libro PLE TXT (14.1 ventas, 8.1 compras, 13.1 inventario)' })
   async pleExport(
     @Param('book') book: '14.1' | '8.1' | '13.1',
-    @Query('period') period: string,
+    @Query() query: RequiredPeriodQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.ple.buildTxt(await this.scope.resolve(actor), period, book);
+    return this.ple.buildTxt(await this.scope.resolve(actor), query.period, book);
   }
 
   @Get('accountant-summary')
@@ -289,13 +290,13 @@ export class ComplianceController {
   @RequirePermissions('compliance.read', 'billing.read', 'nav.contabilidad_exportar_formatos')
   @ApiOperation({ summary: 'Libro de ventas formato SUNAT (Excel RVIE)' })
   async salesRegister(
-    @Query('period') period: string,
+    @Query() query: RequiredPeriodQueryDto,
     @CurrentUser() actor: JwtRequestUser,
     @Res() res: Response,
   ) {
     const { buffer, filename } = await this.sunatBooks.buildSalesRegisterBuffer(
       await this.scope.resolve(actor),
-      period,
+      query.period,
     );
     res.setHeader(
       'Content-Disposition',
@@ -312,13 +313,13 @@ export class ComplianceController {
   @RequirePermissions('compliance.read', 'billing.read', 'nav.contabilidad_exportar_formatos')
   @ApiOperation({ summary: 'Registro de inventarios formato SUNAT (Excel)' })
   async inventoryRegister(
-    @Query('period') period: string,
+    @Query() query: RequiredPeriodQueryDto,
     @CurrentUser() actor: JwtRequestUser,
     @Res() res: Response,
   ) {
     const { buffer, filename } = await this.sunatBooks.buildInventoryRegisterBuffer(
       await this.scope.resolve(actor),
-      period,
+      query.period,
     );
     res.setHeader(
       'Content-Disposition',

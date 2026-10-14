@@ -120,3 +120,21 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('Despacho dentro de una transacción de venta', () => {
+  it('usa la misma conexión para leer producto, política y lotes y no agota el pool', async () => {
+    const root = { product: { findFirst: jest.fn(() => { throw new Error('Consulta fuera de transacción'); }) } };
+    const tx = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: 'p1', manejaLotes: false }) },
+      inventoryTransferReason: { findFirst: jest.fn().mockResolvedValue({ id: 'reason' }) },
+      inventoryInboundMovement: { create: jest.fn() },
+      productWarehouseStock: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const allocation = { getPolicyFromWarehouse: jest.fn().mockResolvedValue({ inventoryLotAllocationMethod: 'FEFO' }) };
+    const service = new InventoryMovementsService(root as never, allocation as never, {} as never, {} as never, {} as never, {} as never);
+    await service.dispatchSaleStock({ productId: 'p1', warehouseId: 'w1', quantity: 1, mode: SaleLotAllocationMode.AUTO }, 'user', tx as never);
+    expect(root.product.findFirst).not.toHaveBeenCalled();
+    expect(allocation.getPolicyFromWarehouse).toHaveBeenCalledWith('w1', tx);
+    expect(tx.productWarehouseStock.updateMany).toHaveBeenCalled();
+  });
+});

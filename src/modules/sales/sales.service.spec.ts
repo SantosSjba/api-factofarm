@@ -27,6 +27,8 @@ function buildService() {
       findMany: jest.fn(),
     },
     product: { findMany: jest.fn() },
+    establishment: { findFirst: jest.fn().mockResolvedValue({ tenantId: "tenant-1" }) },
+    compoundProduct: { findMany: jest.fn().mockResolvedValue([]) },
     warehouse: { findFirst: jest.fn() },
     drugInteraction: { findMany: jest.fn() },
     saleVoidRequest: {

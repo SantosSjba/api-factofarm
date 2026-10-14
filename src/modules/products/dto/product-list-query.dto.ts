@@ -1,5 +1,6 @@
+import { BooleanField } from '../../../common/decorators/boolean-field.decorator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class ProductListQueryDto {
@@ -25,19 +26,19 @@ export class ProductListQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @BooleanField()
   @IsBoolean()
   habilitado?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @BooleanField()
   @IsBoolean()
   generico?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @BooleanField()
   @IsBoolean()
   necesitaRecetaMedica?: boolean;
 

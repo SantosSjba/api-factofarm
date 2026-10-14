@@ -1,5 +1,5 @@
+import { PlatformSettingsService } from '../../common/settings/platform-settings.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../common/services/email.service';
 import {
   DEFAULT_TIME_ZONE,
@@ -13,7 +13,7 @@ export class PublicComplaintsService {
   private readonly logger = new Logger(PublicComplaintsService.name);
 
   constructor(
-    private readonly config: ConfigService,
+    private readonly settings: PlatformSettingsService,
     private readonly email: EmailService,
     private readonly prisma: PrismaService,
   ) {}
@@ -22,8 +22,8 @@ export class PublicComplaintsService {
     const numeroRegistro = this.buildRegistrationNumber();
     const tipoLabel = dto.tipo === ComplaintKind.RECLAMO ? 'Reclamo' : 'Queja';
     const to =
-      this.config.get<string>('COMPLAINTS_EMAIL')?.trim() ||
-      this.config.get<string>('SALES_CONTACT_EMAIL')?.trim();
+      (await this.settings.get('COMPLAINTS_EMAIL'))?.trim() ||
+      (await this.settings.get('SALES_CONTACT_EMAIL'))?.trim();
 
     await this.prisma.complaint.create({
       data: {

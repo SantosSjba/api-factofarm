@@ -1142,7 +1142,7 @@ export class InventoryMovementsService {
       mode: dto.mode,
       manualLots: dto.manualLots,
     };
-    const { lines, manejaLotes } = await this.resolveSaleLotAllocation(previewDto);
+    const { lines, manejaLotes } = await this.resolveSaleLotAllocation(previewDto, tx);
 
     const db = tx ?? this.prisma;
     const transferReason = await db.inventoryTransferReason.findFirst({
@@ -1311,14 +1311,15 @@ export class InventoryMovementsService {
     };
   }
 
-  private async resolveSaleLotAllocation(dto: SaleLotAllocationPreviewDto) {
-    const product = await this.prisma.product.findFirst({
+  private async resolveSaleLotAllocation(dto: SaleLotAllocationPreviewDto, tx?: Prisma.TransactionClient) {
+    const db = tx ?? this.prisma;
+    const product = await db.product.findFirst({
       where: { id: dto.productId, deletedAt: null },
       select: { id: true, manejaLotes: true },
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    const policy = await this.lotAllocation.getPolicyFromWarehouse(dto.warehouseId);
+    const policy = await this.lotAllocation.getPolicyFromWarehouse(dto.warehouseId, tx);
     const quantity = new Prisma.Decimal(dto.quantity);
 
     if (!product.manejaLotes) {
@@ -1329,6 +1330,7 @@ export class InventoryMovementsService {
       dto.productId,
       dto.warehouseId,
       policy,
+      tx,
     );
 
     let lines: LotAllocationLine[];

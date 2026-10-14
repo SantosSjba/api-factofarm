@@ -7,21 +7,17 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../constants/metadata.constants';
 import { hasChainScope } from '../permissions/role-policy.util';
-import { PermissionsCacheService } from '../permissions/permissions-cache.service';
 import type { JwtRequestUser } from '../../modules/auth/domain/auth.types';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(
-    private readonly reflector: Reflector,
-    private readonly permissionsCache: PermissionsCacheService,
-  ) {}
+  constructor(private readonly reflector: Reflector) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+  canActivate(context: ExecutionContext): boolean {
+    const required = this.reflector.getAllAndOverride<string[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (!required?.length) {
       return true;
@@ -41,8 +37,8 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // B-LOG-12: re-check live codes from DB (30s TTL) instead of JWT forever.
-    const liveCodes = await this.permissionsCache.getPermissionCodes(user.sub);
+    // JwtAuthGuard carga permisos vigentes en cada petición.
+    const liveCodes = user.permissionCodes;
     const hasPermission = required.some((code) => liveCodes.includes(code));
     if (!hasPermission) {
       throw new ForbiddenException({

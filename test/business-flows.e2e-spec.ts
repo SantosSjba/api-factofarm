@@ -1,3 +1,4 @@
+import { BillingService } from '../src/modules/billing/billing.service';
 import type { INestApplication } from '@nestjs/common';
 import type { App } from 'supertest/types';
 import request from 'supertest';
@@ -334,7 +335,9 @@ describe('QA business flows (e2e)', () => {
       .expect(201);
   }, 90_000);
 
-  it('QA-CPE-01: sin OSE real solo permite nota de venta (no boleta)', async () => {
+  it('QA-CPE-01: con emisión electrónica deshabilitada solo permite nota de venta', async () => {
+    const canEmit = jest.spyOn(app.get(BillingService), 'establishmentCanEmitCpe').mockResolvedValue(false);
+    try {
     const auth = await loginAsAdmin(app);
     const ctx = await resolvePosContext(app, auth);
     const bearer = bearerOf(ctx.token);
@@ -359,6 +362,7 @@ describe('QA business flows (e2e)', () => {
     expect(sale.body.id).toBeDefined();
     expect(sale.body.documentType).toBe('NOTA_VENTA');
     expect(close.body.ok).toBe(true);
+    } finally { canEmit.mockRestore(); }
   }, 90_000);
 
   it('QA-CONCUR: 10 ventas concurrentes sin 5xx', async () => {

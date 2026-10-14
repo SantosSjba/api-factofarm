@@ -1,5 +1,7 @@
+import { ExchangePanelHandoffDto } from './application/dto/exchange-panel-handoff.dto';
 import {
   Body,
+  ForbiddenException,
   Controller,
   Get,
   HttpCode,
@@ -94,7 +96,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Canjear código de acceso al panel de un cliente SaaS (sesión de soporte)',
   })
-  exchangePanelHandoff(@Body() body: { code?: string }) {
+  exchangePanelHandoff(@Body() body: ExchangePanelHandoffDto) {
     return this.authService.exchangePanelHandoff(body.code ?? '');
   }
 
@@ -109,6 +111,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar perfil propio' })
   updateMe(@CurrentUser() user: JwtRequestUser, @Body() dto: UpdateMeDto) {
+    if (user.supportSession) throw new ForbiddenException('La sesión de soporte no permite modificar el perfil del operador');
     return this.authService.updateMe(user.sub, dto);
   }
 
@@ -120,6 +123,7 @@ export class AuthController {
     @CurrentUser() user: JwtRequestUser,
     @Body() dto: ChangePasswordDto,
   ) {
+    if (user.supportSession) throw new ForbiddenException('La sesión de soporte no permite cambiar la contraseña del operador');
     return this.authService.changePassword(
       user.sub,
       dto.currentPassword,

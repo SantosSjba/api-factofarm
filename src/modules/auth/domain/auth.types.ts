@@ -2,6 +2,7 @@ import type { UserRole } from '../../../generated/prisma/client';
 
 export type AuthJwtPayload = {
   sub: string;
+  authVersion?: number;
   email: string;
   role: UserRole;
   tenantId: string | null;

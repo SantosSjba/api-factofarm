@@ -16,6 +16,9 @@ export function validatePasswordPolicy(password: string): PasswordValidationResu
   if (password.length < MIN_LENGTH) {
     errors.push(`Mínimo ${MIN_LENGTH} caracteres`);
   }
+  if (Buffer.byteLength(password, 'utf8') > 72) {
+    errors.push('La contraseña es demasiado larga. Usa menos caracteres.');
+  }
   if (!HAS_UPPER.test(password)) {
     errors.push('Debe incluir al menos una mayúscula');
   }

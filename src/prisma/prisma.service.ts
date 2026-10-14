@@ -16,14 +16,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       connectionString,
       max: config.get<number>('PG_POOL_MAX', 20),
       idleTimeoutMillis: config.get<number>('PG_POOL_IDLE_MS', 30_000),
-      connectionTimeoutMillis: config.get<number>('PG_POOL_CONNECT_MS', 10_000),
+      connectionTimeoutMillis: config.get<number>('PG_POOL_CONNECT_MS', 60_000),
       keepAlive: true,
     });
     pool.on('error', (err) => {
       this.logger.warn(`Pool PostgreSQL: ${err.message}`);
     });
     const adapter = new PrismaPg(pool);
-    super({ adapter });
+    super({ adapter, transactionOptions: {
+      maxWait: config.get<number>('PG_TX_MAX_WAIT_MS', 60_000),
+      timeout: config.get<number>('PG_TX_TIMEOUT_MS', 60_000),
+    } });
     this.pool = pool;
   }
 

@@ -66,6 +66,7 @@ export const envValidationSchema = Joi.object({
   CACHE_TTL_MS: Joi.number().integer().min(10_000).default(300_000),
   PASSWORD_RESET_EXPIRES_MINUTES: Joi.number().integer().min(5).max(1440).default(60),
   /** En producción el envío real exige SMTP_HOST; sin él, forgot-password falla en runtime (no bloquea boot). */
+  SETTINGS_ENCRYPTION_KEY: Joi.string().min(32).optional().allow(''),
   SMTP_HOST: Joi.string().optional().allow(''),
   SMTP_PORT: Joi.number().port().default(587),
   SMTP_USER: Joi.string().optional().allow(''),
@@ -79,9 +80,11 @@ export const envValidationSchema = Joi.object({
   COMPANY_RUC: Joi.string().optional().allow(''),
   COMPANY_ADDRESS: Joi.string().optional().allow(''),
   SENTRY_DSN: Joi.string().uri().optional().allow(''),
+  PG_TX_MAX_WAIT_MS: Joi.number().integer().min(5000).max(120000).default(60000),
+  PG_TX_TIMEOUT_MS: Joi.number().integer().min(5000).max(120000).default(60000),
   PG_POOL_MAX: Joi.number().integer().min(1).max(100).default(20),
   PG_POOL_IDLE_MS: Joi.number().integer().min(1000).default(30_000),
-  PG_POOL_CONNECT_MS: Joi.number().integer().min(1000).default(10_000),
+  PG_POOL_CONNECT_MS: Joi.number().integer().min(1000).max(120000).default(60_000),
   /** Días a conservar AuditLog antes de purga (Fase 2 retención). */
   DATA_RETENTION_AUDIT_DAYS: Joi.number().integer().min(30).max(3650).default(730),
   /** Permite borrado real de AuditLog (dry-run siempre disponible). */

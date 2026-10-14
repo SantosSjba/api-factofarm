@@ -1,3 +1,4 @@
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -9,7 +10,10 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
-import { hasChainScope, isPlatformAdmin } from '../../common/permissions/role-policy.util';
+import {
+  hasChainScope,
+  isPlatformAdmin,
+} from '../../common/permissions/role-policy.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthJwtPayload } from '../auth/domain/auth.types';
 import { establishmentRoom, saleRoom } from './realtime.events';
@@ -32,7 +36,9 @@ function realtimeCorsOrigin(): boolean | string[] {
   namespace: '/realtime',
   cors: { origin: realtimeCorsOrigin(), credentials: true },
 })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(RealtimeGateway.name);
 
   @WebSocketServer()
@@ -43,6 +49,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private readonly config: ConfigService,
     private readonly realtime: RealtimeService,
     private readonly prisma: PrismaService,
+    private readonly sessions: JwtAuthGuard,
   ) {}
 
   afterInit(server: Server) {
@@ -57,11 +64,32 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         client.disconnect(true);
         return;
       }
-      const payload = this.jwt.verify<AuthJwtPayload>(token, {
-        secret: this.config.getOrThrow<string>('JWT_SECRET'),
+      const payload = await this.sessions.validateSession(
+        this.jwt.verify<AuthJwtPayload>(token, {
+          secret: this.config.getOrThrow<string>('JWT_SECRET'),
+        }),
+      );
+      // Una conexión abierta no debe sobrevivir indefinidamente a una revocación.
+      const sessionCheck = setInterval(() => {
+        void this.sessions
+          .validateSession(payload)
+          .catch(() => client.disconnect(true));
+      }, 15_000);
+      sessionCheck.unref();
+      const expiresAt = (payload as AuthJwtPayload & { exp?: number }).exp;
+      const expiry = expiresAt
+        ? setTimeout(
+            () => client.disconnect(true),
+            Math.max(0, Math.min(2_147_483_647, expiresAt * 1000 - Date.now())),
+          )
+        : undefined;
+      expiry?.unref();
+      client.once('disconnect', () => {
+        clearInterval(sessionCheck);
+        if (expiry) clearTimeout(expiry);
       });
       await client.join(establishmentRoom(payload.establecimientoId));
-      client.data.user = payload;
+      (client.data as { user?: AuthJwtPayload }).user = payload;
       client.on('join-sale', (saleId: string) => {
         void this.handleJoinSale(client, payload, saleId);
       });
@@ -71,7 +99,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   handleDisconnect(client: Socket) {
-    const user = client.data.user as AuthJwtPayload | undefined;
+    const user = (client.data as { user?: AuthJwtPayload }).user;
     if (user) {
       this.logger.debug(`Cliente WS desconectado: ${user.email}`);
     }
@@ -83,6 +111,12 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     saleId: string,
   ): Promise<void> {
     if (typeof saleId !== 'string' || !saleId.trim()) return;
+    try {
+      actor = await this.sessions.validateSession(actor);
+    } catch {
+      client.disconnect(true);
+      return;
+    }
     const id = saleId.trim();
     const sale = await this.prisma.sale.findFirst({
       where: { id, deletedAt: null },
@@ -97,7 +131,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       if (!actor.tenantId || sale.establishment.tenantId !== actor.tenantId) {
         return;
       }
-      if (!hasChainScope(actor.role) && sale.establishmentId !== actor.establecimientoId) {
+      if (
+        !hasChainScope(actor.role) &&
+        sale.establishmentId !== actor.establecimientoId
+      ) {
         return;
       }
     }

@@ -1,0 +1,8 @@
+/// Configuración operativa global; secretos cifrados, nunca expuestos por la API.
+model PlatformSetting {
+  key       String   @id @db.VarChar(80)
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
+}

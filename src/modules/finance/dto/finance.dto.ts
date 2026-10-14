@@ -1,3 +1,4 @@
+import { BooleanField } from '../../../common/decorators/boolean-field.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -94,7 +95,7 @@ export class BankMovementListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @BooleanField()
   conciliado?: boolean;
 }
 
