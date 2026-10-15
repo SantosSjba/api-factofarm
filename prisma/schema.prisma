@@ -11,7 +11,10 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  output              = "../src/generated/prisma"
+  // CJS explícito: en Docker se genera sin tsconfig y Prisma asumiría ESM
+  moduleFormat        = "cjs"
+  importFileExtension = ""
 }
 
 datasource db {
