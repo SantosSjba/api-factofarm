@@ -11,7 +11,11 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { CashMovementType, PaymentMethod, PosPrinterPaperWidth } from '../../../generated/prisma/client';
+import {
+  CashMovementType,
+  PaymentMethod,
+  PosPrinterPaperWidth,
+} from '../../../generated/prisma/client';
 
 export class OpenCashSessionDto {
   @ApiProperty({ format: 'uuid' })
@@ -72,7 +76,10 @@ export class CreateCashRegisterDto {
 }
 
 export class UpdateCashRegisterHardwareDto {
-  @ApiPropertyOptional({ enum: PosPrinterPaperWidth, default: PosPrinterPaperWidth.MM_80 })
+  @ApiPropertyOptional({
+    enum: PosPrinterPaperWidth,
+    default: PosPrinterPaperWidth.MM_80,
+  })
   @IsOptional()
   @IsEnum(PosPrinterPaperWidth)
   printerPaperWidth?: PosPrinterPaperWidth;
@@ -82,22 +89,34 @@ export class UpdateCashRegisterHardwareDto {
   @IsBoolean()
   printerAutoPrint?: boolean;
 
-  @ApiPropertyOptional({ default: true, description: 'Pulso cajón monedero al imprimir (ESC/POS)' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Pulso cajón monedero al imprimir (ESC/POS)',
+  })
   @IsOptional()
   @IsBoolean()
   openCashDrawerOnPrint?: boolean;
 
-  @ApiPropertyOptional({ default: true, description: 'Escáner USB tipo keyboard wedge' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Escáner USB tipo keyboard wedge',
+  })
   @IsOptional()
   @IsBoolean()
   barcodeWedgeEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: false, description: 'Habilitar pantalla cliente / pole display' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Habilitar pantalla cliente / pole display',
+  })
   @IsOptional()
   @IsBoolean()
   customerDisplayEnabled?: boolean;
 
-  @ApiPropertyOptional({ maxLength: 120, description: 'Nombre impresora en sistema operativo' })
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description: 'Nombre impresora en sistema operativo',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)

@@ -10,7 +10,10 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { BillingProviderType, SunatDocumentStatus } from '../../../generated/prisma/client';
+import {
+  BillingProviderType,
+  SunatDocumentStatus,
+} from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class UpsertBillingConfigDto {
@@ -37,12 +40,16 @@ export class UpsertBillingConfigDto {
   @MaxLength(500)
   apiUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Token OSE en texto plano; se guarda encriptado' })
+  @ApiPropertyOptional({
+    description: 'Token OSE en texto plano; se guarda encriptado',
+  })
   @IsOptional()
   @IsString()
   apiToken?: string;
 
-  @ApiPropertyOptional({ description: 'Certificado .pfx en base64; se guarda encriptado' })
+  @ApiPropertyOptional({
+    description: 'Certificado .pfx en base64; se guarda encriptado',
+  })
   @IsOptional()
   @IsString()
   certificateBase64?: string;
@@ -125,9 +132,19 @@ class EmitSpecialDocumentLineDto {
 
 export class EmitSpecialDocumentDto {
   @ApiProperty({
-    enum: ['RETENCION', 'PERCEPCION', 'LIQUIDACION_COMPRA', 'GUIA_REMISION_TRANSPORTISTA'],
+    enum: [
+      'RETENCION',
+      'PERCEPCION',
+      'LIQUIDACION_COMPRA',
+      'GUIA_REMISION_TRANSPORTISTA',
+    ],
   })
-  @IsIn(['RETENCION', 'PERCEPCION', 'LIQUIDACION_COMPRA', 'GUIA_REMISION_TRANSPORTISTA'])
+  @IsIn([
+    'RETENCION',
+    'PERCEPCION',
+    'LIQUIDACION_COMPRA',
+    'GUIA_REMISION_TRANSPORTISTA',
+  ])
   documentType!:
     | 'RETENCION'
     | 'PERCEPCION'

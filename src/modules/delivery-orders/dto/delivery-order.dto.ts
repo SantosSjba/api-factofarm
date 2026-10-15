@@ -15,7 +15,10 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DeliveryChannel, DeliveryOrderStatus } from '../../../generated/prisma/client';
+import {
+  DeliveryChannel,
+  DeliveryOrderStatus,
+} from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class DeliveryOrderListQueryDto extends PaginationQueryDto {
@@ -65,7 +68,10 @@ export class CreateDeliveryOrderDto {
   @IsUUID()
   customerId?: string;
 
-  @ApiPropertyOptional({ enum: DeliveryChannel, default: DeliveryChannel.TELEFONO })
+  @ApiPropertyOptional({
+    enum: DeliveryChannel,
+    default: DeliveryChannel.TELEFONO,
+  })
   @IsOptional()
   @IsEnum(DeliveryChannel)
   canal?: DeliveryChannel;
@@ -151,7 +157,10 @@ export class UpdateDeliveryOrderStatusDto {
 }
 
 export class AssignDeliveryOrderDto {
-  @ApiPropertyOptional({ format: 'uuid', description: 'Repartidor / responsable' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Repartidor / responsable',
+  })
   @IsOptional()
   @IsUUID()
   assignedToId?: string;

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { LoyaltyTransactionType, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -42,8 +46,10 @@ export class LoyaltyService {
     referencia?: string,
     actorId?: string,
   ) {
-    if (!puntos) throw new BadRequestException('Indique puntos distintos de cero');
-    const tipo = puntos > 0 ? LoyaltyTransactionType.AJUSTE : LoyaltyTransactionType.CANJE;
+    if (!puntos)
+      throw new BadRequestException('Indique puntos distintos de cero');
+    const tipo =
+      puntos > 0 ? LoyaltyTransactionType.AJUSTE : LoyaltyTransactionType.CANJE;
     return this.addPoints(
       establishmentId,
       customerId,
@@ -108,7 +114,10 @@ export class LoyaltyService {
       orderBy: { sale: { createdAt: 'desc' } },
     });
 
-    const totals = new Map<string, { nombre: string; codigoInterno: string | null; qty: number }>();
+    const totals = new Map<
+      string,
+      { nombre: string; codigoInterno: string | null; qty: number }
+    >();
     for (const row of sales) {
       const prev = totals.get(row.productId);
       const qty = Number(row.cantidad.toString());
@@ -128,10 +137,10 @@ export class LoyaltyService {
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 8);
 
-    const recentIds = new Set(
-      sales.slice(0, 30).map((s) => s.productId),
-    );
-    const suggestions = frequent.filter((f) => !recentIds.has(f.productId)).slice(0, 5);
+    const recentIds = new Set(sales.slice(0, 30).map((s) => s.productId));
+    const suggestions = frequent
+      .filter((f) => !recentIds.has(f.productId))
+      .slice(0, 5);
 
     return {
       frequentPurchases: frequent,
@@ -178,7 +187,13 @@ export class LoyaltyService {
           deliveryOrderId,
           createdById,
         },
-        select: { id: true, puntos: true, saldoAfter: true, tipo: true, createdAt: true },
+        select: {
+          id: true,
+          puntos: true,
+          saldoAfter: true,
+          tipo: true,
+          createdAt: true,
+        },
       });
 
       return {

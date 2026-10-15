@@ -60,7 +60,8 @@ function leerCentenas(n: number): string {
   if (rest < 20) return `${head} ${UNIDADES[rest]}`.trim();
   const d = Math.floor(rest / 10);
   const u = rest % 10;
-  const dec = d === 2 && u > 0 ? `VEINTI${UNIDADES[u].toLowerCase()}` : DECENAS[d];
+  const dec =
+    d === 2 && u > 0 ? `VEINTI${UNIDADES[u].toLowerCase()}` : DECENAS[d];
   const tail = d === 2 && u > 0 ? '' : u > 0 ? ` Y ${UNIDADES[u]}` : '';
   return `${head} ${dec}${tail}`.trim();
 }
@@ -76,7 +77,8 @@ function enteroALetras(n: number): string {
   }
   const millones = Math.floor(n / 1_000_000);
   const rest = n % 1_000_000;
-  const millTxt = millones === 1 ? 'UN MILLON' : `${enteroALetras(millones)} MILLONES`;
+  const millTxt =
+    millones === 1 ? 'UN MILLON' : `${enteroALetras(millones)} MILLONES`;
   return rest ? `${millTxt} ${enteroALetras(rest)}` : millTxt;
 }
 
@@ -96,12 +98,17 @@ export function mapFactilizaTipoDoc(documentType: string): string {
   return map[documentType] ?? '03';
 }
 
-export function mapFactilizaAfectadoTipo(documentType: 'FACTURA' | 'BOLETA'): string {
+export function mapFactilizaAfectadoTipo(
+  documentType: 'FACTURA' | 'BOLETA',
+): string {
   return documentType === 'FACTURA' ? '01' : '03';
 }
 
 /** Fecha/hora de emisión CPE con offset (compat: nombre histórico). */
-export function peruEmissionDate(isoDate: string, timeZone = DEFAULT_TIME_ZONE): string {
+export function peruEmissionDate(
+  isoDate: string,
+  timeZone = DEFAULT_TIME_ZONE,
+): string {
   return formatIsoOffsetInTimeZone(isoDate, timeZone);
 }
 
@@ -133,7 +140,9 @@ export type FactilizaOkResponse = {
   };
 };
 
-export function extractBase64Artifact(payload: FactilizaOkResponse): Buffer | null {
+export function extractBase64Artifact(
+  payload: FactilizaOkResponse,
+): Buffer | null {
   const data = payload.data;
   if (!data) return null;
   const raw = data.base64 ?? data.pdf ?? data.xml ?? data.cdr ?? data.content;

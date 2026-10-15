@@ -1,10 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class AuditLogQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Cursor opaco; si se envía, usa paginación cursor-based' })
+  @ApiPropertyOptional({
+    description: 'Cursor opaco; si se envía, usa paginación cursor-based',
+  })
   @IsOptional()
   @IsString()
   cursor?: string;

@@ -1,6 +1,9 @@
 import { ForbiddenException } from '@nestjs/common';
 import { UserRole } from '../../generated/prisma/client';
-import { hasChainScope, isPlatformAdmin } from '../permissions/role-policy.util';
+import {
+  hasChainScope,
+  isPlatformAdmin,
+} from '../permissions/role-policy.util';
 
 export type ScopeActor = {
   establecimientoId: string;
@@ -24,7 +27,10 @@ export function resolveEstablishmentScope(
 }
 
 /** Filtro Prisma estándar por establecimiento del actor. */
-export function establishmentWhere(actor: ScopeActor, field = 'establishmentId') {
+export function establishmentWhere(
+  actor: ScopeActor,
+  field = 'establishmentId',
+) {
   return { [field]: actor.establecimientoId } as Record<string, string>;
 }
 

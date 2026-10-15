@@ -18,13 +18,17 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
 
     const prisma = {
       product: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'p1', manejaLotes: false }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'p1', manejaLotes: false }),
       },
       inventoryTransferReason: {
         findFirst: jest.fn().mockResolvedValue({ id: 'tr-out' }),
       },
       productWarehouseStock: {
-        findUnique: jest.fn().mockResolvedValue({ cantidad: new Prisma.Decimal(20) }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ cantidad: new Prisma.Decimal(20) }),
       },
       $transaction: transaction,
     };
@@ -67,8 +71,8 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
         data: expect.objectContaining({
           movementType: InventoryMovementType.SALIDA,
           cantidad: new Prisma.Decimal(-3),
-        }),
-      }),
+        }) as unknown,
+      }) as unknown,
     );
     expect(warehouseUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -76,16 +80,18 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
           productId: 'p1',
           warehouseId: 'w1',
           cantidad: { gte: new Prisma.Decimal(3) },
-        }),
+        }) as unknown,
         data: { cantidad: { decrement: new Prisma.Decimal(3) } },
-      }),
+      }) as unknown,
     );
   });
 
   it('rechaza cantidad cero', async () => {
     const prisma = {
       product: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'p1', manejaLotes: false }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'p1', manejaLotes: false }),
       },
       inventoryTransferReason: {
         findFirst: jest.fn().mockResolvedValue({ id: 'tr-out' }),
@@ -123,16 +129,50 @@ describe('InventoryMovementsService.dispatchSaleStock', () => {
 
 describe('Despacho dentro de una transacción de venta', () => {
   it('usa la misma conexión para leer producto, política y lotes y no agota el pool', async () => {
-    const root = { product: { findFirst: jest.fn(() => { throw new Error('Consulta fuera de transacción'); }) } };
-    const tx = {
-      product: { findFirst: jest.fn().mockResolvedValue({ id: 'p1', manejaLotes: false }) },
-      inventoryTransferReason: { findFirst: jest.fn().mockResolvedValue({ id: 'reason' }) },
-      inventoryInboundMovement: { create: jest.fn() },
-      productWarehouseStock: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    const root = {
+      product: {
+        findFirst: jest.fn(() => {
+          throw new Error('Consulta fuera de transacción');
+        }),
+      },
     };
-    const allocation = { getPolicyFromWarehouse: jest.fn().mockResolvedValue({ inventoryLotAllocationMethod: 'FEFO' }) };
-    const service = new InventoryMovementsService(root as never, allocation as never, {} as never, {} as never, {} as never, {} as never);
-    await service.dispatchSaleStock({ productId: 'p1', warehouseId: 'w1', quantity: 1, mode: SaleLotAllocationMode.AUTO }, 'user', tx as never);
+    const tx = {
+      product: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'p1', manejaLotes: false }),
+      },
+      inventoryTransferReason: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'reason' }),
+      },
+      inventoryInboundMovement: { create: jest.fn() },
+      productWarehouseStock: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const allocation = {
+      getPolicyFromWarehouse: jest
+        .fn()
+        .mockResolvedValue({ inventoryLotAllocationMethod: 'FEFO' }),
+    };
+    const service = new InventoryMovementsService(
+      root as never,
+      allocation as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    await service.dispatchSaleStock(
+      {
+        productId: 'p1',
+        warehouseId: 'w1',
+        quantity: 1,
+        mode: SaleLotAllocationMode.AUTO,
+      },
+      'user',
+      tx as never,
+    );
     expect(root.product.findFirst).not.toHaveBeenCalled();
     expect(allocation.getPolicyFromWarehouse).toHaveBeenCalledWith('w1', tx);
     expect(tx.productWarehouseStock.updateMany).toHaveBeenCalled();

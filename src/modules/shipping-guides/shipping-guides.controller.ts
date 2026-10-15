@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -27,15 +37,29 @@ export class ShippingGuidesController {
   ) {}
 
   @Get('carriers')
-  @RequirePermissions('shipping.read', 'nav.transportistas', 'nav.gr_transportista')
-  async listCarriers(@Query() query: ShippingListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'shipping.read',
+    'nav.transportistas',
+    'nav.gr_transportista',
+  )
+  async listCarriers(
+    @Query() query: ShippingListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.listCarriers(await this.scope.resolve(actor), query);
   }
 
   @Post('carriers')
   @RequirePermissions('shipping.write', 'nav.transportistas')
-  async createCarrier(@Body() dto: CreateShippingCarrierDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createCarrier(await this.scope.resolve(actor), dto, actor.sub);
+  async createCarrier(
+    @Body() dto: CreateShippingCarrierDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createCarrier(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch('carriers/:id')
@@ -45,25 +69,51 @@ export class ShippingGuidesController {
     @Body() dto: UpdateShippingCarrierDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateCarrier(await this.scope.resolve(actor), id, dto, actor.sub);
+    return this.service.updateCarrier(
+      await this.scope.resolve(actor),
+      id,
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete('carriers/:id')
   @RequirePermissions('shipping.write', 'nav.transportistas')
-  async removeCarrier(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.removeCarrier(await this.scope.resolve(actor), id, actor.sub);
+  async removeCarrier(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.removeCarrier(
+      await this.scope.resolve(actor),
+      id,
+      actor.sub,
+    );
   }
 
   @Get('drivers')
-  @RequirePermissions('shipping.read', 'nav.conductores', 'nav.gr_transportista')
-  async listDrivers(@Query() query: ShippingListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'shipping.read',
+    'nav.conductores',
+    'nav.gr_transportista',
+  )
+  async listDrivers(
+    @Query() query: ShippingListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.listDrivers(await this.scope.resolve(actor), query);
   }
 
   @Post('drivers')
   @RequirePermissions('shipping.write', 'nav.conductores')
-  async createDriver(@Body() dto: CreateShippingDriverDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createDriver(await this.scope.resolve(actor), dto, actor.sub);
+  async createDriver(
+    @Body() dto: CreateShippingDriverDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createDriver(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch('drivers/:id')
@@ -73,25 +123,47 @@ export class ShippingGuidesController {
     @Body() dto: UpdateShippingDriverDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateDriver(await this.scope.resolve(actor), id, dto, actor.sub);
+    return this.service.updateDriver(
+      await this.scope.resolve(actor),
+      id,
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete('drivers/:id')
   @RequirePermissions('shipping.write', 'nav.conductores')
-  async removeDriver(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.removeDriver(await this.scope.resolve(actor), id, actor.sub);
+  async removeDriver(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.removeDriver(
+      await this.scope.resolve(actor),
+      id,
+      actor.sub,
+    );
   }
 
   @Get('vehicles')
   @RequirePermissions('shipping.read', 'nav.vehiculos', 'nav.gr_transportista')
-  async listVehicles(@Query() query: ShippingListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async listVehicles(
+    @Query() query: ShippingListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.listVehicles(await this.scope.resolve(actor), query);
   }
 
   @Post('vehicles')
   @RequirePermissions('shipping.write', 'nav.vehiculos')
-  async createVehicle(@Body() dto: CreateShippingVehicleDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createVehicle(await this.scope.resolve(actor), dto, actor.sub);
+  async createVehicle(
+    @Body() dto: CreateShippingVehicleDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createVehicle(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch('vehicles/:id')
@@ -101,22 +173,41 @@ export class ShippingGuidesController {
     @Body() dto: UpdateShippingVehicleDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateVehicle(await this.scope.resolve(actor), id, dto, actor.sub);
+    return this.service.updateVehicle(
+      await this.scope.resolve(actor),
+      id,
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete('vehicles/:id')
   @RequirePermissions('shipping.write', 'nav.vehiculos')
-  async removeVehicle(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.removeVehicle(await this.scope.resolve(actor), id, actor.sub);
+  async removeVehicle(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.removeVehicle(
+      await this.scope.resolve(actor),
+      id,
+      actor.sub,
+    );
   }
 
   @Get('departure-addresses')
-  @RequirePermissions('shipping.read', 'nav.direcciones_partida', 'nav.gr_remitente')
+  @RequirePermissions(
+    'shipping.read',
+    'nav.direcciones_partida',
+    'nav.gr_remitente',
+  )
   async listDepartureAddresses(
     @Query() query: ShippingListQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listDepartureAddresses(await this.scope.resolve(actor), query);
+    return this.service.listDepartureAddresses(
+      await this.scope.resolve(actor),
+      query,
+    );
   }
 
   @Post('departure-addresses')
@@ -125,7 +216,11 @@ export class ShippingGuidesController {
     @Body() dto: CreateDepartureAddressDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createDepartureAddress(await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.createDepartureAddress(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch('departure-addresses/:id')
@@ -135,7 +230,12 @@ export class ShippingGuidesController {
     @Body() dto: UpdateDepartureAddressDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateDepartureAddress(await this.scope.resolve(actor), id, dto, actor.sub);
+    return this.service.updateDepartureAddress(
+      await this.scope.resolve(actor),
+      id,
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete('departure-addresses/:id')
@@ -144,6 +244,10 @@ export class ShippingGuidesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.removeDepartureAddress(await this.scope.resolve(actor), id, actor.sub);
+    return this.service.removeDepartureAddress(
+      await this.scope.resolve(actor),
+      id,
+      actor.sub,
+    );
   }
 }

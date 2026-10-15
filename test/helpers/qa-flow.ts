@@ -24,9 +24,12 @@ export async function readPosStock(
     .set(bearer)
     .expect(200);
 
-  const row = (res.body as Array<{ id?: string; stock?: string | number }>).find(
-    (p) => p.id === productId,
-  );
+  const row = (
+    res.body as Array<{
+      id?: string;
+      stock?: string | number;
+    }>
+  ).find((p) => p.id === productId);
   if (!row) return 0;
   return Number(row.stock ?? 0);
 }
@@ -42,7 +45,8 @@ export async function findCustomerId(
     .set(bearer)
     .expect(200);
 
-  const id = res.body.items?.[0]?.id as string | undefined;
+  const id = (res.body as { id: string; items: { id: string }[] }).items?.[0]
+    ?.id as string | undefined;
   if (!id) throw new Error(`Cliente seed ${documento} no encontrado`);
   return id;
 }
@@ -58,7 +62,7 @@ export async function createSecondaryWarehouse(
     .set(bearer)
     .send({ establishmentId, nombre })
     .expect(201);
-  return res.body.id as string;
+  return (res.body as { id: string; items: { id: string }[] }).id;
 }
 
 export async function ensureInboundStock(
@@ -73,9 +77,14 @@ export async function ensureInboundStock(
     .expect(200);
 
   const reason =
-    (reasons.body as Array<{ id: string; codigo?: string; code?: string }>).find(
-      (r) => (r.codigo ?? r.code) === 'COMPRA_NACIONAL',
-    ) ?? reasons.body[0];
+    (
+      reasons.body as {
+        id: string;
+        codigo?: string;
+        code?: string;
+      }[] as Array<{ id: string; codigo?: string; code?: string }>
+    ).find((r) => (r.codigo ?? r.code) === 'COMPRA_NACIONAL') ??
+    (reasons.body as { id: string; codigo?: string; code?: string }[])[0];
   if (!reason?.id) throw new Error('Sin motivo de ingreso COMPRA_NACIONAL');
 
   await request(app.getHttpServer())

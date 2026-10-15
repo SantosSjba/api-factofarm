@@ -1,8 +1,20 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
+import { scalarText } from '../../common/utils/scalar-text.util';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CustomerDocumentType, Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  assertTenantAccess,
+  actorFromJwt,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
   monthBoundsInTimeZone,
@@ -73,10 +85,11 @@ const selectCustomer = {
   customerType: { select: { id: true, descripcion: true } },
   zone: { select: { id: true, nombre: true } },
   vendedorAsignado: { select: { id: true, nombre: true } },
-  addresses: { select: selectCustomerAddress, orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'asc' }] },
+  addresses: {
+    select: selectCustomerAddress,
+    orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'asc' }],
+  },
 } satisfies Prisma.CustomerSelect;
-
-type CustomerRow = Prisma.CustomerGetPayload<{ select: typeof selectCustomer }>;
 
 @Injectable()
 export class CustomersService {
@@ -100,10 +113,14 @@ export class CustomersService {
         searchable.push({ nombre: { contains: search, mode: 'insensitive' } });
       }
       if (field === 'all' || field === 'numeroDocumento') {
-        searchable.push({ numeroDocumento: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          numeroDocumento: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'codigoInterno') {
-        searchable.push({ codigoInterno: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoInterno: { contains: search, mode: 'insensitive' },
+        });
       }
     }
 
@@ -151,6 +168,7 @@ export class CustomersService {
       assertTenantAccess(actorFromJwt(actor), row.tenantId);
     }
     const { tenantId: _tenantId, ...customer } = row;
+    void _tenantId;
     return customer;
   }
 
@@ -167,7 +185,11 @@ export class CustomersService {
       if (dto.addresses?.length) {
         await this.replaceAddresses(created.id, dto.addresses);
       }
-      await this.lpdp.ensureCustomerConsentOnCreate(dto, created.id, actor?.sub);
+      await this.lpdp.ensureCustomerConsentOnCreate(
+        dto,
+        created.id,
+        actor?.sub,
+      );
       await this.audit.log({
         userId: actor?.sub,
         action: 'CREATE',
@@ -216,7 +238,11 @@ export class CustomersService {
     });
   }
 
-  async updateStatus(id: string, dto: UpdateCustomerStatusDto, actor?: JwtRequestUser) {
+  async updateStatus(
+    id: string,
+    dto: UpdateCustomerStatusDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
@@ -233,7 +259,11 @@ export class CustomersService {
     return updated;
   }
 
-  async updateBarcode(id: string, dto: UpdateCustomerBarcodeDto, actor?: JwtRequestUser) {
+  async updateBarcode(
+    id: string,
+    dto: UpdateCustomerBarcodeDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
@@ -250,7 +280,11 @@ export class CustomersService {
     return updated;
   }
 
-  async updateTags(id: string, dto: UpdateCustomerTagsDto, actor?: JwtRequestUser) {
+  async updateTags(
+    id: string,
+    dto: UpdateCustomerTagsDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureCustomer(id, actor);
     const updated = await this.prisma.customer.update({
       where: { id },
@@ -297,7 +331,11 @@ export class CustomersService {
     }
   }
 
-  async updateZone(id: string, dto: UpdateCustomerZoneDto, actor?: JwtRequestUser) {
+  async updateZone(
+    id: string,
+    dto: UpdateCustomerZoneDto,
+    actor?: JwtRequestUser,
+  ) {
     const zone = await this.prisma.customerZone.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, tenantId: true },
@@ -375,7 +413,10 @@ export class CustomersService {
     }));
   }
 
-  async previewImportFromExcel(file: Express.Multer.File, actor?: JwtRequestUser) {
+  async previewImportFromExcel(
+    file: Express.Multer.File,
+    actor?: JwtRequestUser,
+  ) {
     return this.importFromExcel(file, actor, { dryRun: true });
   }
 
@@ -394,7 +435,9 @@ export class CustomersService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: '',
+    });
 
     let created = 0;
     let updated = 0;
@@ -402,10 +445,12 @@ export class CustomersService {
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const nombre = String(r['Nombre/Razón Social'] ?? '').trim();
-      const nombreComercial = String(r['Nombre Comercial'] ?? '').trim();
-      const numeroDocumento = String(r['Número de documento'] ?? '').trim();
-      const tipoDocumentoRaw = String(r['Código documento de identidad'] ?? '').trim();
+      const nombre = scalarText(r['Nombre/Razón Social'] ?? '').trim();
+      const nombreComercial = scalarText(r['Nombre Comercial'] ?? '').trim();
+      const numeroDocumento = scalarText(r['Número de documento'] ?? '').trim();
+      const tipoDocumentoRaw = scalarText(
+        r['Código documento de identidad'] ?? '',
+      ).trim();
       const tipoDocumento = this.mapPersonDocumentType(tipoDocumentoRaw);
 
       if (!nombre || !tipoDocumento || !numeroDocumento) {
@@ -413,36 +458,47 @@ export class CustomersService {
         continue;
       }
 
-      const countryCode = String(r['Código del Páis'] ?? '').trim();
-      const ubigeoCode = String(r['Código de Ubigeo'] ?? '').trim();
-      const direccion = String(r['Dirección'] ?? '').trim();
-      const correo = String(r['Correo electrónico'] ?? '').trim();
-      const telefono = String(r['Teléfono'] ?? '').trim();
-      const tipoClienteNombre = String(r['Tipo Cliente'] ?? '').trim();
+      const countryCode = scalarText(r['Código del Páis'] ?? '').trim();
+      const ubigeoCode = scalarText(r['Código de Ubigeo'] ?? '').trim();
+      const direccion = scalarText(r['Dirección'] ?? '').trim();
+      const correo = scalarText(r['Correo electrónico'] ?? '').trim();
+      const telefono = scalarText(r['Teléfono'] ?? '').trim();
+      const tipoClienteNombre = scalarText(r['Tipo Cliente'] ?? '').trim();
 
       const customerTypeId = tipoClienteNombre
-        ? (
+        ? ((
             await this.prisma.customerType.findFirst({
-              where: { deletedAt: null, descripcion: { equals: tipoClienteNombre, mode: 'insensitive' } },
+              where: {
+                deletedAt: null,
+                descripcion: { equals: tipoClienteNombre, mode: 'insensitive' },
+              },
               select: { id: true },
             })
-          )?.id ?? null
+          )?.id ?? null)
         : null;
 
       const district = ubigeoCode
         ? await this.prisma.district.findFirst({
             where: { id: ubigeoCode },
-            select: { id: true, provinceId: true, province: { select: { departmentId: true } } },
+            select: {
+              id: true,
+              provinceId: true,
+              province: { select: { departmentId: true } },
+            },
           })
         : null;
 
       if (ubigeoCode && !district) {
-        errors.push(`Fila ${i + 2}: código de ubigeo inválido (${ubigeoCode}).`);
+        errors.push(
+          `Fila ${i + 2}: código de ubigeo inválido (${ubigeoCode}).`,
+        );
         continue;
       }
 
       if (tipoDocumentoRaw && !tipoDocumento) {
-        errors.push(`Fila ${i + 2}: tipo documento inválido (${tipoDocumentoRaw}).`);
+        errors.push(
+          `Fila ${i + 2}: tipo documento inválido (${tipoDocumentoRaw}).`,
+        );
         continue;
       }
 
@@ -535,7 +591,7 @@ export class CustomersService {
           }
           created++;
         }
-      } catch (e) {
+      } catch {
         errors.push(`Fila ${i + 2}: error al procesar.`);
       }
     }
@@ -567,9 +623,9 @@ export class CustomersService {
         'Nombre Comercial': '',
         'Código del Páis': '',
         'Código de Ubigeo': '',
-        'Dirección': '',
+        Dirección: '',
         'Correo electrónico': '',
-        'Teléfono': '',
+        Teléfono: '',
         'Tipo Cliente': 'Interno',
       },
       {
@@ -579,16 +635,16 @@ export class CustomersService {
         'Nombre Comercial': 'Empresa SAC',
         'Código del Páis': 'PE',
         'Código de Ubigeo': 150101,
-        'Dirección': 'Los pinos 125',
+        Dirección: 'Los pinos 125',
         'Correo electrónico': 'embo@gmail.com',
-        'Teléfono': 7152233,
+        Teléfono: 7152233,
         'Tipo Cliente': '',
       },
     ];
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
   private mapPersonDocumentType(rawCode: string): CustomerDocumentType | null {
@@ -676,15 +732,24 @@ export class CustomersService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(normalized);
     XLSX.utils.book_append_sheet(workbook, sheet, 'clientes');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
-  private parseMonth(value: string, timeZone: string): { start: Date; end: Date } | null {
+  private parseMonth(
+    value: string,
+    timeZone: string,
+  ): { start: Date; end: Date } | null {
     const m = /^(\d{2})\/(\d{4})$/.exec(value.trim());
     if (!m) return null;
     const month = Number(m[1]);
     const year = Number(m[2]);
-    if (!Number.isFinite(month) || !Number.isFinite(year) || month < 1 || month > 12) return null;
+    if (
+      !Number.isFinite(month) ||
+      !Number.isFinite(year) ||
+      month < 1 ||
+      month > 12
+    )
+      return null;
     const yearMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
     const { start, end } = monthBoundsInTimeZone(yearMonth, timeZone);
     return { start, end };
@@ -698,7 +763,9 @@ export class CustomersService {
     return normalizeTimeZone(row?.timeZone);
   }
 
-  private toCreateInput(dto: CreateCustomerDto): Omit<Prisma.CustomerUncheckedCreateInput, 'tenantId'> {
+  private toCreateInput(
+    dto: CreateCustomerDto,
+  ): Omit<Prisma.CustomerUncheckedCreateInput, 'tenantId'> {
     return {
       nombre: dto.nombre.trim().toUpperCase(),
       nombreComercial: this.norm(dto.nombreComercial),
@@ -729,34 +796,52 @@ export class CustomersService {
     };
   }
 
-  private toUpdateInput(dto: UpdateCustomerDto): Prisma.CustomerUncheckedUpdateInput {
+  private toUpdateInput(
+    dto: UpdateCustomerDto,
+  ): Prisma.CustomerUncheckedUpdateInput {
     const data: Prisma.CustomerUncheckedUpdateInput = {};
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim().toUpperCase();
-    if (dto.nombreComercial !== undefined) data.nombreComercial = this.norm(dto.nombreComercial);
+    if (dto.nombreComercial !== undefined)
+      data.nombreComercial = this.norm(dto.nombreComercial);
     if (dto.tipoDocumento !== undefined) data.tipoDocumento = dto.tipoDocumento;
-    if (dto.numeroDocumento !== undefined) data.numeroDocumento = dto.numeroDocumento.trim();
-    if (dto.nacionalidad !== undefined) data.nacionalidad = this.normUpper(dto.nacionalidad);
+    if (dto.numeroDocumento !== undefined)
+      data.numeroDocumento = dto.numeroDocumento.trim();
+    if (dto.nacionalidad !== undefined)
+      data.nacionalidad = this.normUpper(dto.nacionalidad);
     if (dto.diasCredito !== undefined) data.diasCredito = dto.diasCredito;
     if (dto.limiteCredito !== undefined) {
       data.limiteCredito =
-        dto.limiteCredito !== null ? new Prisma.Decimal(dto.limiteCredito) : null;
+        dto.limiteCredito !== null
+          ? new Prisma.Decimal(dto.limiteCredito)
+          : null;
     }
-    if (dto.codigoInterno !== undefined) data.codigoInterno = this.norm(dto.codigoInterno);
-    if (dto.codigoBarra !== undefined) data.codigoBarra = this.norm(dto.codigoBarra);
-    if (dto.observaciones !== undefined) data.observaciones = this.norm(dto.observaciones);
+    if (dto.codigoInterno !== undefined)
+      data.codigoInterno = this.norm(dto.codigoInterno);
+    if (dto.codigoBarra !== undefined)
+      data.codigoBarra = this.norm(dto.codigoBarra);
+    if (dto.observaciones !== undefined)
+      data.observaciones = this.norm(dto.observaciones);
     if (dto.sitioWeb !== undefined) data.sitioWeb = this.norm(dto.sitioWeb);
-    if (dto.contactoNombre !== undefined) data.contactoNombre = this.norm(dto.contactoNombre);
-    if (dto.contactoTelefono !== undefined) data.contactoTelefono = this.norm(dto.contactoTelefono);
+    if (dto.contactoNombre !== undefined)
+      data.contactoNombre = this.norm(dto.contactoNombre);
+    if (dto.contactoTelefono !== undefined)
+      data.contactoTelefono = this.norm(dto.contactoTelefono);
     if (dto.telefono !== undefined) data.telefono = this.norm(dto.telefono);
-    if (dto.correoElectronico !== undefined) data.correoElectronico = this.normLower(dto.correoElectronico);
-    if (dto.correosOpcionales !== undefined) data.correosOpcionales = this.norm(dto.correosOpcionales);
-    if (dto.puntosAcumulados !== undefined) data.puntosAcumulados = dto.puntosAcumulados;
+    if (dto.correoElectronico !== undefined)
+      data.correoElectronico = this.normLower(dto.correoElectronico);
+    if (dto.correosOpcionales !== undefined)
+      data.correosOpcionales = this.norm(dto.correosOpcionales);
+    if (dto.puntosAcumulados !== undefined)
+      data.puntosAcumulados = dto.puntosAcumulados;
     if (dto.activo !== undefined) data.activo = dto.activo;
     if (dto.habilitado !== undefined) data.habilitado = dto.habilitado;
-    if (dto.etiquetas !== undefined) data.etiquetas = dto.etiquetas.map((x) => x.trim()).filter(Boolean);
-    if (dto.customerTypeId !== undefined) data.customerTypeId = dto.customerTypeId ?? null;
+    if (dto.etiquetas !== undefined)
+      data.etiquetas = dto.etiquetas.map((x) => x.trim()).filter(Boolean);
+    if (dto.customerTypeId !== undefined)
+      data.customerTypeId = dto.customerTypeId ?? null;
     if (dto.zoneId !== undefined) data.zoneId = dto.zoneId ?? null;
-    if (dto.vendedorAsignadoId !== undefined) data.vendedorAsignadoId = dto.vendedorAsignadoId ?? null;
+    if (dto.vendedorAsignadoId !== undefined)
+      data.vendedorAsignadoId = dto.vendedorAsignadoId ?? null;
     return data;
   }
 
@@ -782,7 +867,10 @@ export class CustomersService {
     });
   }
 
-  private async ensureCustomer(id: string, actor?: JwtRequestUser): Promise<void> {
+  private async ensureCustomer(
+    id: string,
+    actor?: JwtRequestUser,
+  ): Promise<void> {
     const row = await this.prisma.customer.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, tenantId: true },
@@ -809,8 +897,14 @@ export class CustomersService {
     return n ? n.toUpperCase() : undefined;
   }
 
-  private handleKnownError(err: unknown, conflictMessage = 'Ya existe un cliente con ese documento.'): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+  private handleKnownError(
+    err: unknown,
+    conflictMessage = 'Ya existe un cliente con ese documento.',
+  ): never {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException(conflictMessage);
     }
     throw err;

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -52,7 +61,10 @@ export class ServicesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar servicios con paginación' })
-  list(@Query() query: ServiceListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: ServiceListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.servicesService.list(query, actor);
   }
 
@@ -72,7 +84,11 @@ export class ServicesController {
   @Patch(':id')
   @ApiOperation({ summary: 'Actualizar servicio' })
   @ApiBody({ type: CreateServiceDto })
-  update(@Param('id') id: string, @Body() dto: CreateServiceDto, @CurrentUser() actor: JwtRequestUser) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: CreateServiceDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.servicesService.update(id, dto, actor);
   }
 
@@ -90,13 +106,21 @@ export class ServicesController {
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Actualizar estado habilitado del servicio' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateServiceStatusDto, @CurrentUser() actor: JwtRequestUser) {
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceStatusDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.servicesService.updateStatus(id, dto, actor);
   }
 
   @Patch(':id/barcode')
   @ApiOperation({ summary: 'Actualizar código de barras del servicio' })
-  updateBarcode(@Param('id') id: string, @Body() dto: UpdateServiceBarcodeDto, @CurrentUser() actor: JwtRequestUser) {
+  updateBarcode(
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceBarcodeDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.servicesService.updateBarcode(id, dto, actor);
   }
 }

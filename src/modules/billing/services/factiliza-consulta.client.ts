@@ -29,7 +29,11 @@ export type FactilizaCpeStatus = {
 export class FactilizaConsultaClient {
   private readonly logger = new Logger(FactilizaConsultaClient.name);
 
-  async validateRuc(apiUrl: string | null, token: string, ruc: string): Promise<FactilizaRucInfo> {
+  async validateRuc(
+    apiUrl: string | null,
+    token: string,
+    ruc: string,
+  ): Promise<FactilizaRucInfo> {
     const base = (apiUrl?.trim() || DEFAULT_CONSULTA_URL).replace(/\/$/, '');
     const url = `${base}/ruc/info/${ruc.trim()}`;
     const res = await fetch(url, {
@@ -46,7 +50,11 @@ export class FactilizaConsultaClient {
     return payload.data;
   }
 
-  async validateDni(apiUrl: string | null, token: string, dni: string): Promise<FactilizaDniInfo> {
+  async validateDni(
+    apiUrl: string | null,
+    token: string,
+    dni: string,
+  ): Promise<FactilizaDniInfo> {
     const base = (apiUrl?.trim() || DEFAULT_CONSULTA_URL).replace(/\/$/, '');
     const url = `${base}/dni/info/${dni.trim()}`;
     const res = await fetch(url, {
@@ -98,7 +106,11 @@ export class FactilizaConsultaClient {
       data?: FactilizaCpeStatus;
     };
     if (!res.ok || !payload.data) {
-      this.logger.warn(`Consulta CPE fallida: ${payload.message ?? res.status}`);
+      this.logger.warn({
+        event: 'billing_status_query_failed',
+        provider: 'factiliza',
+        statusCode: res.status,
+      });
       throw new Error(payload.message ?? 'No se pudo consultar el CPE');
     }
     return payload.data;

@@ -32,14 +32,24 @@ export class HospitalController {
 
   @Get('areas')
   @RequirePermissions('hospital.read', 'nav.hospital_dispensacion')
-  async listAreas(@Query() query: HospitalAreaListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async listAreas(
+    @Query() query: HospitalAreaListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.listAreas(await this.scope.resolve(actor), query);
   }
 
   @Post('areas')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  async createArea(@Body() dto: CreateHospitalAreaDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createArea(await this.scope.resolve(actor), dto, actor.sub);
+  async createArea(
+    @Body() dto: CreateHospitalAreaDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createArea(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Get('consumptions')
@@ -48,7 +58,10 @@ export class HospitalController {
     @Query() query: HospitalConsumptionListQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listConsumptions(await this.scope.resolve(actor), query);
+    return this.service.listConsumptions(
+      await this.scope.resolve(actor),
+      query,
+    );
   }
 
   @Post('consumptions')
@@ -57,18 +70,36 @@ export class HospitalController {
     @Body() dto: CreateHospitalConsumptionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.createConsumption(await this.scope.resolve(actor), dto, actor);
+    return this.service.createConsumption(
+      await this.scope.resolve(actor),
+      dto,
+      actor,
+    );
   }
 
   @Patch('consumptions/:id/dispense')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  async dispense(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.dispenseConsumption(id, await this.scope.resolve(actor), actor.sub);
+  async dispense(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.dispenseConsumption(
+      id,
+      await this.scope.resolve(actor),
+      actor.sub,
+    );
   }
 
   @Patch('consumptions/:id/cancel')
   @RequirePermissions('hospital.write', 'nav.hospital_dispensacion')
-  async cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.cancelConsumption(id, await this.scope.resolve(actor), actor.sub);
+  async cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.cancelConsumption(
+      id,
+      await this.scope.resolve(actor),
+      actor.sub,
+    );
   }
 }

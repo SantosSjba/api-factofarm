@@ -15,7 +15,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType, PaymentMethod, SaleDocumentType } from '../../../generated/prisma/client';
+import {
+  DiscountType,
+  PaymentMethod,
+  SaleDocumentType,
+} from '../../../generated/prisma/client';
 import { SaleLotAllocationMode } from '../../inventory-movements/dto/sale-lot-allocation-preview.dto';
 
 class SaleManualLotDto {
@@ -109,7 +113,10 @@ export class CreatePaymentDto {
 }
 
 export class CreateSaleDto {
-  @ApiProperty({ format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000' })
+  @ApiProperty({
+    format: 'uuid',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
   @IsUUID()
   warehouseId!: string;
 
@@ -171,7 +178,9 @@ export class CreateSaleDto {
   @IsUUID()
   controlledApprovedById?: string;
 
-  @ApiPropertyOptional({ description: 'Firma digital dispensación controlados (hash)' })
+  @ApiPropertyOptional({
+    description: 'Firma digital dispensación controlados (hash)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(128)
@@ -262,7 +271,10 @@ export class CreateSaleDebitNoteDto {
 }
 
 export class OfflineSaleDto {
-  @ApiProperty({ format: 'uuid', description: 'Id local generado en POS offline' })
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Id local generado en POS offline',
+  })
   @IsUUID()
   offlineLocalId!: string;
 

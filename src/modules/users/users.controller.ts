@@ -42,7 +42,10 @@ export class UsersController {
   @Get()
   @RequirePermissions('users.read')
   @ApiOperation({ summary: 'Listar usuarios (paginado)' })
-  findAll(@Query() query: UserListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: UserListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.usersService.findAll(
       {
         search: query.search,
@@ -59,7 +62,10 @@ export class UsersController {
   @RequirePermissions('users.read')
   @ApiOperation({ summary: 'Obtener usuario por id' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.usersService.findOne(id, actor);
   }
 
@@ -93,7 +99,10 @@ export class UsersController {
   @RequirePermissions('users.write')
   @ApiOperation({ summary: 'Eliminar usuario (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.usersService.remove(id, actor);
   }
 }

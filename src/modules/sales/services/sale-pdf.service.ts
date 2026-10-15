@@ -33,7 +33,11 @@ export type SalePdfInput = {
   igvTotal: string;
   descuentoTotal: string;
   total: string;
-  payments: Array<{ metodo: string; monto: string; referencia?: string | null }>;
+  payments: Array<{
+    metodo: string;
+    monto: string;
+    referencia?: string | null;
+  }>;
   lines: SalePdfLine[];
   footerNote: string;
   /** Logo del establecimiento (PNG/JPEG). Si falta, se usa el logo FactoFarm. */
@@ -54,7 +58,10 @@ export class SalePdfService {
     return this.buildTicket(input, format === 'TICKET_58' ? 58 : 80);
   }
 
-  private async buildTicket(input: SalePdfInput, paperWidthMm: 58 | 80): Promise<Buffer> {
+  private async buildTicket(
+    input: SalePdfInput,
+    paperWidthMm: 58 | 80,
+  ): Promise<Buffer> {
     const pageWidth = paperWidthMm * MM_TO_PT;
     const margin = paperWidthMm === 58 ? 8 : 10;
     const contentWidth = pageWidth - margin * 2;
@@ -63,7 +70,11 @@ export class SalePdfService {
     const totalSize = paperWidthMm === 58 ? 10 : 11;
 
     const logoBuffer = await this.resolveLogoBuffer(input.logoBuffer);
-    const pageHeight = this.estimateTicketHeight(input, !!logoBuffer, paperWidthMm);
+    const pageHeight = this.estimateTicketHeight(
+      input,
+      !!logoBuffer,
+      paperWidthMm,
+    );
 
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({
@@ -77,7 +88,8 @@ export class SalePdfService {
       doc.on('error', reject);
 
       const comp =
-        `${input.serie ?? ''}-${input.numero ?? ''}`.replace(/^-|-$/g, '') || 'S/N';
+        `${input.serie ?? ''}-${input.numero ?? ''}`.replace(/^-|-$/g, '') ||
+        'S/N';
 
       const dashedLine = () => {
         const y = doc.y;
@@ -119,13 +131,19 @@ export class SalePdfService {
 
       doc.font('Helvetica').fontSize(fontSize);
       if (input.rucEmisor) {
-        doc.text(`RUC ${input.rucEmisor}`, { width: contentWidth, align: 'center' });
+        doc.text(`RUC ${input.rucEmisor}`, {
+          width: contentWidth,
+          align: 'center',
+        });
       }
       if (input.address) {
         doc.text(input.address, { width: contentWidth, align: 'center' });
       }
       if (input.phone) {
-        doc.text(`Tel. ${input.phone}`, { width: contentWidth, align: 'center' });
+        doc.text(`Tel. ${input.phone}`, {
+          width: contentWidth,
+          align: 'center',
+        });
       }
 
       doc.moveDown(0.35);
@@ -148,9 +166,10 @@ export class SalePdfService {
             timeZone: normalizeTimeZone(input.timeZone),
           }),
           {
-          width: contentWidth,
-          align: 'center',
-        })
+            width: contentWidth,
+            align: 'center',
+          },
+        )
         .fillColor('#000000');
 
       doc.moveDown(0.3);
@@ -176,7 +195,10 @@ export class SalePdfService {
           ? `${line.cantidad} x ${line.precioUnitario}`
           : `Cant. ${line.cantidad}`;
         const rowY = doc.y;
-        doc.text(qtyPrice, margin, rowY, { width: contentWidth * 0.55, align: 'left' });
+        doc.text(qtyPrice, margin, rowY, {
+          width: contentWidth * 0.55,
+          align: 'left',
+        });
         doc.text(`S/ ${line.totalLinea}`, margin + contentWidth * 0.45, rowY, {
           width: contentWidth * 0.55,
           align: 'right',
@@ -196,7 +218,9 @@ export class SalePdfService {
 
       const moneyRow = (label: string, value: string, bold = false) => {
         const y = doc.y;
-        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? totalSize : fontSize);
+        doc
+          .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(bold ? totalSize : fontSize);
         doc.text(label, margin, y, { width: contentWidth * 0.55 });
         doc.text(`S/ ${value}`, margin + contentWidth * 0.4, y, {
           width: contentWidth * 0.6,
@@ -215,7 +239,10 @@ export class SalePdfService {
       if (input.payments.length) {
         doc.moveDown(0.2);
         dashedLine();
-        doc.font('Helvetica-Bold').fontSize(fontSize).text('Pagos', { width: contentWidth });
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(fontSize)
+          .text('Pagos', { width: contentWidth });
         doc.font('Helvetica').fontSize(fontSize);
         for (const p of input.payments) {
           const ref = p.referencia ? ` · ${p.referencia}` : '';
@@ -241,7 +268,10 @@ export class SalePdfService {
       });
       doc.moveDown(0.15);
       doc
-        .text('FactoFarm', margin, doc.y, { width: contentWidth, align: 'center' })
+        .text('FactoFarm', margin, doc.y, {
+          width: contentWidth,
+          align: 'center',
+        })
         .fillColor('#000000');
 
       doc.end();
@@ -260,7 +290,8 @@ export class SalePdfService {
       doc.on('error', reject);
 
       const comp =
-        `${input.serie ?? ''}-${input.numero ?? ''}`.replace(/^-|-$/g, '') || 'S/N';
+        `${input.serie ?? ''}-${input.numero ?? ''}`.replace(/^-|-$/g, '') ||
+        'S/N';
       const pageInnerWidth = 595.28 - margin * 2;
 
       if (logoBuffer) {
@@ -283,17 +314,26 @@ export class SalePdfService {
           align: 'center',
         });
       if (input.rucEmisor) {
-        doc.fontSize(10).font('Helvetica').text(`RUC ${input.rucEmisor}`, { align: 'center' });
+        doc
+          .fontSize(10)
+          .font('Helvetica')
+          .text(`RUC ${input.rucEmisor}`, { align: 'center' });
       }
       if (input.address) {
-        doc.fontSize(9).fillColor('#444444').text(input.address, { align: 'center' });
+        doc
+          .fontSize(9)
+          .fillColor('#444444')
+          .text(input.address, { align: 'center' });
       }
       if (input.phone) {
         doc.fontSize(9).text(`Tel. ${input.phone}`, { align: 'center' });
       }
       doc.fillColor('#000000');
       doc.moveDown(0.5);
-      doc.fontSize(13).font('Helvetica-Bold').text(input.documentLabel, { align: 'center' });
+      doc
+        .fontSize(13)
+        .font('Helvetica-Bold')
+        .text(input.documentLabel, { align: 'center' });
       doc.fontSize(12).font('Helvetica').text(comp, { align: 'center' });
       doc.moveDown(0.3);
       doc
@@ -304,8 +344,9 @@ export class SalePdfService {
             timeZone: normalizeTimeZone(input.timeZone),
           }),
           {
-          align: 'center',
-        });
+            align: 'center',
+          },
+        );
       doc.fillColor('#000000');
       doc.moveDown();
 
@@ -342,12 +383,18 @@ export class SalePdfService {
         doc.text(line.descripcion, colDesc, rowY, { width: 300 });
         const afterDesc = doc.y;
         doc.text(line.cantidad, colCant, rowY, { width: 60, align: 'right' });
-        doc.text(`S/ ${line.totalLinea}`, colTotal, rowY, { width: 80, align: 'right' });
+        doc.text(`S/ ${line.totalLinea}`, colTotal, rowY, {
+          width: 80,
+          align: 'right',
+        });
         doc.y = Math.max(afterDesc, rowY + 12);
         if (line.lotes) {
-          doc.fillColor('#666666').fontSize(8).text(`Lotes: ${line.lotes}`, colDesc, doc.y, {
-            width: 300,
-          });
+          doc
+            .fillColor('#666666')
+            .fontSize(8)
+            .text(`Lotes: ${line.lotes}`, colDesc, doc.y, {
+              width: 300,
+            });
           doc.fillColor('#000000').fontSize(9);
         }
         doc.moveDown(0.35);
@@ -364,7 +411,9 @@ export class SalePdfService {
 
       const moneyRow = (label: string, value: string, bold = false) => {
         const yy = doc.y;
-        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 10);
+        doc
+          .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(bold ? 11 : 10);
         doc.text(label, 320, yy, { width: 120, align: 'right' });
         doc.text(`S/ ${value}`, 450, yy, { width: 90, align: 'right' });
         doc.moveDown(0.35);
@@ -419,13 +468,18 @@ export class SalePdfService {
     }
     h += 55;
     h += input.payments.length ? 14 + input.payments.length * 11 : 0;
-    const footerWraps = Math.max(2, Math.ceil((input.footerNote?.length ?? 40) / lineChars));
+    const footerWraps = Math.max(
+      2,
+      Math.ceil((input.footerNote?.length ?? 40) / lineChars),
+    );
     h += footerWraps * 10 + 50;
     // Margen extra para que no se corten las últimas líneas del ticket
     return Math.max(h + 36, paperWidthMm === 58 ? 300 : 340);
   }
 
-  private async resolveLogoBuffer(tenantLogo?: Buffer | null): Promise<Buffer | null> {
+  private async resolveLogoBuffer(
+    tenantLogo?: Buffer | null,
+  ): Promise<Buffer | null> {
     if (tenantLogo?.length && this.isRasterImage(tenantLogo)) {
       return tenantLogo;
     }
@@ -435,10 +489,7 @@ export class SalePdfService {
   private isRasterImage(buf: Buffer): boolean {
     if (buf.length < 8) return false;
     const isPng =
-      buf[0] === 0x89 &&
-      buf[1] === 0x50 &&
-      buf[2] === 0x4e &&
-      buf[3] === 0x47;
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
     const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
     return isPng || isJpeg;
   }

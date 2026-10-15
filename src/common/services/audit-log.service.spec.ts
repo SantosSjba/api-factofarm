@@ -17,7 +17,9 @@ describe('AuditLogService', () => {
           provide: PrismaService,
           useValue: {
             auditLog: { create },
-            user: { findUnique: jest.fn().mockResolvedValue({ tenantId: 'tenant-1' }) },
+            user: {
+              findUnique: jest.fn().mockResolvedValue({ tenantId: 'tenant-1' }),
+            },
           },
         },
       ],
@@ -29,14 +31,17 @@ describe('AuditLogService', () => {
   });
 
   it('persists audit row with request context IP/UA', async () => {
-    await context.run({ ipAddress: '10.0.0.1', userAgent: 'jest' }, async () => {
-      await service.log({
-        userId: 'user-1',
-        action: 'CREATE',
-        entity: 'Sale',
-        entityId: 'sale-1',
-      });
-    });
+    await context.run(
+      { ipAddress: '10.0.0.1', userAgent: 'jest' },
+      async () => {
+        await service.log({
+          userId: 'user-1',
+          action: 'CREATE',
+          entity: 'Sale',
+          entityId: 'sale-1',
+        });
+      },
+    );
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -44,8 +49,8 @@ describe('AuditLogService', () => {
           ipAddress: '10.0.0.1',
           userAgent: 'jest',
           action: 'CREATE',
-        }),
-      }),
+        }) as unknown,
+      }) as unknown,
     );
   });
 });

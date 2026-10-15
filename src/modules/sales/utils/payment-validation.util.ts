@@ -8,7 +8,9 @@ export const PAYMENT_METHODS_REQUIRING_REFERENCE: PaymentMethod[] = [
   PaymentMethod.TRANSFERENCIA,
 ];
 
-export const INVALID_SPLIT_PAYMENT_METHODS: PaymentMethod[] = [PaymentMethod.MIXTO];
+export const INVALID_SPLIT_PAYMENT_METHODS: PaymentMethod[] = [
+  PaymentMethod.MIXTO,
+];
 
 export type SalePaymentInput = {
   metodo: PaymentMethod;
@@ -20,7 +22,10 @@ export function paymentRequiresReference(metodo: PaymentMethod): boolean {
   return PAYMENT_METHODS_REQUIRING_REFERENCE.includes(metodo);
 }
 
-export function validateSalePayments(payments: SalePaymentInput[], saleTotal: Prisma.Decimal): void {
+export function validateSalePayments(
+  payments: SalePaymentInput[],
+  saleTotal: Prisma.Decimal,
+): void {
   if (!payments.length) {
     throw new BadRequestException('Debe registrar al menos un pago');
   }
@@ -31,7 +36,10 @@ export function validateSalePayments(payments: SalePaymentInput[], saleTotal: Pr
         'Para pagos mixtos registre una línea por cada medio (efectivo, Yape, etc.)',
       );
     }
-    if (paymentRequiresReference(payment.metodo) && !payment.referencia?.trim()) {
+    if (
+      paymentRequiresReference(payment.metodo) &&
+      !payment.referencia?.trim()
+    ) {
       throw new BadRequestException(
         `Ingrese el código o N° de operación para el pago con ${payment.metodo}`,
       );
@@ -43,6 +51,8 @@ export function validateSalePayments(payments: SalePaymentInput[], saleTotal: Pr
     new Prisma.Decimal(0),
   );
   if (!paymentsTotal.equals(saleTotal)) {
-    throw new BadRequestException('Los pagos no coinciden con el total de la venta');
+    throw new BadRequestException(
+      'Los pagos no coinciden con el total de la venta',
+    );
   }
 }

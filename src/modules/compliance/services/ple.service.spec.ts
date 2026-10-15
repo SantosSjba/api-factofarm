@@ -2,8 +2,12 @@ import { PleService } from './ple.service';
 
 describe('PleService', () => {
   const prisma = {
-    establishment: { findFirst: jest.fn().mockResolvedValue({ timeZone: 'America/Lima' }) },
-    establishmentBillingConfig: { findUnique: jest.fn().mockResolvedValue({ rucEmisor: '20123456789' }) },
+    establishment: {
+      findFirst: jest.fn().mockResolvedValue({ timeZone: 'America/Lima' }),
+    },
+    establishmentBillingConfig: {
+      findUnique: jest.fn().mockResolvedValue({ rucEmisor: '20123456789' }),
+    },
     sale: {
       findMany: jest.fn(),
       aggregate: jest.fn(),
@@ -20,7 +24,11 @@ describe('PleService', () => {
   it('resume periodo contable', async () => {
     prisma.sale.aggregate.mockResolvedValue({
       _count: 2,
-      _sum: { subtotal: { toString: () => '100' }, igvTotal: { toString: () => '18' }, total: { toString: () => '118' } },
+      _sum: {
+        subtotal: { toString: () => '100' },
+        igvTotal: { toString: () => '18' },
+        total: { toString: () => '118' },
+      },
     });
     prisma.goodsReceipt.findMany.mockResolvedValue([]);
     prisma.electronicDocument.groupBy.mockResolvedValue([]);

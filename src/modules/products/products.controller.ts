@@ -115,8 +115,13 @@ export class ProductsController {
 
   @Get(':id/equivalents')
   @RequirePermissions('products.read')
-  @ApiOperation({ summary: 'Productos bioequivalentes / gen?ricos relacionados' })
-  listEquivalents(@Param('id') id: string, @CurrentUser() actor: JwtRequestUser) {
+  @ApiOperation({
+    summary: 'Productos bioequivalentes / gen?ricos relacionados',
+  })
+  listEquivalents(
+    @Param('id') id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.productsService.listEquivalents(id, actor);
   }
 
@@ -128,7 +133,11 @@ export class ProductsController {
     @Body() dto: SetProductEquivalentsDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.productsService.setEquivalents(id, dto.equivalentProductIds, actor);
+    return this.productsService.setEquivalents(
+      id,
+      dto.equivalentProductIds,
+      actor,
+    );
   }
 
   @Get(':id/suppliers')
@@ -218,7 +227,10 @@ export class ProductsController {
   @Get()
   @RequirePermissions('products.read', 'nav.productos')
   @ApiOperation({ summary: 'Listar productos con paginaci?n' })
-  list(@Query() query: ProductListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: ProductListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.productsService.list(query, actor);
   }
 
@@ -290,19 +302,27 @@ export class ProductsController {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('productos-export.xlsx')}`,
     );
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 
   @Post('import/preview')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Vista previa de importaci?n sin persistir cambios' })
+  @ApiOperation({
+    summary: 'Vista previa de importaci?n sin persistir cambios',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        mode: { type: 'string', enum: ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'] },
+        mode: {
+          type: 'string',
+          enum: ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'],
+        },
         file: { type: 'string', format: 'binary' },
       },
       required: ['mode', 'file'],
@@ -324,13 +344,19 @@ export class ProductsController {
 
   @Post('import')
   @RequirePermissions('products.write')
-  @ApiOperation({ summary: 'Importar productos (productos, lista de precios, actualizar precios)' })
+  @ApiOperation({
+    summary:
+      'Importar productos (productos, lista de precios, actualizar precios)',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        mode: { type: 'string', enum: ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'] },
+        mode: {
+          type: 'string',
+          enum: ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'],
+        },
         file: { type: 'string', format: 'binary' },
       },
       required: ['mode', 'file'],
@@ -353,10 +379,10 @@ export class ProductsController {
   @Get('import/template')
   @RequirePermissions('products.write')
   @ApiOperation({ summary: 'Descargar plantilla de importaci?n por modo' })
-  async downloadImportTemplate(
+  downloadImportTemplate(
     @Query('mode') mode: ImportProductsDto['mode'],
     @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
+  ): StreamableFile {
     const selectedMode = mode ?? 'PRODUCTOS';
     const buffer = this.productsService.buildImportTemplateBuffer(selectedMode);
     const filename =
@@ -365,8 +391,14 @@ export class ProductsController {
         : selectedMode === 'ACTUALIZAR_PRECIOS'
           ? 'items_prices_simsed.xlsx'
           : 'items.xlsx';
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 }

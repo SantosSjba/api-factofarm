@@ -1,6 +1,6 @@
+import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
@@ -11,7 +11,9 @@ export async function createE2eApp(): Promise<INestApplication<App>> {
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication<INestApplication<App>>();
+  app.useLogger(app.get(Logger));
+  app.useGlobalInterceptors(new LoggerErrorInterceptor());
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
@@ -33,6 +35,9 @@ export async function createE2eApp(): Promise<INestApplication<App>> {
     httpAdapter.reply(res, document, 200);
   });
 
+  // Un solo servidor por aplicación: Supertest no debe abrir/cerrar puertos
+  // durante peticiones concurrentes del mismo flujo.
+  await app.listen(0, '127.0.0.1');
   return app;
 }
 

@@ -49,14 +49,20 @@ export class CustomersController {
   @Get()
   @RequirePermissions('customers.read', 'nav.clientes_list')
   @ApiOperation({ summary: 'Listar clientes con filtros y paginación' })
-  list(@Query() query: CustomerListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: CustomerListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.customersService.list(query, actor);
   }
 
   @Post()
   @RequirePermissions('customers.write')
   @ApiOperation({ summary: 'Crear cliente' })
-  @ApiBody({ type: CreateCustomerDto, examples: { natural: { value: OPENAPI_EXAMPLES.createCustomer } } })
+  @ApiBody({
+    type: CreateCustomerDto,
+    examples: { natural: { value: OPENAPI_EXAMPLES.createCustomer } },
+  })
   create(@Body() dto: CreateCustomerDto, @CurrentUser() actor: JwtRequestUser) {
     return this.customersService.create(dto, actor);
   }
@@ -87,7 +93,10 @@ export class CustomersController {
 
   @Post('zones')
   @RequirePermissions('customers.write')
-  createZone(@Body() dto: CreateCustomerZoneDto, @CurrentUser() actor: JwtRequestUser) {
+  createZone(
+    @Body() dto: CreateCustomerZoneDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.customersService.createZone(dto, actor);
   }
 
@@ -103,13 +112,18 @@ export class CustomersController {
 
   @Delete('zones/:id')
   @RequirePermissions('customers.write')
-  removeZone(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  removeZone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.customersService.removeZone(id, actor);
   }
 
   @Get('import/template')
   @RequirePermissions('customers.write')
-  async downloadImportTemplate(@Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
+  downloadImportTemplate(
+    @Res({ passthrough: true }) res: Response,
+  ): StreamableFile {
     const buffer = this.customersService.buildImportTemplateBuffer();
     res.setHeader(
       'Content-Disposition',
@@ -124,7 +138,9 @@ export class CustomersController {
 
   @Post('import/preview')
   @RequirePermissions('customers.write')
-  @ApiOperation({ summary: 'Vista previa de importación de clientes sin persistir' })
+  @ApiOperation({
+    summary: 'Vista previa de importación de clientes sin persistir',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -192,7 +208,10 @@ export class CustomersController {
   @Get(':id')
   @RequirePermissions('customers.read')
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.customersService.findOne(id, actor);
   }
 
@@ -210,7 +229,10 @@ export class CustomersController {
   @Delete(':id')
   @RequirePermissions('customers.delete')
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.customersService.remove(id, actor);
   }
 

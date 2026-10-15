@@ -10,7 +10,9 @@ export type PasswordValidationResult = {
 };
 
 /** Política de contraseñas FactoFarm (Fase 0). */
-export function validatePasswordPolicy(password: string): PasswordValidationResult {
+export function validatePasswordPolicy(
+  password: string,
+): PasswordValidationResult {
   const errors: string[] = [];
 
   if (password.length < MIN_LENGTH) {

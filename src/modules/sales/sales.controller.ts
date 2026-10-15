@@ -10,14 +10,27 @@ import {
   Res,
   StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiHeader,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
-import { CreateSaleDto, CreateSaleDebitNoteDto, CreateSaleReturnDto, SyncSalesDto, VoidSaleDto } from './dto/create-sale.dto';
+import {
+  CreateSaleDto,
+  CreateSaleDebitNoteDto,
+  CreateSaleReturnDto,
+  SyncSalesDto,
+  VoidSaleDto,
+} from './dto/create-sale.dto';
 import { ConvertSaleToCpeDto } from './dto/convert-sale-to-cpe.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
@@ -40,14 +53,19 @@ export class SalesController {
     description:
       'storage=hot (default) | archived (cold storage) | all (hot table incluyendo archivedAt)',
   })
-  async findAll(@Query() query: SaleListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async findAll(
+    @Query() query: SaleListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.findAll(establishmentId, query);
   }
 
   @Get('pos-catalog')
   @RequirePermissions('sales.read', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Catálogo rápido POS (búsqueda por nombre/código/barras)' })
+  @ApiOperation({
+    summary: 'Catálogo rápido POS (búsqueda por nombre/código/barras)',
+  })
   async posCatalog(
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Query('search') search: string | undefined,
@@ -59,19 +77,27 @@ export class SalesController {
 
   @Get('pos-substitutes')
   @RequirePermissions('sales.read', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Sugerencias de sustitutos genéricos/bioequivalentes con stock' })
+  @ApiOperation({
+    summary: 'Sugerencias de sustitutos genéricos/bioequivalentes con stock',
+  })
   async posSubstitutes(
     @Query('productId', ParseUUIDPipe) productId: string,
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.service.suggestGenericSubstitutes(establishmentId, productId, warehouseId);
+    return this.service.suggestGenericSubstitutes(
+      establishmentId,
+      productId,
+      warehouseId,
+    );
   }
 
   @Post('check-interactions')
   @RequirePermissions('sales.read', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Alertas de interacciones entre principios activos del carrito' })
+  @ApiOperation({
+    summary: 'Alertas de interacciones entre principios activos del carrito',
+  })
   checkInteractions(@Body() dto: CheckSaleInteractionsDto) {
     return this.service.checkInteractions(dto.productIds);
   }
@@ -90,7 +116,10 @@ export class SalesController {
   @Get(':id')
   @RequirePermissions('sales.read')
   @ApiOperation({ summary: 'Detalle de venta' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.findOne(id, establishmentId);
   }
@@ -123,7 +152,10 @@ export class SalesController {
   @RequirePermissions('sales.write', 'nav.punto_venta')
   @ApiOperation({ summary: 'Registrar venta (POS)' })
   @ApiHeader({ name: 'Idempotency-Key', required: false })
-  @ApiBody({ type: CreateSaleDto, examples: { posBoleta: { value: OPENAPI_EXAMPLES.createSale } } })
+  @ApiBody({
+    type: CreateSaleDto,
+    examples: { posBoleta: { value: OPENAPI_EXAMPLES.createSale } },
+  })
   @ApiOkResponse({ description: 'Venta registrada' })
   create(
     @Body() dto: CreateSaleDto,
@@ -135,7 +167,10 @@ export class SalesController {
 
   @Post('sync')
   @RequirePermissions('sales.write', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Sincronizar ventas registradas offline (idempotente por offlineLocalId)' })
+  @ApiOperation({
+    summary:
+      'Sincronizar ventas registradas offline (idempotente por offlineLocalId)',
+  })
   syncOffline(@Body() dto: SyncSalesDto, @CurrentUser() actor: JwtRequestUser) {
     return this.service.syncOfflineBatch(dto, actor);
   }
@@ -156,11 +191,20 @@ export class SalesController {
     @Body('rejectedReason') rejectedReason: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.rejectVoidRequest(requestId, rejectedReason ?? '', actor);
+    return this.service.rejectVoidRequest(
+      requestId,
+      rejectedReason ?? '',
+      actor,
+    );
   }
 
   @Post(':id/convert-to-cpe')
-  @RequirePermissions('sales.write', 'billing.write', 'nav.notas_venta', 'nav.comprobante_electronico')
+  @RequirePermissions(
+    'sales.write',
+    'billing.write',
+    'nav.notas_venta',
+    'nav.comprobante_electronico',
+  )
   @ApiOperation({
     summary: 'Migrar nota de venta a boleta/factura e iniciar emisión SUNAT',
     description:
@@ -172,12 +216,20 @@ export class SalesController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.service.convertToCpe(id, establishmentId, dto.documentType, actor.sub);
+    return this.service.convertToCpe(
+      id,
+      establishmentId,
+      dto.documentType,
+      actor.sub,
+    );
   }
 
   @Post(':id/void-request')
   @RequirePermissions('sales.write', 'nav.punto_venta', 'nav.anulaciones')
-  @ApiOperation({ summary: 'Solicitar anulación (cajero) o anular directo (gerente/farmacéutico)' })
+  @ApiOperation({
+    summary:
+      'Solicitar anulación (cajero) o anular directo (gerente/farmacéutico)',
+  })
   requestVoid(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VoidSaleDto,
@@ -210,7 +262,9 @@ export class SalesController {
 
   @Post(':id/debit-notes')
   @RequirePermissions('sales.write', 'nav.notas_venta', 'billing.write')
-  @ApiOperation({ summary: 'Emitir nota de débito (cargo adicional) sobre venta facturada' })
+  @ApiOperation({
+    summary: 'Emitir nota de débito (cargo adicional) sobre venta facturada',
+  })
   createDebitNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateSaleDebitNoteDto,

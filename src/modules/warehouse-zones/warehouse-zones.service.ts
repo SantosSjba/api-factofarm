@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -57,8 +61,13 @@ export class WarehouseZonesService {
       });
       return created;
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Ya existe una zona con ese nombre en el almacén');
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Ya existe una zona con ese nombre en el almacén',
+        );
       }
       throw err;
     }
@@ -101,7 +110,10 @@ export class WarehouseZonesService {
     await this.scope.assertWarehouseInTenant(actor, current.warehouseId);
     await this.integrity.assertCanDeleteWarehouseZone(id);
 
-    await this.prisma.warehouseZone.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.warehouseZone.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     await this.audit.log({
       userId: actor.sub,
       action: 'DELETE',

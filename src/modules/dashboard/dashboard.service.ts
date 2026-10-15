@@ -1,6 +1,9 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { actorFromJwt, requireTenantId } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  requireTenantId,
+} from '../../common/scoping/tenant-scope.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import {
@@ -50,7 +53,9 @@ export class DashboardService {
   private tenantIdForDashboard(actor: JwtRequestUser): string {
     const scope = actorFromJwt(actor);
     if (isPlatformAdmin(scope.role)) {
-      throw new ForbiddenException('Use la consola de plataforma (/platform/dashboard)');
+      throw new ForbiddenException(
+        'Use la consola de plataforma (/platform/dashboard)',
+      );
     }
     return requireTenantId(scope);
   }
@@ -226,10 +231,16 @@ export class DashboardService {
     return { periodDays: 30, establishments: rows };
   }
 
-  async getSalesTrend(actor: JwtRequestUser, periodDays = 14): Promise<SalesTrend> {
+  async getSalesTrend(
+    actor: JwtRequestUser,
+    periodDays = 14,
+  ): Promise<SalesTrend> {
     const tenantId = this.tenantIdForDashboard(actor);
     const timeZone = await this.resolveActorTimeZone(actor);
-    const { end: endExclusive, ymd: todayYmd } = dayBoundsInTimeZone(new Date(), timeZone);
+    const { end: endExclusive, ymd: todayYmd } = dayBoundsInTimeZone(
+      new Date(),
+      timeZone,
+    );
     const [ty, tm, td] = todayYmd.split('-').map(Number);
     const firstDayUtc = new Date(Date.UTC(ty, tm - 1, td - (periodDays - 1)));
     const firstYmd = `${firstDayUtc.getUTCFullYear()}-${String(firstDayUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDayUtc.getUTCDate()).padStart(2, '0')}`;
@@ -279,39 +290,46 @@ export class DashboardService {
     const establishmentId = await this.establishmentScope.resolveScoped(actor);
     const timeZone = await this.resolveActorTimeZone(actor);
     const { start: startOfDay } = dayBoundsInTimeZone(new Date(), timeZone);
-    const startOfWeek = new Date(startOfDay.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const startOfWeek = new Date(
+      startOfDay.getTime() - 7 * 24 * 60 * 60 * 1000,
+    );
 
-    const [salesToday, salesWeek, pendingVoids, openSessions, staffPresent] = await Promise.all([
-      this.prisma.sale.aggregate({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          estado: 'COMPLETADA',
-          createdAt: { gte: startOfDay },
-        },
-        _sum: { total: true },
-        _count: true,
-      }),
-      this.prisma.sale.aggregate({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          estado: 'COMPLETADA',
-          createdAt: { gte: startOfWeek },
-        },
-        _sum: { total: true },
-        _count: true,
-      }),
-      this.prisma.saleVoidRequest.count({
-        where: { establishmentId, status: 'PENDIENTE' },
-      }),
-      this.prisma.cashSession.count({
-        where: { estado: 'ABIERTA', cashRegister: { establishmentId } },
-      }),
-      this.prisma.userAttendance.count({
-        where: { establishmentId, checkOutAt: null, checkInAt: { gte: startOfDay } },
-      }),
-    ]);
+    const [salesToday, salesWeek, pendingVoids, openSessions, staffPresent] =
+      await Promise.all([
+        this.prisma.sale.aggregate({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            estado: 'COMPLETADA',
+            createdAt: { gte: startOfDay },
+          },
+          _sum: { total: true },
+          _count: true,
+        }),
+        this.prisma.sale.aggregate({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            estado: 'COMPLETADA',
+            createdAt: { gte: startOfWeek },
+          },
+          _sum: { total: true },
+          _count: true,
+        }),
+        this.prisma.saleVoidRequest.count({
+          where: { establishmentId, status: 'PENDIENTE' },
+        }),
+        this.prisma.cashSession.count({
+          where: { estado: 'ABIERTA', cashRegister: { establishmentId } },
+        }),
+        this.prisma.userAttendance.count({
+          where: {
+            establishmentId,
+            checkOutAt: null,
+            checkInAt: { gte: startOfDay },
+          },
+        }),
+      ]);
 
     return {
       ventasHoy: (salesToday._sum.total ?? new Prisma.Decimal(0)).toString(),
@@ -328,21 +346,27 @@ export class DashboardService {
     const establishmentId = await this.establishmentScope.resolveScoped(actor);
     const tenantId = requireTenantId(actorFromJwt(actor));
 
-    const [pendingPrescriptions, pendingVoids, controlledProducts] = await Promise.all([
-      this.prisma.prescription.count({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          estado: { in: ['ACTIVA', 'PARCIALMENTE_DISPENSADA'] },
-        },
-      }),
-      this.prisma.saleVoidRequest.count({
-        where: { establishmentId, status: 'PENDIENTE' },
-      }),
-      this.prisma.product.count({
-        where: { tenantId, esControlado: true, deletedAt: null, habilitado: true },
-      }),
-    ]);
+    const [pendingPrescriptions, pendingVoids, controlledProducts] =
+      await Promise.all([
+        this.prisma.prescription.count({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            estado: { in: ['ACTIVA', 'PARCIALMENTE_DISPENSADA'] },
+          },
+        }),
+        this.prisma.saleVoidRequest.count({
+          where: { establishmentId, status: 'PENDIENTE' },
+        }),
+        this.prisma.product.count({
+          where: {
+            tenantId,
+            esControlado: true,
+            deletedAt: null,
+            habilitado: true,
+          },
+        }),
+      ]);
 
     return {
       recetasPendientes: pendingPrescriptions,
@@ -403,7 +427,7 @@ export class DashboardService {
 
     const warehouseFilter = {
       establishmentId,
-      deletedAt: null as null,
+      deletedAt: null,
     };
 
     const [
@@ -624,10 +648,16 @@ export class DashboardService {
       usuariosCliente,
       recentTenants,
     ] = await Promise.all([
-      this.prisma.tenant.count({ where: { deletedAt: null, status: 'PENDING' } }),
+      this.prisma.tenant.count({
+        where: { deletedAt: null, status: 'PENDING' },
+      }),
       this.prisma.tenant.count({ where: { deletedAt: null, status: 'TRIAL' } }),
-      this.prisma.tenant.count({ where: { deletedAt: null, status: 'ACTIVE' } }),
-      this.prisma.tenant.count({ where: { deletedAt: null, status: 'SUSPENDED' } }),
+      this.prisma.tenant.count({
+        where: { deletedAt: null, status: 'ACTIVE' },
+      }),
+      this.prisma.tenant.count({
+        where: { deletedAt: null, status: 'SUSPENDED' },
+      }),
       this.prisma.tenantLead.count({ where: { status: 'NEW' } }),
       this.prisma.complaint.count({
         where: { status: { in: ['PENDING', 'IN_REVIEW'] } },

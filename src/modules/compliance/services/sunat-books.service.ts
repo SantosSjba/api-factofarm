@@ -1,5 +1,6 @@
+import {} from '../../../common/utils/spreadsheet.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
+
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   formatDateYmdInTimeZone,
@@ -30,7 +31,9 @@ export class SunatBooksService {
         createdAt: { gte: from, lt: to },
       },
       include: {
-        customer: { select: { tipoDocumento: true, numeroDocumento: true, nombre: true } },
+        customer: {
+          select: { tipoDocumento: true, numeroDocumento: true, nombre: true },
+        },
         electronicDocument: {
           select: { sunatStatus: true, documentType: true },
         },
@@ -118,7 +121,11 @@ export class SunatBooksService {
         : '',
     }));
 
-    return this.toXlsxBuffer(rows, 'Registro-Inventario', `Registro-Inventario-${period}.xlsx`);
+    return this.toXlsxBuffer(
+      rows,
+      'Registro-Inventario',
+      `Registro-Inventario-${period}.xlsx`,
+    );
   }
 
   private mapSaleDocumentType(type: string): string {
@@ -168,7 +175,10 @@ export class SunatBooksService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const buffer = XLSX.write(workbook, {
+      type: 'buffer',
+      bookType: 'xlsx',
+    }) as Buffer;
     return { buffer, filename, rowCount: rows.length };
   }
 }

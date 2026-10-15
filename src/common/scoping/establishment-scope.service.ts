@@ -1,6 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { JwtRequestUser } from '../../modules/auth/domain/auth.types';
-import { hasChainScope, isPlatformAdmin } from '../permissions/role-policy.util';
+import {
+  hasChainScope,
+  isPlatformAdmin,
+} from '../permissions/role-policy.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { actorFromJwt, assertTenantAccess } from './tenant-scope.util';
 import {
@@ -22,7 +29,10 @@ export class EstablishmentScopeService {
   }
 
   /** Resuelve sucursal efectiva y valida tenant (usar en lugar de resolve sync). */
-  async resolve(user: JwtRequestUser, requestedEstablishmentId?: string | null): Promise<string> {
+  async resolve(
+    user: JwtRequestUser,
+    requestedEstablishmentId?: string | null,
+  ): Promise<string> {
     return this.resolveScoped(user, requestedEstablishmentId);
   }
 
@@ -30,7 +40,10 @@ export class EstablishmentScopeService {
     user: JwtRequestUser,
     requestedEstablishmentId?: string | null,
   ): Promise<string> {
-    const establishmentId = resolveEstablishmentScope(this.toActor(user), requestedEstablishmentId);
+    const establishmentId = resolveEstablishmentScope(
+      this.toActor(user),
+      requestedEstablishmentId,
+    );
     await this.assertEstablishmentInTenant(user, establishmentId);
     return establishmentId;
   }
@@ -43,7 +56,10 @@ export class EstablishmentScopeService {
    * Valida acceso a un establecimiento: primero tenant, luego sucursal
    * (admins de cadena / plataforma pueden cruzar sucursales del mismo tenant).
    */
-  async assertAccess(user: JwtRequestUser, resourceEstablishmentId: string): Promise<void> {
+  async assertAccess(
+    user: JwtRequestUser,
+    resourceEstablishmentId: string,
+  ): Promise<void> {
     await this.assertEstablishmentInTenant(user, resourceEstablishmentId);
     if (isPlatformAdmin(user.role) || hasChainScope(user.role)) {
       return;
@@ -75,7 +91,10 @@ export class EstablishmentScopeService {
     }
   }
 
-  async assertWarehouseInTenant(user: JwtRequestUser, warehouseId: string): Promise<void> {
+  async assertWarehouseInTenant(
+    user: JwtRequestUser,
+    warehouseId: string,
+  ): Promise<void> {
     const row = await this.prisma.warehouse.findFirst({
       where: { id: warehouseId, deletedAt: null },
       select: { establishmentId: true },
@@ -86,7 +105,10 @@ export class EstablishmentScopeService {
     await this.assertEstablishmentInTenant(user, row.establishmentId);
   }
 
-  async assertWarehouseZoneInTenant(user: JwtRequestUser, warehouseZoneId: string): Promise<void> {
+  async assertWarehouseZoneInTenant(
+    user: JwtRequestUser,
+    warehouseZoneId: string,
+  ): Promise<void> {
     const row = await this.prisma.warehouseZone.findFirst({
       where: { id: warehouseZoneId, deletedAt: null },
       select: { warehouse: { select: { establishmentId: true } } },
@@ -98,7 +120,9 @@ export class EstablishmentScopeService {
   }
 
   /** IDs de sucursales activas del tenant (null = sin filtro para plataforma). */
-  async establishmentIdsForActor(user: JwtRequestUser): Promise<string[] | null> {
+  async establishmentIdsForActor(
+    user: JwtRequestUser,
+  ): Promise<string[] | null> {
     if (isPlatformAdmin(user.role)) {
       return null;
     }
@@ -112,7 +136,10 @@ export class EstablishmentScopeService {
     return rows.map((r) => r.id);
   }
 
-  async assertCustomerInTenant(user: JwtRequestUser, customerId: string): Promise<void> {
+  async assertCustomerInTenant(
+    user: JwtRequestUser,
+    customerId: string,
+  ): Promise<void> {
     const row = await this.prisma.customer.findFirst({
       where: { id: customerId, deletedAt: null },
       select: { tenantId: true },
@@ -123,7 +150,10 @@ export class EstablishmentScopeService {
     assertTenantAccess(actorFromJwt(user), row.tenantId);
   }
 
-  async assertProductInTenant(user: JwtRequestUser, productId: string): Promise<void> {
+  async assertProductInTenant(
+    user: JwtRequestUser,
+    productId: string,
+  ): Promise<void> {
     const row = await this.prisma.product.findFirst({
       where: { id: productId, deletedAt: null },
       select: { tenantId: true },
@@ -134,7 +164,10 @@ export class EstablishmentScopeService {
     assertTenantAccess(actorFromJwt(user), row.tenantId);
   }
 
-  async assertSupplierInTenant(user: JwtRequestUser, supplierId: string): Promise<void> {
+  async assertSupplierInTenant(
+    user: JwtRequestUser,
+    supplierId: string,
+  ): Promise<void> {
     const row = await this.prisma.supplier.findFirst({
       where: { id: supplierId, deletedAt: null },
       select: { tenantId: true },

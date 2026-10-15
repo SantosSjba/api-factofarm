@@ -12,7 +12,10 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EstablishmentScopeService } from '../../../common/scoping/establishment-scope.service';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
-import { actorFromJwt, tenantWhere } from '../../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  tenantWhere,
+} from '../../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
@@ -139,7 +142,10 @@ export class LpdpService {
     return created;
   }
 
-  async listArcoRequests(status: ArcoRequestStatus | undefined, actor: JwtRequestUser) {
+  async listArcoRequests(
+    status: ArcoRequestStatus | undefined,
+    actor: JwtRequestUser,
+  ) {
     return this.prisma.arcoRequest.findMany({
       where: {
         ...(status ? { status } : {}),
@@ -179,7 +185,10 @@ export class LpdpService {
           processedAt: new Date(),
         },
       });
-      if (status === ArcoRequestStatus.COMPLETADA && row.requestType === ArcoRequestType.CANCELACION) {
+      if (
+        status === ArcoRequestStatus.COMPLETADA &&
+        row.requestType === ArcoRequestType.CANCELACION
+      ) {
         await tx.customer.update({
           where: { id: row.customerId },
           data: { deletedAt: new Date(), activo: false, habilitado: false },
@@ -259,7 +268,9 @@ export class LpdpService {
           ? { tenantId: actor.tenantId }
           : {}),
         sales: { none: { createdAt: { gte: cutoff }, deletedAt: null } },
-        prescriptions: { none: { createdAt: { gte: cutoff }, deletedAt: null } },
+        prescriptions: {
+          none: { createdAt: { gte: cutoff }, deletedAt: null },
+        },
       },
       select: {
         id: true,
@@ -272,13 +283,16 @@ export class LpdpService {
     });
 
     return {
-      policy: 'Clientes sin actividad > 10 años — revisión manual antes de eliminar',
+      policy:
+        'Clientes sin actividad > 10 años — revisión manual antes de eliminar',
       cutoffDate: cutoff.toISOString(),
       candidates: staleCustomers,
     };
   }
 
-  anonymizeStatsRows<T extends { nombre?: string; numeroDocumento?: string }>(rows: T[]) {
+  anonymizeStatsRows<T extends { nombre?: string; numeroDocumento?: string }>(
+    rows: T[],
+  ) {
     return rows.map((row) => ({
       ...row,
       nombre: row.nombre ? this.anonymizeLabel(row.nombre) : row.nombre,

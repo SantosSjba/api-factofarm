@@ -28,7 +28,10 @@ import {
   SalesAnalyticsQueryDto,
   ShrinkageExpiryQueryDto,
 } from './dto/pharmaceutical.dto';
-import { formatDateYmdInTimeZone, normalizeTimeZone } from '../../common/utils/timezone.util';
+import {
+  formatDateYmdInTimeZone,
+  normalizeTimeZone,
+} from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 
@@ -45,8 +48,13 @@ export class PharmaceuticalController {
 
   @Get('approvers')
   @RequirePermissions('pharmaceutical.read', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Usuarios disponibles para segunda validación (controlados)' })
-  async approvers(@CurrentUser() actor: JwtRequestUser, @Query('excludeSelf') excludeSelf?: string) {
+  @ApiOperation({
+    summary: 'Usuarios disponibles para segunda validación (controlados)',
+  })
+  async approvers(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('excludeSelf') excludeSelf?: string,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.listApprovers(
       establishmentId,
@@ -67,8 +75,15 @@ export class PharmaceuticalController {
   }
 
   @Get('reports/shrinkage-expiry')
-  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'nav.reportes_panel')
-  async shrinkageExpiry(@CurrentUser() actor: JwtRequestUser, @Query() query: ShrinkageExpiryQueryDto) {
+  @RequirePermissions(
+    'pharmaceutical.read',
+    'nav.reporte_digemid',
+    'nav.reportes_panel',
+  )
+  async shrinkageExpiry(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: ShrinkageExpiryQueryDto,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.shrinkageAndExpiryReport(
       establishmentId,
@@ -79,8 +94,15 @@ export class PharmaceuticalController {
   }
 
   @Get('reports/profitability')
-  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'nav.reportes_panel')
-  async profitability(@CurrentUser() actor: JwtRequestUser, @Query() query: ProfitabilityQueryDto) {
+  @RequirePermissions(
+    'pharmaceutical.read',
+    'nav.reporte_digemid',
+    'nav.reportes_panel',
+  )
+  async profitability(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: ProfitabilityQueryDto,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.profitabilityReport(
       establishmentId,
@@ -90,8 +112,15 @@ export class PharmaceuticalController {
   }
 
   @Get('reports/sales-analytics')
-  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'nav.reportes_panel')
-  async salesAnalytics(@CurrentUser() actor: JwtRequestUser, @Query() query: SalesAnalyticsQueryDto) {
+  @RequirePermissions(
+    'pharmaceutical.read',
+    'nav.reporte_digemid',
+    'nav.reportes_panel',
+  )
+  async salesAnalytics(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: SalesAnalyticsQueryDto,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.salesAnalyticsReport(
       establishmentId,
@@ -102,17 +131,30 @@ export class PharmaceuticalController {
   }
 
   @Get('reports/dispensation-by-medico')
-  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'nav.reportes_panel')
-  async dispensationByMedico(@CurrentUser() actor: JwtRequestUser, @Query() query: PharmaReportQueryDto) {
-    return this.service.dispensationByMedicoReport(await this.scope.resolve(actor), {
-      from: query.from,
-      to: query.to,
-    });
+  @RequirePermissions(
+    'pharmaceutical.read',
+    'nav.reporte_digemid',
+    'nav.reportes_panel',
+  )
+  async dispensationByMedico(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: PharmaReportQueryDto,
+  ) {
+    return this.service.dispensationByMedicoReport(
+      await this.scope.resolve(actor),
+      {
+        from: query.from,
+        to: query.to,
+      },
+    );
   }
 
   @Get('reports/controlled-monthly')
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_psicotropicos')
-  async controlledMonthly(@CurrentUser() actor: JwtRequestUser, @Query() query: ControlledMonthlyQueryDto) {
+  async controlledMonthly(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: ControlledMonthlyQueryDto,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     const tz = await this.resolveTimeZone(establishmentId);
     const todayYmd = formatDateYmdInTimeZone(new Date(), tz);
@@ -131,12 +173,19 @@ export class PharmaceuticalController {
     @Query('to') to: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const buffer = await this.service.buildControlledLedgerExportBuffer(await this.scope.resolve(actor), from, to);
+    const buffer = await this.service.buildControlledLedgerExportBuffer(
+      await this.scope.resolve(actor),
+      from,
+      to,
+    );
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('libro-controlados-digemid.xlsx')}`,
     );
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 
@@ -147,12 +196,17 @@ export class PharmaceuticalController {
     @CurrentUser() actor: JwtRequestUser,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const buffer = await this.service.buildAdverseEventsExportBuffer(await this.scope.resolve(actor));
+    const buffer = await this.service.buildAdverseEventsExportBuffer(
+      await this.scope.resolve(actor),
+    );
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('farmacovigilancia-digemid.xlsx')}`,
     );
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 
@@ -164,7 +218,12 @@ export class PharmaceuticalController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.service.listControlledLedger(await this.scope.resolve(actor), productId, from, to);
+    return this.service.listControlledLedger(
+      await this.scope.resolve(actor),
+      productId,
+      from,
+      to,
+    );
   }
 
   @Get('controlled-categories')
@@ -200,7 +259,10 @@ export class PharmaceuticalController {
 
   @Post('adverse-events')
   @RequirePermissions('pharmaceutical.write', 'nav.reporte_digemid')
-  async createAdverseEvent(@Body() dto: CreateAdverseEventDto, @CurrentUser() actor: JwtRequestUser) {
+  async createAdverseEvent(
+    @Body() dto: CreateAdverseEventDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     const row = await this.prisma.adverseEvent.create({
       data: {
@@ -216,7 +278,12 @@ export class PharmaceuticalController {
         registeredById: actor.sub,
       },
     });
-    await this.audit.log({ userId: actor.sub, action: 'CREATE', entity: 'AdverseEvent', entityId: row.id });
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'CREATE',
+      entity: 'AdverseEvent',
+      entityId: row.id,
+    });
     return row;
   }
 
@@ -240,14 +307,21 @@ export class PharmaceuticalController {
         notificadoDigemid: true,
         digemidReportNumber: dto.digemidReportNumber.trim(),
         medidasCorrectivas: dto.medidasCorrectivas?.trim() || null,
-        fechaNotificacion: dto.fechaNotificacion ? new Date(dto.fechaNotificacion) : new Date(),
+        fechaNotificacion: dto.fechaNotificacion
+          ? new Date(dto.fechaNotificacion)
+          : new Date(),
         pacienteEdad: dto.pacienteEdad ?? current.pacienteEdad,
         pacienteSexo: dto.pacienteSexo?.trim() || current.pacienteSexo,
         reaccionTipo: dto.reaccionTipo?.trim() || current.reaccionTipo,
         cie10Codigo: dto.cie10Codigo?.trim() || current.cie10Codigo,
       },
     });
-    await this.audit.log({ userId: actor.sub, action: 'NOTIFY_DIGEMID', entity: 'AdverseEvent', entityId: id });
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'NOTIFY_DIGEMID',
+      entity: 'AdverseEvent',
+      entityId: id,
+    });
     return row;
   }
 
@@ -255,7 +329,10 @@ export class PharmaceuticalController {
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
   async adverseEvents(@CurrentUser() actor: JwtRequestUser) {
     return this.prisma.adverseEvent.findMany({
-      where: { establishmentId: await this.scope.resolve(actor), deletedAt: null },
+      where: {
+        establishmentId: await this.scope.resolve(actor),
+        deletedAt: null,
+      },
       orderBy: { fecha: 'desc' },
       take: 100,
       include: {
@@ -266,8 +343,15 @@ export class PharmaceuticalController {
   }
 
   @Get('reports/sanitary-registry-alerts')
-  @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid', 'products.read')
-  async sanitaryAlerts(@CurrentUser() actor: JwtRequestUser, @Query('daysAhead') daysAhead?: string) {
+  @RequirePermissions(
+    'pharmaceutical.read',
+    'nav.reporte_digemid',
+    'products.read',
+  )
+  async sanitaryAlerts(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('daysAhead') daysAhead?: string,
+  ) {
     return this.service.sanitaryRegistryAlerts(
       await this.scope.resolve(actor),
       daysAhead ? Number(daysAhead) : 90,
@@ -276,8 +360,14 @@ export class PharmaceuticalController {
 
   @Get('reports/lot-traceability')
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
-  async lotTraceability(@CurrentUser() actor: JwtRequestUser, @Query() query: RequiredLotQueryDto) {
-    return this.service.lotTraceabilityReport(await this.scope.resolve(actor), query.codigoLote);
+  async lotTraceability(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query() query: RequiredLotQueryDto,
+  ) {
+    return this.service.lotTraceabilityReport(
+      await this.scope.resolve(actor),
+      query.codigoLote,
+    );
   }
 
   @Get('reports/bpa-storage')
@@ -289,13 +379,21 @@ export class PharmaceuticalController {
   @Get('reports/inspection-export')
   @RequirePermissions('pharmaceutical.read', 'nav.reporte_digemid')
   @ApiOperation({ summary: 'Exportación inspección DIGEMID (Excel)' })
-  async inspectionExport(@CurrentUser() actor: JwtRequestUser, @Res() res: Response) {
-    const buffer = await this.service.buildInspectionExportBuffer(await this.scope.resolve(actor));
+  async inspectionExport(
+    @CurrentUser() actor: JwtRequestUser,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.buildInspectionExportBuffer(
+      await this.scope.resolve(actor),
+    );
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('inspeccion-digemid.xlsx')}`,
     );
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.send(buffer);
   }
 

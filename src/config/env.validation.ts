@@ -2,6 +2,9 @@ import * as Joi from 'joi';
 
 /** Validación centralizada de variables de entorno (Joi). */
 export const envValidationSchema = Joi.object({
+  LOG_LEVEL: Joi.string()
+    .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
+    .optional(),
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
     .default('development'),
@@ -36,23 +39,27 @@ export const envValidationSchema = Joi.object({
   /** Orígenes CORS adicionales separados por coma (producción). */
   CORS_ORIGINS: Joi.string().optional().allow(''),
   /** Clave AES-256 para secretos de facturación (32+ bytes en base64 o hex). Obligatoria en producción. */
-  BILLING_ENCRYPTION_KEY: Joi.string().min(32).when('NODE_ENV', {
-    is: 'production',
-    then: Joi.required().messages({
-      'any.required':
-        'BILLING_ENCRYPTION_KEY es obligatoria en producción para cifrar secretos OSE',
+  BILLING_ENCRYPTION_KEY: Joi.string()
+    .min(32)
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.required().messages({
+        'any.required':
+          'BILLING_ENCRYPTION_KEY es obligatoria en producción para cifrar secretos OSE',
+      }),
+      otherwise: Joi.optional().allow(''),
     }),
-    otherwise: Joi.optional().allow(''),
-  }),
   /** Clave AES-256 para cifrado de datos sensibles de salud (recetas, diagnósticos). Obligatoria en producción. */
-  LPDP_SENSITIVE_ENCRYPTION_KEY: Joi.string().min(32).when('NODE_ENV', {
-    is: 'production',
-    then: Joi.required().messages({
-      'any.required':
-        'LPDP_SENSITIVE_ENCRYPTION_KEY es obligatoria en producción para cifrar datos de salud',
+  LPDP_SENSITIVE_ENCRYPTION_KEY: Joi.string()
+    .min(32)
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.required().messages({
+        'any.required':
+          'LPDP_SENSITIVE_ENCRYPTION_KEY es obligatoria en producción para cifrar datos de salud',
+      }),
+      otherwise: Joi.optional().allow(''),
     }),
-    otherwise: Joi.optional().allow(''),
-  }),
   /** Habilitar documentación OpenAPI/Scalar (desactivado por defecto en producción). */
   SWAGGER_ENABLED: Joi.boolean().when('NODE_ENV', {
     is: 'production',
@@ -60,11 +67,18 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.boolean().default(true),
   }),
   /** URL Redis opcional para cache distribuido (catálogos, permisos). */
-  REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).optional().allow(''),
+  REDIS_URL: Joi.string()
+    .uri({ scheme: ['redis', 'rediss'] })
+    .optional()
+    .allow(''),
   /** Prefijo de claves en Redis compartido (FACTOSYS PERU db-redis). */
   REDIS_KEY_PREFIX: Joi.string().max(40).default('factofarm'),
   CACHE_TTL_MS: Joi.number().integer().min(10_000).default(300_000),
-  PASSWORD_RESET_EXPIRES_MINUTES: Joi.number().integer().min(5).max(1440).default(60),
+  PASSWORD_RESET_EXPIRES_MINUTES: Joi.number()
+    .integer()
+    .min(5)
+    .max(1440)
+    .default(60),
   /** En producción el envío real exige SMTP_HOST; sin él, forgot-password falla en runtime (no bloquea boot). */
   SETTINGS_ENCRYPTION_KEY: Joi.string().min(32).optional().allow(''),
   SMTP_HOST: Joi.string().optional().allow(''),
@@ -80,13 +94,25 @@ export const envValidationSchema = Joi.object({
   COMPANY_RUC: Joi.string().optional().allow(''),
   COMPANY_ADDRESS: Joi.string().optional().allow(''),
   SENTRY_DSN: Joi.string().uri().optional().allow(''),
-  PG_TX_MAX_WAIT_MS: Joi.number().integer().min(5000).max(120000).default(60000),
+  PG_TX_MAX_WAIT_MS: Joi.number()
+    .integer()
+    .min(5000)
+    .max(120000)
+    .default(60000),
   PG_TX_TIMEOUT_MS: Joi.number().integer().min(5000).max(120000).default(60000),
   PG_POOL_MAX: Joi.number().integer().min(1).max(100).default(20),
   PG_POOL_IDLE_MS: Joi.number().integer().min(1000).default(30_000),
-  PG_POOL_CONNECT_MS: Joi.number().integer().min(1000).max(120000).default(60_000),
+  PG_POOL_CONNECT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .max(120000)
+    .default(60_000),
   /** Días a conservar AuditLog antes de purga (Fase 2 retención). */
-  DATA_RETENTION_AUDIT_DAYS: Joi.number().integer().min(30).max(3650).default(730),
+  DATA_RETENTION_AUDIT_DAYS: Joi.number()
+    .integer()
+    .min(30)
+    .max(3650)
+    .default(730),
   /** Permite borrado real de AuditLog (dry-run siempre disponible). */
   DATA_RETENTION_PURGE_ENABLED: Joi.boolean().default(false),
   /**
@@ -97,9 +123,17 @@ export const envValidationSchema = Joi.object({
   /** Cron del job de retención (formato standard). */
   DATA_RETENTION_CRON: Joi.string().default('0 3 * * *'),
   /** Tamaño de lote al borrar AuditLog / archivar. */
-  DATA_RETENTION_BATCH_SIZE: Joi.number().integer().min(100).max(50_000).default(5000),
+  DATA_RETENTION_BATCH_SIZE: Joi.number()
+    .integer()
+    .min(100)
+    .max(50_000)
+    .default(5000),
   /** Días en hot path antes de copiar a cold storage (ventas/kardex). Default 5 años. */
-  DATA_RETENTION_ARCHIVE_DAYS: Joi.number().integer().min(30).max(7300).default(1825),
+  DATA_RETENTION_ARCHIVE_DAYS: Joi.number()
+    .integer()
+    .min(30)
+    .max(7300)
+    .default(1825),
   /** Permite copiar a archive y marcar archivedAt (nunca DELETE de negocio). */
   DATA_RETENTION_ARCHIVE_ENABLED: Joi.boolean().default(false),
   /** Cron semanal de archivado (default domingo 04:00). */

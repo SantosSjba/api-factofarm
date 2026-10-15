@@ -3,7 +3,12 @@ import type { App } from 'supertest/types';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { createE2eApp, closeE2eApp } from './helpers/e2e-app';
-import { loginAsAdmin, resolvePosContext, runPosSaleFlow, ensureOpenCashSession } from './helpers/pos-flow';
+import {
+  loginAsAdmin,
+  resolvePosContext,
+  runPosSaleFlow,
+  ensureOpenCashSession,
+} from './helpers/pos-flow';
 
 async function readPosStock(
   app: INestApplication<App>,
@@ -17,9 +22,9 @@ async function readPosStock(
     .set(bearer)
     .expect(200);
 
-  const row = (res.body as Array<{ id?: string; stock?: string | number }>).find(
-    (p) => p.id === productId,
-  );
+  const row = (
+    res.body as Array<{ id?: string; stock?: string | number }>
+  ).find((p) => p.id === productId);
   if (!row) throw new Error(`Producto ${productId} no aparece en pos-catalog`);
   return Number(row.stock ?? 0);
 }
@@ -40,9 +45,14 @@ describe('POS flow (e2e)', () => {
     const ctx = await resolvePosContext(app, auth);
     const { sale, close } = await runPosSaleFlow(app, ctx);
 
-    expect(sale.body.id).toBeDefined();
-    expect(sale.body.documentType).toBe('NOTA_VENTA');
-    expect(close.body.ok).toBe(true);
+    expect(
+      (sale.body as { id: string; documentType: string; createdAt: string }).id,
+    ).toBeDefined();
+    expect(
+      (sale.body as { id: string; documentType: string; createdAt: string })
+        .documentType,
+    ).toBe('NOTA_VENTA');
+    expect((close.body as { ok: boolean }).ok).toBe(true);
   }, 60_000);
 
   it('venta decrementa stock y anulación (otro usuario) lo restaura', async () => {
@@ -53,7 +63,12 @@ describe('POS flow (e2e)', () => {
     const adminBearer = { Authorization: `Bearer ${admin.token}` };
     const sellerBearer = { Authorization: `Bearer ${seller.token}` };
 
-    const stockBefore = await readPosStock(app, adminBearer, ctx.warehouseId, ctx.productId);
+    const stockBefore = await readPosStock(
+      app,
+      adminBearer,
+      ctx.warehouseId,
+      ctx.productId,
+    );
     expect(stockBefore).toBeGreaterThanOrEqual(1);
 
     const session = await ensureOpenCashSession(app, ctx);
@@ -70,19 +85,38 @@ describe('POS flow (e2e)', () => {
       })
       .expect(201);
 
-    expect(sale.body.id).toBeDefined();
-    expect(String(sale.body.createdAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(
+      (sale.body as { id: string; documentType: string; createdAt: string }).id,
+    ).toBeDefined();
+    expect(
+      String(
+        (sale.body as { id: string; documentType: string; createdAt: string })
+          .createdAt,
+      ),
+    ).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
-    const stockAfterSale = await readPosStock(app, adminBearer, ctx.warehouseId, ctx.productId);
+    const stockAfterSale = await readPosStock(
+      app,
+      adminBearer,
+      ctx.warehouseId,
+      ctx.productId,
+    );
     expect(stockAfterSale).toBe(stockBefore - 1);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/sales/${sale.body.id}/void`)
+      .post(
+        `/api/v1/sales/${(sale.body as { id: string; documentType: string; createdAt: string }).id}/void`,
+      )
       .set(adminBearer)
       .send({ reason: 'E2E stock restore' })
       .expect(201);
 
-    const stockAfterVoid = await readPosStock(app, adminBearer, ctx.warehouseId, ctx.productId);
+    const stockAfterVoid = await readPosStock(
+      app,
+      adminBearer,
+      ctx.warehouseId,
+      ctx.productId,
+    );
     expect(stockAfterVoid).toBe(stockBefore);
 
     await request(app.getHttpServer())
@@ -121,7 +155,8 @@ describe('POS flow (e2e)', () => {
       .post(`/api/v1/cash-registers/sessions/${session.id}/close`)
       .set(bearer)
       .send({
-        montoCierreFisico: ctx.productPrice * responses.filter((r) => r.status === 201).length,
+        montoCierreFisico:
+          ctx.productPrice * responses.filter((r) => r.status === 201).length,
       })
       .expect(201);
   }, 120_000);

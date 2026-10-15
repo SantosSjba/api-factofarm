@@ -3,32 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import {
   DeliveryNotificationChannel,
   DeliveryOrderStatus,
-  type DeliveryOrder,
-  type Establishment,
 } from '../../generated/prisma/client';
 import { EmailService } from '../../common/services/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
-
-type NotifyContext = {
-  order: Pick<
-    DeliveryOrder,
-    | 'id'
-    | 'numero'
-    | 'estado'
-    | 'clienteNombre'
-    | 'clienteTelefono'
-    | 'clienteEmail'
-    | 'total'
-    | 'direccionEntrega'
-  >;
-  establishment: Pick<
-    Establishment,
-    | 'nombre'
-    | 'deliveryWhatsappNumero'
-    | 'deliveryNotifyEmailEnabled'
-    | 'deliveryNotifySmsEnabled'
-  >;
-};
 
 @Injectable()
 export class DeliveryNotificationService {
@@ -65,7 +42,11 @@ export class DeliveryNotificationService {
     if (!order) return;
 
     const templateKey = `status.${newStatus}`;
-    const message = this.buildStatusMessage(order.establishment.nombre, order.numero, newStatus);
+    const message = this.buildStatusMessage(
+      order.establishment.nombre,
+      order.numero,
+      newStatus,
+    );
 
     const whatsappPhone = this.normalizePhone(
       order.establishment.deliveryWhatsappNumero ?? order.clienteTelefono,
@@ -74,9 +55,19 @@ export class DeliveryNotificationService {
       ? this.buildWhatsAppLink(whatsappPhone, message)
       : null;
 
-    await this.log(order.id, DeliveryNotificationChannel.WHATSAPP, templateKey, order.clienteTelefono, message, true);
+    await this.log(
+      order.id,
+      DeliveryNotificationChannel.WHATSAPP,
+      templateKey,
+      order.clienteTelefono,
+      message,
+      true,
+    );
 
-    if (order.establishment.deliveryNotifyEmailEnabled && order.clienteEmail?.trim()) {
+    if (
+      order.establishment.deliveryNotifyEmailEnabled &&
+      order.clienteEmail?.trim()
+    ) {
       try {
         await this.email.sendTransactional(
           order.clienteEmail.trim(),
@@ -106,7 +97,7 @@ export class DeliveryNotificationService {
     }
 
     if (order.establishment.deliveryNotifySmsEnabled) {
-      const smsOk = this.logSmsDev(order.clienteTelefono, message);
+      const smsOk = this.logSmsDev();
       await this.log(
         order.id,
         DeliveryNotificationChannel.SMS,
@@ -127,7 +118,11 @@ export class DeliveryNotificationService {
     return `https://wa.me/${withCountry}?text=${encodeURIComponent(text)}`;
   }
 
-  private buildStatusMessage(farmacia: string, numero: string, status: DeliveryOrderStatus): string {
+  private buildStatusMessage(
+    farmacia: string,
+    numero: string,
+    status: DeliveryOrderStatus,
+  ): string {
     const labels: Record<DeliveryOrderStatus, string> = {
       RECIBIDO: 'recibimos tu pedido',
       PREPARANDO: 'estamos preparando tu pedido',
@@ -144,12 +139,15 @@ export class DeliveryNotificationService {
     return digits.length >= 9 ? digits : null;
   }
 
-  private logSmsDev(phone: string, message: string): boolean {
+  private logSmsDev(): boolean {
     if (this.config.get('NODE_ENV') === 'production') {
-      this.logger.warn(`SMS no integrado — pendiente proveedor para ${phone}`);
+      this.logger.warn({
+        event: 'sms_skipped',
+        reason: 'provider_not_configured',
+      });
       return false;
     }
-    this.logger.log(`[DEV SMS] ${phone}: ${message}`);
+    this.logger.log({ event: 'sms_skipped', reason: 'development_mode' });
     return true;
   }
 

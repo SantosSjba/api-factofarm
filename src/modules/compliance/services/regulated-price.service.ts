@@ -65,7 +65,10 @@ export class RegulatedPriceService {
     };
 
     const row = existing
-      ? await this.prisma.regulatedDrugPrice.update({ where: { id: existing.id }, data })
+      ? await this.prisma.regulatedDrugPrice.update({
+          where: { id: existing.id },
+          data,
+        })
       : await this.prisma.regulatedDrugPrice.create({ data });
 
     await this.audit.log({

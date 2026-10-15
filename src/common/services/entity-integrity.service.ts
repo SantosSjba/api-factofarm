@@ -19,36 +19,50 @@ export class EntityIntegrityService {
   constructor(private readonly prisma: PrismaService) {}
 
   async assertCanDeleteProduct(productId: string): Promise<void> {
-    const [saleItems, stockAgg, lotStock, serials, poItems, receiptItems, compoundUses] =
-      await Promise.all([
-        this.prisma.saleItem.count({ where: { productId } }),
-        this.prisma.productWarehouseStock.aggregate({
-          where: { productId, cantidad: { gt: 0 } },
-          _count: { _all: true },
-        }),
-        this.prisma.productLotStock.count({
-          where: { productId, deletedAt: null, stock: { gt: 0 } },
-        }),
-        this.prisma.productSerial.count({
-          where: {
-            productId,
-            deletedAt: null,
-            OR: [
-              { estado: { in: [ProductSerialStatus.DISPONIBLE, ProductSerialStatus.RESERVADO] } },
-              { vendido: true },
-            ],
-          },
-        }),
-        this.prisma.purchaseOrderItem.count({
-          where: { productId, purchaseOrder: { deletedAt: null } },
-        }),
-        this.prisma.goodsReceiptItem.count({
-          where: { productId, goodsReceipt: { deletedAt: null } },
-        }),
-        this.prisma.compoundProductItem.count({
-          where: { productId, compoundProduct: { deletedAt: null } },
-        }),
-      ]);
+    const [
+      saleItems,
+      stockAgg,
+      lotStock,
+      serials,
+      poItems,
+      receiptItems,
+      compoundUses,
+    ] = await Promise.all([
+      this.prisma.saleItem.count({ where: { productId } }),
+      this.prisma.productWarehouseStock.aggregate({
+        where: { productId, cantidad: { gt: 0 } },
+        _count: { _all: true },
+      }),
+      this.prisma.productLotStock.count({
+        where: { productId, deletedAt: null, stock: { gt: 0 } },
+      }),
+      this.prisma.productSerial.count({
+        where: {
+          productId,
+          deletedAt: null,
+          OR: [
+            {
+              estado: {
+                in: [
+                  ProductSerialStatus.DISPONIBLE,
+                  ProductSerialStatus.RESERVADO,
+                ],
+              },
+            },
+            { vendido: true },
+          ],
+        },
+      }),
+      this.prisma.purchaseOrderItem.count({
+        where: { productId, purchaseOrder: { deletedAt: null } },
+      }),
+      this.prisma.goodsReceiptItem.count({
+        where: { productId, goodsReceipt: { deletedAt: null } },
+      }),
+      this.prisma.compoundProductItem.count({
+        where: { productId, compoundProduct: { deletedAt: null } },
+      }),
+    ]);
 
     const reasons: string[] = [];
     if (saleItems > 0) reasons.push('ventas');
@@ -66,35 +80,53 @@ export class EntityIntegrityService {
   }
 
   async assertCanDeleteWarehouse(warehouseId: string): Promise<void> {
-    const [stock, lots, serials, sales, inbound, transfers, receipts, pos, deliveries] =
-      await Promise.all([
-        this.prisma.productWarehouseStock.count({
-          where: { warehouseId, cantidad: { gt: 0 } },
-        }),
-        this.prisma.productLotStock.count({
-          where: { warehouseId, deletedAt: null, stock: { gt: 0 } },
-        }),
-        this.prisma.productSerial.count({
-          where: {
-            warehouseId,
-            deletedAt: null,
-            estado: { not: ProductSerialStatus.ANULADO },
-          },
-        }),
-        this.prisma.sale.count({ where: { warehouseId, deletedAt: null } }),
-        this.prisma.inventoryInboundMovement.count({
-          where: { warehouseId, deletedAt: null },
-        }),
-        this.prisma.inventoryStockTransfer.count({
-          where: {
-            deletedAt: null,
-            OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
-          },
-        }),
-        this.prisma.goodsReceipt.count({ where: { warehouseId, deletedAt: null } }),
-        this.prisma.purchaseOrder.count({ where: { warehouseId, deletedAt: null } }),
-        this.prisma.deliveryOrder.count({ where: { warehouseId, deletedAt: null } }),
-      ]);
+    const [
+      stock,
+      lots,
+      serials,
+      sales,
+      inbound,
+      transfers,
+      receipts,
+      pos,
+      deliveries,
+    ] = await Promise.all([
+      this.prisma.productWarehouseStock.count({
+        where: { warehouseId, cantidad: { gt: 0 } },
+      }),
+      this.prisma.productLotStock.count({
+        where: { warehouseId, deletedAt: null, stock: { gt: 0 } },
+      }),
+      this.prisma.productSerial.count({
+        where: {
+          warehouseId,
+          deletedAt: null,
+          estado: { not: ProductSerialStatus.ANULADO },
+        },
+      }),
+      this.prisma.sale.count({ where: { warehouseId, deletedAt: null } }),
+      this.prisma.inventoryInboundMovement.count({
+        where: { warehouseId, deletedAt: null },
+      }),
+      this.prisma.inventoryStockTransfer.count({
+        where: {
+          deletedAt: null,
+          OR: [
+            { fromWarehouseId: warehouseId },
+            { toWarehouseId: warehouseId },
+          ],
+        },
+      }),
+      this.prisma.goodsReceipt.count({
+        where: { warehouseId, deletedAt: null },
+      }),
+      this.prisma.purchaseOrder.count({
+        where: { warehouseId, deletedAt: null },
+      }),
+      this.prisma.deliveryOrder.count({
+        where: { warehouseId, deletedAt: null },
+      }),
+    ]);
 
     const reasons: string[] = [];
     if (stock > 0 || lots > 0) reasons.push('stock');
@@ -112,52 +144,53 @@ export class EntityIntegrityService {
   }
 
   async assertCanDeleteEstablishment(establishmentId: string): Promise<void> {
-    const [sales, docs, openSessions, users, stockRows, pos, ar, ap] = await Promise.all([
-      this.prisma.sale.count({ where: { establishmentId, deletedAt: null } }),
-      this.prisma.electronicDocument.count({
-        where: { establishmentId, deletedAt: null },
-      }),
-      this.prisma.cashSession.count({
-        where: {
-          estado: CashSessionStatus.ABIERTA,
-          cashRegister: { establishmentId, deletedAt: null },
-        },
-      }),
-      this.prisma.user.count({
-        where: { establecimientoId: establishmentId, deletedAt: null },
-      }),
-      this.prisma.productWarehouseStock.count({
-        where: {
-          cantidad: { gt: 0 },
-          warehouse: { establishmentId, deletedAt: null },
-        },
-      }),
-      this.prisma.purchaseOrder.count({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          estado: {
-            notIn: [PurchaseOrderStatus.ANULADA, PurchaseOrderStatus.CERRADA],
+    const [sales, docs, openSessions, users, stockRows, pos, ar, ap] =
+      await Promise.all([
+        this.prisma.sale.count({ where: { establishmentId, deletedAt: null } }),
+        this.prisma.electronicDocument.count({
+          where: { establishmentId, deletedAt: null },
+        }),
+        this.prisma.cashSession.count({
+          where: {
+            estado: CashSessionStatus.ABIERTA,
+            cashRegister: { establishmentId, deletedAt: null },
           },
-        },
-      }),
-      this.prisma.accountReceivable.count({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          saldo: { gt: 0 },
-          estado: { not: AccountReceivableStatus.ANULADA },
-        },
-      }),
-      this.prisma.accountPayable.count({
-        where: {
-          establishmentId,
-          deletedAt: null,
-          saldo: { gt: 0 },
-          estado: { not: AccountPayableStatus.ANULADA },
-        },
-      }),
-    ]);
+        }),
+        this.prisma.user.count({
+          where: { establecimientoId: establishmentId, deletedAt: null },
+        }),
+        this.prisma.productWarehouseStock.count({
+          where: {
+            cantidad: { gt: 0 },
+            warehouse: { establishmentId, deletedAt: null },
+          },
+        }),
+        this.prisma.purchaseOrder.count({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            estado: {
+              notIn: [PurchaseOrderStatus.ANULADA, PurchaseOrderStatus.CERRADA],
+            },
+          },
+        }),
+        this.prisma.accountReceivable.count({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            saldo: { gt: 0 },
+            estado: { not: AccountReceivableStatus.ANULADA },
+          },
+        }),
+        this.prisma.accountPayable.count({
+          where: {
+            establishmentId,
+            deletedAt: null,
+            saldo: { gt: 0 },
+            estado: { not: AccountPayableStatus.ANULADA },
+          },
+        }),
+      ]);
 
     const reasons: string[] = [];
     if (sales > 0) reasons.push('ventas');
@@ -184,7 +217,9 @@ export class EntityIntegrityService {
       select: { id: true, numero: true, documentType: true },
     });
     if (!series) {
-      throw new BadRequestException('Serie no encontrada para el establecimiento');
+      throw new BadRequestException(
+        'Serie no encontrada para el establecimiento',
+      );
     }
 
     const [sales, docs, siblings] = await Promise.all([
@@ -417,8 +452,12 @@ export class EntityIntegrityService {
     const [products, services, compounds, children] = await Promise.all([
       this.prisma.product.count({ where: { categoryId, deletedAt: null } }),
       this.prisma.service.count({ where: { categoryId, deletedAt: null } }),
-      this.prisma.compoundProduct.count({ where: { categoryId, deletedAt: null } }),
-      this.prisma.category.count({ where: { parentId: categoryId, deletedAt: null } }),
+      this.prisma.compoundProduct.count({
+        where: { categoryId, deletedAt: null },
+      }),
+      this.prisma.category.count({
+        where: { parentId: categoryId, deletedAt: null },
+      }),
     ]);
     if (products + services + compounds > 0) {
       throw new BadRequestException(
@@ -521,8 +560,12 @@ export class EntityIntegrityService {
 
   async assertCanDeleteShippingCarrier(carrierId: string): Promise<void> {
     const [drivers, vehicles] = await Promise.all([
-      this.prisma.shippingDriver.count({ where: { carrierId, deletedAt: null } }),
-      this.prisma.shippingVehicle.count({ where: { carrierId, deletedAt: null } }),
+      this.prisma.shippingDriver.count({
+        where: { carrierId, deletedAt: null },
+      }),
+      this.prisma.shippingVehicle.count({
+        where: { carrierId, deletedAt: null },
+      }),
     ]);
     if (drivers + vehicles > 0) {
       throw new BadRequestException(
@@ -617,7 +660,9 @@ export class EntityIntegrityService {
     }
   }
 
-  async assertCashRegisterHasNoOpenSession(cashRegisterId: string): Promise<void> {
+  async assertCashRegisterHasNoOpenSession(
+    cashRegisterId: string,
+  ): Promise<void> {
     const open = await this.prisma.cashSession.count({
       where: { cashRegisterId, estado: CashSessionStatus.ABIERTA },
     });

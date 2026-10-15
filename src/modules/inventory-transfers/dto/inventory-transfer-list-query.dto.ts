@@ -3,7 +3,9 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
 export class InventoryTransferListQueryDto {
-  @ApiPropertyOptional({ enum: ['BORRADOR', 'EN_TRANSITO', 'RECIBIDO', 'ANULADO'] })
+  @ApiPropertyOptional({
+    enum: ['BORRADOR', 'EN_TRANSITO', 'RECIBIDO', 'ANULADO'],
+  })
   @IsOptional()
   @IsIn(['BORRADOR', 'EN_TRANSITO', 'RECIBIDO', 'ANULADO'])
   estado?: 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDO' | 'ANULADO';

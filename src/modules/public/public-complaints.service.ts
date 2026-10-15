@@ -6,7 +6,10 @@ import {
   formatDateYmdInTimeZone,
 } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ComplaintKind, ComplaintRequestDto } from './dto/complaint-request.dto';
+import {
+  ComplaintKind,
+  ComplaintRequestDto,
+} from './dto/complaint-request.dto';
 
 @Injectable()
 export class PublicComplaintsService {
@@ -18,7 +21,9 @@ export class PublicComplaintsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async submit(dto: ComplaintRequestDto): Promise<{ ok: true; numeroRegistro: string }> {
+  async submit(
+    dto: ComplaintRequestDto,
+  ): Promise<{ ok: true; numeroRegistro: string }> {
     const numeroRegistro = this.buildRegistrationNumber();
     const tipoLabel = dto.tipo === ComplaintKind.RECLAMO ? 'Reclamo' : 'Queja';
     const to =
@@ -92,7 +97,10 @@ export class PublicComplaintsService {
   }
 
   private buildRegistrationNumber(): string {
-    const ymd = formatDateYmdInTimeZone(new Date(), DEFAULT_TIME_ZONE).replace(/-/g, '');
+    const ymd = formatDateYmdInTimeZone(new Date(), DEFAULT_TIME_ZONE).replace(
+      /-/g,
+      '',
+    );
     const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `LR-${ymd}-${suffix}`;
   }

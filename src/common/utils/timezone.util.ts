@@ -17,10 +17,16 @@ const COMMON_TIME_ZONES = [
 
 export type CommonTimeZone = (typeof COMMON_TIME_ZONES)[number];
 
-export function listCommonTimeZones(): ReadonlyArray<{ value: string; label: string }> {
+export function listCommonTimeZones(): ReadonlyArray<{
+  value: string;
+  label: string;
+}> {
   return COMMON_TIME_ZONES.map((value) => ({
     value,
-    label: value === 'UTC' ? 'UTC' : value.replace('America/', '').replace(/_/g, ' '),
+    label:
+      value === 'UTC'
+        ? 'UTC'
+        : value.replace('America/', '').replace(/_/g, ' '),
   }));
 }
 
@@ -42,7 +48,10 @@ export function isValidTimeZone(timeZone: string): boolean {
 }
 
 /** YYYY-MM-DD en la zona indicada. */
-export function formatDateYmdInTimeZone(date: Date, timeZone = DEFAULT_TIME_ZONE): string {
+export function formatDateYmdInTimeZone(
+  date: Date,
+  timeZone = DEFAULT_TIME_ZONE,
+): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: normalizeTimeZone(timeZone),
     year: 'numeric',
@@ -70,7 +79,10 @@ export function formatDateTimeInTimeZone(
 }
 
 /** Hora civil "00".."23" en la zona indicada. */
-export function formatHourInTimeZone(date: Date, timeZone = DEFAULT_TIME_ZONE): string {
+export function formatHourInTimeZone(
+  date: Date,
+  timeZone = DEFAULT_TIME_ZONE,
+): string {
   const parts = getZonedParts(date, normalizeTimeZone(timeZone));
   return String(parts.hour).padStart(2, '0');
 }
@@ -129,9 +141,11 @@ export function dayBoundsInTimeZone(
   return { start, end, ymd };
 }
 
-
 /** Acepta `YYYY-MM` (ISO) o `YYYYMM` (periodo SUNAT/PLE). */
-export function parseYearMonth(yearMonth: string): { year: number; month: number } {
+export function parseYearMonth(yearMonth: string): {
+  year: number;
+  month: number;
+} {
   const raw = yearMonth.trim();
   const dashed = /^(\d{4})-(\d{1,2})$/.exec(raw);
   const compact = /^(\d{6})$/.exec(raw);
@@ -146,7 +160,12 @@ export function parseYearMonth(yearMonth: string): { year: number; month: number
   } else {
     throw new Error(`Invalid yearMonth: ${yearMonth}`);
   }
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12
+  ) {
     throw new Error(`Invalid yearMonth: ${yearMonth}`);
   }
   return { year, month };

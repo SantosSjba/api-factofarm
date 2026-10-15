@@ -1,3 +1,4 @@
+import { safeError } from '../logging/http-logger.config';
 import {
   ArgumentsHost,
   Catch,
@@ -27,7 +28,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<{ url: string }>();
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let body: ApiErrorBody;
 
     if (exception instanceof HttpException) {
@@ -37,7 +38,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const raw = exceptionResponse as Record<string, unknown>;
         body = {
           statusCode: status,
-          code: typeof raw.code === 'string' ? raw.code : this.codeFromStatus(status),
+          code:
+            typeof raw.code === 'string'
+              ? raw.code
+              : this.codeFromStatus(status),
           message:
             typeof raw.message === 'string'
               ? raw.message
@@ -46,7 +50,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
                 : exception.message,
           details: raw.details,
           timestamp: new Date().toISOString(),
-          path: request.url,
+          path: request.url.split('?')[0],
         };
       } else {
         body = {
@@ -54,13 +58,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
           code: this.codeFromStatus(status),
           message: exception.message,
           timestamp: new Date().toISOString(),
-          path: request.url,
+          path: request.url.split('?')[0],
         };
       }
     } else {
       const message =
-        exception instanceof Error ? exception.message : 'Error interno del servidor';
-      this.logger.error(message, exception instanceof Error ? exception.stack : undefined);
+        exception instanceof Error
+          ? exception.message
+          : 'Error interno del servidor';
+      this.logger.error({
+        event: 'unhandled_exception',
+        error: safeError(exception),
+        path: request.url.split('?')[0],
+      });
       body = {
         statusCode: status,
         code: 'INTERNAL_ERROR',
@@ -69,33 +79,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
             ? 'Error interno del servidor'
             : message,
         timestamp: new Date().toISOString(),
-        path: request.url,
+        path: request.url.split('?')[0],
       };
     }
 
     if (status >= 500 && process.env.SENTRY_DSN) {
       captureSentryException(exception);
-      this.logger.error(
-        JSON.stringify({
-          sentry: true,
-          dsnConfigured: true,
-          code: body.code,
-          path: body.path,
-          message: body.message,
-        }),
-      );
     }
 
     response.status(status).json(body);
   }
 
   private codeFromStatus(status: number): string {
-    if (status === HttpStatus.UNAUTHORIZED) return 'UNAUTHORIZED';
-    if (status === HttpStatus.FORBIDDEN) return 'FORBIDDEN';
-    if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND';
-    if (status === HttpStatus.CONFLICT) return 'CONFLICT';
-    if (status === HttpStatus.BAD_REQUEST) return 'BAD_REQUEST';
-    if (status === HttpStatus.TOO_MANY_REQUESTS) return 'RATE_LIMITED';
+    if (status === Number(HttpStatus.UNAUTHORIZED)) return 'UNAUTHORIZED';
+    if (status === Number(HttpStatus.FORBIDDEN)) return 'FORBIDDEN';
+    if (status === Number(HttpStatus.NOT_FOUND)) return 'NOT_FOUND';
+    if (status === Number(HttpStatus.CONFLICT)) return 'CONFLICT';
+    if (status === Number(HttpStatus.BAD_REQUEST)) return 'BAD_REQUEST';
+    if (status === Number(HttpStatus.TOO_MANY_REQUESTS)) return 'RATE_LIMITED';
     return 'HTTP_ERROR';
   }
 }

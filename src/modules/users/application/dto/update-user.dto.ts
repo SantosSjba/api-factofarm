@@ -1,5 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../../../generated/prisma/client';
 import { UserProfileDto } from './user-profile.dto';

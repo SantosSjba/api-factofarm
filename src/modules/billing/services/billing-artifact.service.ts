@@ -11,11 +11,19 @@ export class BillingArtifactService {
     @Inject(FILE_STORAGE) private readonly storage: IFileStorage,
   ) {}
 
-  async saveText(name: string, mimeType: string, content: string): Promise<string> {
+  async saveText(
+    name: string,
+    mimeType: string,
+    content: string,
+  ): Promise<string> {
     return this.saveBuffer(name, mimeType, Buffer.from(content, 'utf8'));
   }
 
-  async saveBuffer(name: string, mimeType: string, content: Buffer): Promise<string> {
+  async saveBuffer(
+    name: string,
+    mimeType: string,
+    content: Buffer,
+  ): Promise<string> {
     const stored = await this.storage.saveRawBuffer(content, name);
     await this.files.create({
       id: stored.id,

@@ -1,6 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -29,11 +36,21 @@ export class MedicosService {
   async findAll(filters?: MaestroListQueryDto) {
     const where = this.buildWhere(filters);
     if (filters?.page == null) {
-      return this.prisma.medico.findMany({ where, orderBy: { apellidos: 'asc' }, select: selectRow });
+      return this.prisma.medico.findMany({
+        where,
+        orderBy: { apellidos: 'asc' },
+        select: selectRow,
+      });
     }
     const { page, pageSize, skip, take } = paginationArgs(filters);
     const [items, total] = await Promise.all([
-      this.prisma.medico.findMany({ where, orderBy: { apellidos: 'asc' }, skip, take, select: selectRow }),
+      this.prisma.medico.findMany({
+        where,
+        orderBy: { apellidos: 'asc' },
+        skip,
+        take,
+        select: selectRow,
+      }),
       this.prisma.medico.count({ where }),
     ]);
     return buildPaginatedResult(items, total, page, pageSize);
@@ -50,7 +67,12 @@ export class MedicosService {
         },
         select: selectRow,
       });
-      await this.audit.log({ userId: actorId, action: 'CREATE', entity: 'Medico', entityId: created.id });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'Medico',
+        entityId: created.id,
+      });
       return created;
     } catch (err) {
       this.handleKnownError(err);
@@ -58,28 +80,52 @@ export class MedicosService {
   }
 
   async update(id: string, dto: UpdateMedicoDto, actorId?: string) {
-    const current = await this.prisma.medico.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const current = await this.prisma.medico.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
     if (!current) throw new NotFoundException('Médico no encontrado');
     const updated = await this.prisma.medico.update({
       where: { id },
       data: {
         ...(dto.nombres !== undefined ? { nombres: dto.nombres.trim() } : {}),
-        ...(dto.apellidos !== undefined ? { apellidos: dto.apellidos.trim() } : {}),
-        ...(dto.especialidad !== undefined ? { especialidad: dto.especialidad?.trim() || null } : {}),
+        ...(dto.apellidos !== undefined
+          ? { apellidos: dto.apellidos.trim() }
+          : {}),
+        ...(dto.especialidad !== undefined
+          ? { especialidad: dto.especialidad?.trim() || null }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       },
       select: selectRow,
     });
-    await this.audit.log({ userId: actorId, action: 'UPDATE', entity: 'Medico', entityId: id, diff: dto });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPDATE',
+      entity: 'Medico',
+      entityId: id,
+      diff: dto,
+    });
     return updated;
   }
 
   async remove(id: string, actorId?: string) {
-    const current = await this.prisma.medico.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const current = await this.prisma.medico.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
     if (!current) throw new NotFoundException('Médico no encontrado');
     await this.integrity.assertCanDeleteMedico(id);
-    await this.prisma.medico.update({ where: { id }, data: { deletedAt: new Date(), activo: false } });
-    await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'Medico', entityId: id });
+    await this.prisma.medico.update({
+      where: { id },
+      data: { deletedAt: new Date(), activo: false },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'Medico',
+      entityId: id,
+    });
   }
 
   private buildWhere(filters?: MaestroListQueryDto): Prisma.MedicoWhereInput {
@@ -99,7 +145,10 @@ export class MedicosService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe un médico con ese CMP.');
     }
     throw err;

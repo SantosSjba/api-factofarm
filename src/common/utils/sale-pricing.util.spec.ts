@@ -87,9 +87,12 @@ describe('sale-pricing.util', () => {
         },
       ],
     );
-    const sum = lines.reduce((acc, row) => acc.plus(row.unitPrice.times(row.quantity)), new Prisma.Decimal(0));
+    const sum = lines.reduce(
+      (acc, row) => acc.plus(row.unitPrice.times(row.quantity)),
+      new Prisma.Decimal(0),
+    );
     expect(sum.toNumber()).toBeCloseTo(5, 4);
-    expect(lines[0]!.quantity.toString()).toBe('1');
-    expect(lines[1]!.quantity.toString()).toBe('1');
+    expect(lines[0].quantity.toString()).toBe('1');
+    expect(lines[1].quantity.toString()).toBe('1');
   });
 });

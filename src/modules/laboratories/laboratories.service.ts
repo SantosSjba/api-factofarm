@@ -1,6 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -37,7 +44,13 @@ export class LaboratoriesService {
       pageSize: filters.pageSize,
     });
     const [items, total] = await Promise.all([
-      this.prisma.laboratory.findMany({ where, orderBy: { nombre: 'asc' }, skip, take, select: selectRow }),
+      this.prisma.laboratory.findMany({
+        where,
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+        select: selectRow,
+      }),
       this.prisma.laboratory.count({ where }),
     ]);
     return buildPaginatedResult(items, total, page, pageSize);
@@ -46,8 +59,16 @@ export class LaboratoriesService {
   async create(dto: CreateLaboratoryDto, actorId?: string) {
     const nombre = dto.nombre.trim().toUpperCase();
     try {
-      const created = await this.prisma.laboratory.create({ data: { nombre }, select: selectRow });
-      await this.audit.log({ userId: actorId, action: 'CREATE', entity: 'Laboratory', entityId: created.id });
+      const created = await this.prisma.laboratory.create({
+        data: { nombre },
+        select: selectRow,
+      });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'Laboratory',
+        entityId: created.id,
+      });
       return created;
     } catch (err) {
       this.handleKnownError(err);
@@ -55,15 +76,27 @@ export class LaboratoriesService {
   }
 
   async update(id: string, dto: UpdateLaboratoryDto, actorId?: string) {
-    const current = await this.prisma.laboratory.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const current = await this.prisma.laboratory.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
     if (!current) throw new NotFoundException('Laboratorio no encontrado');
     try {
       const updated = await this.prisma.laboratory.update({
         where: { id },
-        data: dto.nombre !== undefined ? { nombre: dto.nombre.trim().toUpperCase() } : {},
+        data:
+          dto.nombre !== undefined
+            ? { nombre: dto.nombre.trim().toUpperCase() }
+            : {},
         select: selectRow,
       });
-      await this.audit.log({ userId: actorId, action: 'UPDATE', entity: 'Laboratory', entityId: id, diff: dto });
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'Laboratory',
+        entityId: id,
+        diff: dto,
+      });
       return updated;
     } catch (err) {
       this.handleKnownError(err);
@@ -71,14 +104,27 @@ export class LaboratoriesService {
   }
 
   async remove(id: string, actorId?: string) {
-    const current = await this.prisma.laboratory.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const current = await this.prisma.laboratory.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
     if (!current) throw new NotFoundException('Laboratorio no encontrado');
     await this.integrity.assertCanDeleteLaboratory(id);
-    await this.prisma.laboratory.update({ where: { id }, data: { deletedAt: new Date() } });
-    await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'Laboratory', entityId: id });
+    await this.prisma.laboratory.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'Laboratory',
+      entityId: id,
+    });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.LaboratoryWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+  ): Prisma.LaboratoryWhereInput {
     const search = filters?.search?.trim();
     return {
       deletedAt: null,
@@ -87,7 +133,10 @@ export class LaboratoriesService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe un laboratorio con ese nombre.');
     }
     throw err;

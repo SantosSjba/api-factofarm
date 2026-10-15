@@ -18,7 +18,9 @@ export class PublicContactController {
   @Public()
   @Post('contact')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @ApiOperation({ summary: 'Solicitud de contacto desde la landing (habilitar cuenta)' })
+  @ApiOperation({
+    summary: 'Solicitud de contacto desde la landing (habilitar cuenta)',
+  })
   submit(@Body() dto: ContactRequestDto) {
     return this.contact.submitLead(dto);
   }
@@ -26,7 +28,9 @@ export class PublicContactController {
   @Public()
   @Post('libro-reclamaciones')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @ApiOperation({ summary: 'Registro en libro de reclamaciones virtual (Ley 29571)' })
+  @ApiOperation({
+    summary: 'Registro en libro de reclamaciones virtual (Ley 29571)',
+  })
   submitComplaint(@Body() dto: ComplaintRequestDto) {
     return this.complaints.submit(dto);
   }

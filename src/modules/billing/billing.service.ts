@@ -1,3 +1,4 @@
+import { safeError } from '../../common/logging/http-logger.config';
 import {
   BadRequestException,
   Injectable,
@@ -19,8 +20,14 @@ import {
   SaleStatus,
   SunatDocumentStatus,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
-import { decryptBillingSecret, encryptBillingSecret } from '../../common/utils/billing-crypto.util';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
+import {
+  decryptBillingSecret,
+  encryptBillingSecret,
+} from '../../common/utils/billing-crypto.util';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import {
   dateRangeBoundsInTimeZone,
@@ -28,7 +35,10 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { EmitDocumentInput, IBillingProvider } from './domain/billing-provider.port';
+import type {
+  EmitDocumentInput,
+  IBillingProvider,
+} from './domain/billing-provider.port';
 import { MockBillingProvider } from './providers/mock-billing.provider';
 import { NubefactBillingProvider } from './providers/nubefact-billing.provider';
 import { FactilizaBillingProvider } from './providers/factiliza-billing.provider';
@@ -37,7 +47,10 @@ import { BillingArtifactService } from './services/billing-artifact.service';
 import { UblBuilderService } from './services/ubl-builder.service';
 import { FactilizaConsultaClient } from './services/factiliza-consulta.client';
 import { getBillingProviderCapabilities } from './utils/billing-capabilities.util';
-import { canEmitElectronicDocuments, hasRealOseConfigured } from './utils/ose-config.util';
+import {
+  canEmitElectronicDocuments,
+  hasRealOseConfigured,
+} from './utils/ose-config.util';
 import { isValidPdfBuffer } from './utils/pdf-buffer.util';
 import { resolveSaleActionFlags } from '../sales/utils/sale-action-rules.util';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -137,7 +150,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async upsertConfig(establishmentId: string, dto: UpsertBillingConfigDto, actorId?: string) {
+  async upsertConfig(
+    establishmentId: string,
+    dto: UpsertBillingConfigDto,
+    actorId?: string,
+  ) {
     const nodeEnv = this.config.get<string>('NODE_ENV');
     const existing = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -162,12 +179,19 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     }
 
     const withoutOse = provider === BillingProviderType.MOCK;
-    const pickText = (incoming: string | undefined, current: string | null | undefined) => {
+    const pickText = (
+      incoming: string | undefined,
+      current: string | null | undefined,
+    ) => {
       if (incoming === undefined) return current ?? null;
       const trimmed = incoming.trim();
       return trimmed || null;
     };
-    const pickBool = (incoming: boolean | undefined, current: boolean | undefined, fallback: boolean) => {
+    const pickBool = (
+      incoming: boolean | undefined,
+      current: boolean | undefined,
+      fallback: boolean,
+    ) => {
       if (incoming !== undefined) return incoming;
       if (current !== undefined) return current;
       return fallback;
@@ -177,20 +201,31 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       establishmentId,
       provider,
       rucEmisor: pickText(dto.rucEmisor, existing?.rucEmisor),
-      razonSocialEmisor: pickText(dto.razonSocialEmisor, existing?.razonSocialEmisor),
+      razonSocialEmisor: pickText(
+        dto.razonSocialEmisor,
+        existing?.razonSocialEmisor,
+      ),
       apiUrl: pickText(dto.apiUrl, existing?.apiUrl),
       consultaApiUrl: pickText(dto.consultaApiUrl, existing?.consultaApiUrl),
       modoSandbox: pickBool(dto.modoSandbox, existing?.modoSandbox, true),
       autoEmitOnSale: withoutOse
         ? false
         : pickBool(dto.autoEmitOnSale, existing?.autoEmitOnSale, true),
-      emitNotaVenta: pickBool(dto.emitNotaVenta, existing?.emitNotaVenta, false),
+      emitNotaVenta: pickBool(
+        dto.emitNotaVenta,
+        existing?.emitNotaVenta,
+        false,
+      ),
       applyDetraccion: withoutOse
         ? false
         : pickBool(dto.applyDetraccion, existing?.applyDetraccion, false),
       autoEmitGuiaOnTransfer: withoutOse
         ? false
-        : pickBool(dto.autoEmitGuiaOnTransfer, existing?.autoEmitGuiaOnTransfer, true),
+        : pickBool(
+            dto.autoEmitGuiaOnTransfer,
+            existing?.autoEmitGuiaOnTransfer,
+            true,
+          ),
     };
 
     // Solo toca secretos si el cliente los envía (evita borrar token al guardar RUC).
@@ -229,7 +264,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return this.getConfig(establishmentId);
   }
 
-  async listDocuments(establishmentId: string, query: BillingDocumentListQueryDto) {
+  async listDocuments(
+    establishmentId: string,
+    query: BillingDocumentListQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.ElectronicDocumentWhereInput = {
       establishmentId,
@@ -278,7 +316,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         taxLines: true,
         responses: { orderBy: { createdAt: 'desc' }, take: 5 },
         sale: { select: { id: true, documentType: true } },
-        relatedDocument: { select: { id: true, documentType: true, serie: true, numero: true } },
+        relatedDocument: {
+          select: { id: true, documentType: true, serie: true, numero: true },
+        },
       },
     });
     if (!doc) throw new NotFoundException('Comprobante no encontrado');
@@ -288,7 +328,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   async getSaleBillingStatus(saleId: string, establishmentId: string) {
     const doc = await this.prisma.electronicDocument.findFirst({
       where: { saleId, establishmentId, deletedAt: null },
-      select: { id: true, sunatStatus: true, sunatCodigo: true, sunatDescripcion: true, serie: true, numero: true },
+      select: {
+        id: true,
+        sunatStatus: true,
+        sunatCodigo: true,
+        sunatDescripcion: true,
+        serie: true,
+        numero: true,
+      },
     });
     return doc
       ? {
@@ -312,7 +359,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       where: { id: saleId, deletedAt: null },
       include: {
         establishment: { select: { id: true, nombre: true } },
-        customer: { select: { nombre: true, numeroDocumento: true, tipoDocumento: true } },
+        customer: {
+          select: { nombre: true, numeroDocumento: true, tipoDocumento: true },
+        },
         items: {
           include: {
             product: {
@@ -320,14 +369,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
                 nombre: true,
                 codigoInterno: true,
                 codigoSunat: true,
-                saleTaxAffectation: { select: { codigo: true, descripcion: true } },
+                saleTaxAffectation: {
+                  select: { codigo: true, descripcion: true },
+                },
                 unit: { select: { codigo: true } },
               },
             },
           },
         },
         _count: { select: { returns: true } },
-        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+        electronicDocument: {
+          select: { id: true, deletedAt: true, sunatStatus: true },
+        },
       },
     });
     if (!sale) return null;
@@ -350,7 +403,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
     const emitable =
       EMITABLE_SALE_TYPES.has(sale.documentType) ||
-      (sale.documentType === SaleDocumentType.NOTA_VENTA && config?.emitNotaVenta);
+      (sale.documentType === SaleDocumentType.NOTA_VENTA &&
+        config?.emitNotaVenta);
     if (!emitable) return null;
     if (!options?.force && config && !config.autoEmitOnSale) return null;
 
@@ -411,7 +465,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           ],
         },
         jobs: {
-          create: { jobType: BillingJobType.EMIT, status: BillingJobStatus.PENDIENTE },
+          create: {
+            jobType: BillingJobType.EMIT,
+            status: BillingJobStatus.PENDIENTE,
+          },
         },
       },
       select: { id: true },
@@ -429,7 +486,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         electronicDocument: { select: { id: true } },
         sale: {
           include: {
-            customer: { select: { nombre: true, numeroDocumento: true, tipoDocumento: true } },
+            customer: {
+              select: {
+                nombre: true,
+                numeroDocumento: true,
+                tipoDocumento: true,
+              },
+            },
             electronicDocument: true,
             items: {
               include: {
@@ -438,7 +501,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
                     nombre: true,
                     codigoInterno: true,
                     codigoSunat: true,
-                    saleTaxAffectation: { select: { codigo: true, descripcion: true } },
+                    saleTaxAffectation: {
+                      select: { codigo: true, descripcion: true },
+                    },
                     unit: { select: { codigo: true } },
                   },
                 },
@@ -478,12 +543,17 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     let subtotal = new Prisma.Decimal(0);
     let igvTotal = new Prisma.Decimal(0);
     let total = new Prisma.Decimal(0);
-    const linePayload: Prisma.ElectronicDocumentLineCreateWithoutElectronicDocumentInput[] = [];
+    const linePayload: Prisma.ElectronicDocumentLineCreateWithoutElectronicDocumentInput[] =
+      [];
 
     for (const [index, returnItem] of saleReturn.items.entries()) {
-      const saleItem = sale.items.find((row) => row.id === returnItem.saleItemId);
+      const saleItem = sale.items.find(
+        (row) => row.id === returnItem.saleItemId,
+      );
       if (!saleItem) continue;
-      const ratio = new Prisma.Decimal(returnItem.cantidad).div(saleItem.cantidad);
+      const ratio = new Prisma.Decimal(returnItem.cantidad).div(
+        saleItem.cantidad,
+      );
       const lineSubtotal = saleItem.subtotalLinea.times(ratio);
       const lineIgv = saleItem.igvLinea.times(ratio);
       const lineTotal = saleItem.totalLinea.times(ratio);
@@ -536,7 +606,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           ],
         },
         jobs: {
-          create: { jobType: BillingJobType.EMIT, status: BillingJobStatus.PENDIENTE },
+          create: {
+            jobType: BillingJobType.EMIT,
+            status: BillingJobStatus.PENDIENTE,
+          },
         },
       },
       select: { id: true },
@@ -553,7 +626,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, deletedAt: null },
       include: {
-        customer: { select: { nombre: true, numeroDocumento: true, tipoDocumento: true } },
+        customer: {
+          select: { nombre: true, numeroDocumento: true, tipoDocumento: true },
+        },
         electronicDocument: true,
       },
     });
@@ -577,8 +652,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
     const total = new Prisma.Decimal(dto.total);
     if (total.lte(0)) return null;
-    const subtotal = total.div(1.18).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
-    const igvTotal = total.minus(subtotal).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
+    const subtotal = total
+      .div(1.18)
+      .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
+    const igvTotal = total
+      .minus(subtotal)
+      .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
     const unitPrice = total;
     const { serie, numero } = await this.resolveDebitNoteNumber(
       sale.establishmentId,
@@ -628,7 +707,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           ],
         },
         jobs: {
-          create: { jobType: BillingJobType.EMIT, status: BillingJobStatus.PENDIENTE },
+          create: {
+            jobType: BillingJobType.EMIT,
+            status: BillingJobStatus.PENDIENTE,
+          },
         },
       },
       select: { id: true },
@@ -647,7 +729,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         estado: true,
         archivedAt: true,
         _count: { select: { returns: true } },
-        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+        electronicDocument: {
+          select: { id: true, deletedAt: true, sunatStatus: true },
+        },
       },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
@@ -698,13 +782,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       where: { establishmentId },
       select: { provider: true, apiTokenEncrypted: true },
     });
-    return canEmitElectronicDocuments(config, this.config.get<string>('NODE_ENV'));
+    return canEmitElectronicDocuments(
+      config,
+      this.config.get<string>('NODE_ENV'),
+    );
   }
 
   async retryDocument(id: string, establishmentId: string, actorId?: string) {
     const doc = await this.ensureDocument(id, establishmentId);
     if (doc.sunatStatus !== SunatDocumentStatus.RECHAZADO) {
-      throw new BadRequestException('Solo se reintentan comprobantes rechazados');
+      throw new BadRequestException(
+        'Solo se reintentan comprobantes rechazados',
+      );
     }
     await this.prisma.billingJob.create({
       data: {
@@ -713,7 +802,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         status: BillingJobStatus.PENDIENTE,
       },
     });
-    await this.audit.log({ userId: actorId, action: 'RETRY', entity: 'ElectronicDocument', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'RETRY',
+      entity: 'ElectronicDocument',
+      entityId: id,
+    });
     setImmediate(() => void this.processPendingJobs());
     return { ok: true };
   }
@@ -733,7 +827,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.billingJob.updateMany({
       where: {
         electronicDocumentId: doc.id,
-        status: { in: [BillingJobStatus.PENDIENTE, BillingJobStatus.PROCESANDO] },
+        status: {
+          in: [BillingJobStatus.PENDIENTE, BillingJobStatus.PROCESANDO],
+        },
       },
       data: { status: BillingJobStatus.FALLIDO, lastError: 'Venta anulada' },
     });
@@ -745,7 +841,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         doc.sunatStatus === SunatDocumentStatus.CONTINGENCIA);
 
     if (needsOseVoid) {
-      const voided = await this.voidDocument(doc.id, establishmentId, reason, actorId);
+      const voided = await this.voidDocument(
+        doc.id,
+        establishmentId,
+        reason,
+        actorId,
+      );
       return voided.id;
     }
 
@@ -753,11 +854,21 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       where: { id: doc.id },
       data: { sunatStatus: SunatDocumentStatus.ANULADO, voidReason: reason },
     });
-    await this.audit.log({ userId: actorId, action: 'VOID', entity: 'ElectronicDocument', entityId: doc.id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'VOID',
+      entity: 'ElectronicDocument',
+      entityId: doc.id,
+    });
     return doc.id;
   }
 
-  async voidDocument(id: string, establishmentId: string, reason: string, actorId?: string) {
+  async voidDocument(
+    id: string,
+    establishmentId: string,
+    reason: string,
+    actorId?: string,
+  ) {
     const doc = await this.ensureDocument(id, establishmentId);
     const caps = await this.billingCapabilitiesFor(establishmentId);
     if (!caps.supportsVoidDocument) {
@@ -767,7 +878,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       );
     }
     const provider = await this.resolveProvider(doc.establishmentId);
-    if (!doc.externalId) throw new BadRequestException('Comprobante sin ID externo OSE');
+    if (!doc.externalId)
+      throw new BadRequestException('Comprobante sin ID externo OSE');
 
     const result = await provider.voidDocument({
       externalId: doc.externalId,
@@ -796,11 +908,20 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    await this.audit.log({ userId: actorId, action: 'VOID', entity: 'ElectronicDocument', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'VOID',
+      entity: 'ElectronicDocument',
+      entityId: id,
+    });
     return this.getDocument(id, establishmentId);
   }
 
-  async sendDailySummary(establishmentId: string, dto: DailySummaryDto, actorId?: string) {
+  async sendDailySummary(
+    establishmentId: string,
+    dto: DailySummaryDto,
+    actorId?: string,
+  ) {
     const caps = await this.billingCapabilitiesFor(establishmentId);
     if (!caps.supportsDailySummary) {
       throw new BadRequestException(
@@ -876,7 +997,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         // Claim atómico: solo una instancia gana el job (evita doble emisión OSE).
         const claimed = await this.prisma.billingJob.updateMany({
           where: { id: candidate.id, status: BillingJobStatus.PENDIENTE },
-          data: { status: BillingJobStatus.PROCESANDO, attempts: { increment: 1 } },
+          data: {
+            status: BillingJobStatus.PROCESANDO,
+            attempts: { increment: 1 },
+          },
         });
         if (claimed.count !== 1) continue;
 
@@ -907,10 +1031,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           await this.processEmitJob(job.electronicDocument);
           await this.prisma.billingJob.update({
             where: { id: job.id },
-            data: { status: BillingJobStatus.COMPLETADO, processedAt: new Date() },
+            data: {
+              status: BillingJobStatus.COMPLETADO,
+              processedAt: new Date(),
+            },
           });
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Error desconocido';
+          const message =
+            err instanceof Error ? err.message : 'Error desconocido';
           await this.prisma.billingJob.update({
             where: { id: job.id },
             data: {
@@ -938,8 +1066,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
       await this.retryRejectedAutomatically();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Cola de facturación: error de base de datos (${message}). Se reintentará.`);
+      this.logger.warn({
+        event: 'billing_queue_failed',
+        retry: true,
+        error: safeError(err),
+      });
     } finally {
       this.processing = false;
     }
@@ -947,7 +1078,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   private async processEmitJob(
     doc: Prisma.ElectronicDocumentGetPayload<{
-      include: { lines: true; establishment: { select: { id: true; nombre: true } } };
+      include: {
+        lines: true;
+        establishment: { select: { id: true; nombre: true } };
+      };
     }>,
   ) {
     await this.prisma.electronicDocument.update({
@@ -962,15 +1096,24 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const emisorRuc = config?.rucEmisor ?? '20100000001';
     const emisorRazon = config?.razonSocialEmisor ?? doc.establishment.nombre;
 
-    let relatedRef: { documentType: ElectronicDocumentType; serie: string; numero: string } | null =
-      null;
-    if (doc.documentType === ElectronicDocumentType.NOTA_CREDITO && doc.relatedDocumentId) {
+    let relatedRef: {
+      documentType: ElectronicDocumentType;
+      serie: string;
+      numero: string;
+    } | null = null;
+    if (
+      doc.documentType === ElectronicDocumentType.NOTA_CREDITO &&
+      doc.relatedDocumentId
+    ) {
       relatedRef = await this.prisma.electronicDocument.findUnique({
         where: { id: doc.relatedDocumentId },
         select: { documentType: true, serie: true, numero: true },
       });
     }
-    if (doc.documentType === ElectronicDocumentType.NOTA_DEBITO && doc.relatedDocumentId) {
+    if (
+      doc.documentType === ElectronicDocumentType.NOTA_DEBITO &&
+      doc.relatedDocumentId
+    ) {
       relatedRef = await this.prisma.electronicDocument.findUnique({
         where: { id: doc.relatedDocumentId },
         select: { documentType: true, serie: true, numero: true },
@@ -993,9 +1136,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const customerAddress = await this.resolveCustomerAddress(doc);
     let ublXml: string;
     let relatedDocument: EmitDocumentInput['relatedDocument'];
-    if (doc.documentType === ElectronicDocumentType.NOTA_CREDITO && relatedRef) {
+    if (
+      doc.documentType === ElectronicDocumentType.NOTA_CREDITO &&
+      relatedRef
+    ) {
       const relatedType =
-        relatedRef.documentType === ElectronicDocumentType.FACTURA ? 'FACTURA' : 'BOLETA';
+        relatedRef.documentType === ElectronicDocumentType.FACTURA
+          ? 'FACTURA'
+          : 'BOLETA';
       relatedDocument = {
         documentType: relatedType,
         serie: relatedRef.serie,
@@ -1020,9 +1168,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         discrepancyReason: 'Devolución de bienes',
         lines: lineInputs,
       });
-    } else if (doc.documentType === ElectronicDocumentType.NOTA_DEBITO && relatedRef) {
+    } else if (
+      doc.documentType === ElectronicDocumentType.NOTA_DEBITO &&
+      relatedRef
+    ) {
       const relatedType =
-        relatedRef.documentType === ElectronicDocumentType.FACTURA ? 'FACTURA' : 'BOLETA';
+        relatedRef.documentType === ElectronicDocumentType.FACTURA
+          ? 'FACTURA'
+          : 'BOLETA';
       relatedDocument = {
         documentType: relatedType,
         serie: relatedRef.serie,
@@ -1105,9 +1258,16 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       })),
       ublXml,
       relatedDocument,
-      creditNoteReasonCode: relatedDocument && doc.documentType === ElectronicDocumentType.NOTA_CREDITO ? '09' : undefined,
+      creditNoteReasonCode:
+        relatedDocument &&
+        doc.documentType === ElectronicDocumentType.NOTA_CREDITO
+          ? '09'
+          : undefined,
       debitNoteReasonCode:
-        relatedDocument && doc.documentType === ElectronicDocumentType.NOTA_DEBITO ? '02' : undefined,
+        relatedDocument &&
+        doc.documentType === ElectronicDocumentType.NOTA_DEBITO
+          ? '02'
+          : undefined,
       voidReasonText: doc.voidReason ?? undefined,
     };
 
@@ -1126,8 +1286,15 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    if (doc.documentType === ElectronicDocumentType.GUIA_REMISION_REMITENTE && doc.inventoryTransferId) {
-      const despatch = await this.buildDespatchFromTransfer(doc.inventoryTransferId, emisorRuc, emisorRazon);
+    if (
+      doc.documentType === ElectronicDocumentType.GUIA_REMISION_REMITENTE &&
+      doc.inventoryTransferId
+    ) {
+      const despatch = await this.buildDespatchFromTransfer(
+        doc.inventoryTransferId,
+        emisorRuc,
+        emisorRazon,
+      );
       if (despatch) input.despatch = despatch;
     }
 
@@ -1159,7 +1326,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.electronicDocument.update({
       where: { id: doc.id },
       data: {
-        sunatStatus: doc.esContingencia ? SunatDocumentStatus.CONTINGENCIA : result.sunatStatus,
+        sunatStatus: doc.esContingencia
+          ? SunatDocumentStatus.CONTINGENCIA
+          : result.sunatStatus,
         sunatCodigo: result.sunatCodigo,
         sunatDescripcion: result.sunatDescripcion,
         externalId: result.externalId,
@@ -1180,7 +1349,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const sunatStatus = doc.esContingencia ? SunatDocumentStatus.CONTINGENCIA : result.sunatStatus;
+    const sunatStatus = doc.esContingencia
+      ? SunatDocumentStatus.CONTINGENCIA
+      : result.sunatStatus;
     await this.notifyBillingRealtime(doc.id, {
       sunatStatus,
       sunatCodigo: result.sunatCodigo,
@@ -1228,7 +1399,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return getBillingProviderCapabilities(provider, nodeEnv);
   }
 
-  private async resolveProvider(establishmentId: string): Promise<IBillingProvider> {
+  private async resolveProvider(
+    establishmentId: string,
+  ): Promise<IBillingProvider> {
     const nodeEnv = this.config.get<string>('NODE_ENV');
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -1253,7 +1426,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const token = decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey());
+    const token = decryptBillingSecret(
+      config.apiTokenEncrypted,
+      this.encryptionKey(),
+    );
     const emisor = {
       ruc: config.rucEmisor?.trim() || '',
       razonSocial: config.razonSocialEmisor?.trim() || '',
@@ -1275,7 +1451,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async resolveCustomerAddress(
-    doc: Prisma.ElectronicDocumentGetPayload<{ select: { saleId: true; saleReturnId: true } }>,
+    doc: Prisma.ElectronicDocumentGetPayload<{
+      select: { saleId: true; saleReturnId: true };
+    }>,
   ): Promise<string> {
     const loadAddress = async (customerId: string | null | undefined) => {
       if (!customerId) return null;
@@ -1307,7 +1485,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private mapSaleDocumentType(type: SaleDocumentType): ElectronicDocumentType {
-    if (type === SaleDocumentType.FACTURA) return ElectronicDocumentType.FACTURA;
+    if (type === SaleDocumentType.FACTURA)
+      return ElectronicDocumentType.FACTURA;
     if (type === SaleDocumentType.BOLETA) return ElectronicDocumentType.BOLETA;
     return ElectronicDocumentType.NOTA_VENTA;
   }
@@ -1328,7 +1507,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         select: { numero: true },
       })) ??
       (await this.prisma.establishmentSeries.findFirst({
-        where: { establishmentId, documentType: DocumentSeriesType.NOTA_CREDITO },
+        where: {
+          establishmentId,
+          documentType: DocumentSeriesType.NOTA_CREDITO,
+        },
         orderBy: { numero: 'asc' },
         select: { numero: true },
       }));
@@ -1342,7 +1524,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       orderBy: { numero: 'desc' },
       select: { numero: true },
     });
-    const next = String((Number.parseInt(last?.numero ?? '0', 10) || 0) + 1).padStart(8, '0');
+    const next = String(
+      (Number.parseInt(last?.numero ?? '0', 10) || 0) + 1,
+    ).padStart(8, '0');
     return { serie, numero: next };
   }
 
@@ -1362,7 +1546,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         select: { numero: true },
       })) ??
       (await this.prisma.establishmentSeries.findFirst({
-        where: { establishmentId, documentType: DocumentSeriesType.NOTA_DEBITO },
+        where: {
+          establishmentId,
+          documentType: DocumentSeriesType.NOTA_DEBITO,
+        },
         orderBy: { numero: 'asc' },
         select: { numero: true },
       }));
@@ -1376,7 +1563,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       orderBy: { numero: 'desc' },
       select: { numero: true },
     });
-    const next = String((Number.parseInt(last?.numero ?? '0', 10) || 0) + 1).padStart(8, '0');
+    const next = String(
+      (Number.parseInt(last?.numero ?? '0', 10) || 0) + 1,
+    ).padStart(8, '0');
     return { serie, numero: next };
   }
 
@@ -1391,7 +1580,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     if (!customer) {
       return {
         tipoDoc: saleDocType === SaleDocumentType.FACTURA ? '6' : '0',
-        numeroDoc: saleDocType === SaleDocumentType.FACTURA ? '00000000000' : '00000000',
+        numeroDoc:
+          saleDocType === SaleDocumentType.FACTURA ? '00000000000' : '00000000',
         nombre: 'CLIENTE VARIOS',
       };
     }
@@ -1425,7 +1615,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         taxLines: true;
         responses: true;
         sale: { select: { id: true; documentType: true } };
-        relatedDocument: { select: { id: true; documentType: true; serie: true; numero: true } };
+        relatedDocument: {
+          select: { id: true; documentType: true; serie: true; numero: true };
+        };
       };
     }>,
   ) {
@@ -1498,7 +1690,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())
       : null;
     if (!token) {
-      throw new BadRequestException('Configure token Factiliza en comprobante electrónico para consultar RUC');
+      throw new BadRequestException(
+        'Configure token Factiliza en comprobante electrónico para consultar RUC',
+      );
     }
     const info = await this.factilizaConsulta.validateRuc(
       config?.consultaApiUrl ?? null,
@@ -1526,7 +1720,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       ? decryptBillingSecret(config.apiTokenEncrypted, this.encryptionKey())
       : null;
     if (!token) {
-      throw new BadRequestException('Configure token Factiliza en comprobante electrónico para consultar DNI');
+      throw new BadRequestException(
+        'Configure token Factiliza en comprobante electrónico para consultar DNI',
+      );
     }
     const info = await this.factilizaConsulta.validateDni(
       config?.consultaApiUrl ?? null,
@@ -1535,14 +1731,20 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     );
     const nombre =
       info.nombre_completo?.trim() ||
-      [info.nombres, info.apellido_paterno, info.apellido_materno].filter(Boolean).join(' ');
+      [info.nombres, info.apellido_paterno, info.apellido_materno]
+        .filter(Boolean)
+        .join(' ');
     return {
       dni: info.numero,
       nombre,
     };
   }
 
-  async refreshDocumentStatus(id: string, establishmentId: string, actorId?: string) {
+  async refreshDocumentStatus(
+    id: string,
+    establishmentId: string,
+    actorId?: string,
+  ) {
     const doc = await this.ensureDocument(id, establishmentId);
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -1554,7 +1756,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const provider = await this.resolveProvider(establishmentId);
       const result = doc.externalId
         ? await provider.getStatus(doc.externalId)
-        : { sunatStatus: doc.sunatStatus, sunatCodigo: doc.sunatCodigo ?? '0', sunatDescripcion: doc.sunatDescripcion ?? '' };
+        : {
+            sunatStatus: doc.sunatStatus,
+            sunatCodigo: doc.sunatCodigo ?? '0',
+            sunatDescripcion: doc.sunatDescripcion ?? '',
+          };
       return this.applyStatusUpdate(doc.id, result, actorId);
     }
 
@@ -1571,14 +1777,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const tipoDoc = tipoDocMap[doc.documentType] ?? '03';
     const tz = await this.resolveTimeZone(establishmentId);
     const fecha = formatDateYmdInTimeZone(doc.emittedAt ?? doc.createdAt, tz);
-    const cpe = await this.factilizaConsulta.queryCpeStatus(config.consultaApiUrl, token, {
-      rucEmisor: config.rucEmisor,
-      tipoDoc,
-      serie: doc.serie,
-      numero: doc.numero,
-      fechaEmision: fecha,
-      total: Number(doc.total.toString()),
-    });
+    const cpe = await this.factilizaConsulta.queryCpeStatus(
+      config.consultaApiUrl,
+      token,
+      {
+        rucEmisor: config.rucEmisor,
+        tipoDoc,
+        serie: doc.serie,
+        numero: doc.numero,
+        fechaEmision: fecha,
+        total: Number(doc.total.toString()),
+      },
+    );
     const codigo = cpe.comprobante_estado_codigo ?? '0';
     const sunatStatus =
       codigo === '1' || codigo === '0'
@@ -1591,7 +1801,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       {
         sunatStatus,
         sunatCodigo: codigo,
-        sunatDescripcion: cpe.comprobante_estado_descripcion ?? 'Consulta SUNAT',
+        sunatDescripcion:
+          cpe.comprobante_estado_descripcion ?? 'Consulta SUNAT',
       },
       actorId,
     );
@@ -1599,7 +1810,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   private async applyStatusUpdate(
     id: string,
-    result: { sunatStatus: SunatDocumentStatus; sunatCodigo: string; sunatDescripcion: string },
+    result: {
+      sunatStatus: SunatDocumentStatus;
+      sunatCodigo: string;
+      sunatDescripcion: string;
+    },
     actorId?: string,
   ) {
     await this.prisma.electronicDocument.update({
@@ -1610,14 +1825,23 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         sunatDescripcion: result.sunatDescripcion,
       },
     });
-    await this.audit.log({ userId: actorId, action: 'QUERY_STATUS', entity: 'ElectronicDocument', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'QUERY_STATUS',
+      entity: 'ElectronicDocument',
+      entityId: id,
+    });
     await this.notifyBillingRealtime(id, result);
     return { ok: true, ...result };
   }
 
   private async notifyBillingRealtime(
     docId: string,
-    result: { sunatStatus: SunatDocumentStatus; sunatCodigo: string; sunatDescripcion: string },
+    result: {
+      sunatStatus: SunatDocumentStatus;
+      sunatCodigo: string;
+      sunatDescripcion: string;
+    },
   ) {
     const doc = await this.prisma.electronicDocument.findUnique({
       where: { id: docId },
@@ -1680,7 +1904,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         electronicDocument: { select: { id: true } },
       },
     });
-    if (!transfer || transfer.electronicDocument) return transfer?.electronicDocument?.id ?? null;
+    if (!transfer || transfer.electronicDocument)
+      return transfer?.electronicDocument?.id ?? null;
 
     const establishmentId = transfer.fromWarehouse.establishmentId;
     const config = await this.prisma.establishmentBillingConfig.findUnique({
@@ -1724,7 +1949,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           })),
         },
         jobs: {
-          create: { jobType: BillingJobType.EMIT, status: BillingJobStatus.PENDIENTE },
+          create: {
+            jobType: BillingJobType.EMIT,
+            status: BillingJobStatus.PENDIENTE,
+          },
         },
       },
       select: { id: true },
@@ -1744,16 +1972,24 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
     if (!transfer) throw new NotFoundException('Transferencia no encontrada');
     if (transfer.fromWarehouse.establishmentId !== establishmentId) {
-      throw new BadRequestException('La transferencia no pertenece a su establecimiento');
+      throw new BadRequestException(
+        'La transferencia no pertenece a su establecimiento',
+      );
     }
     const docId =
-      transfer.electronicDocument?.id ?? (await this.scheduleEmitFromTransfer(transferId));
-    if (!docId) throw new BadRequestException('No se pudo programar la guía de remisión');
+      transfer.electronicDocument?.id ??
+      (await this.scheduleEmitFromTransfer(transferId));
+    if (!docId)
+      throw new BadRequestException('No se pudo programar la guía de remisión');
     await this.processPendingJobs();
     return this.getDocument(docId, establishmentId);
   }
 
-  async emitSpecialDocument(establishmentId: string, dto: EmitSpecialDocumentDto, actorId?: string) {
+  async emitSpecialDocument(
+    establishmentId: string,
+    dto: EmitSpecialDocumentDto,
+    actorId?: string,
+  ) {
     const caps = await this.billingCapabilitiesFor(establishmentId);
     const blocked = caps.unsupportedSpecialDocuments.find(
       (row) => row.documentType === dto.documentType,
@@ -1766,7 +2002,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       RETENCION: DocumentSeriesType.COMPROBANTE_RETENCION_ELECTRONICA,
       PERCEPCION: DocumentSeriesType.COMPROBANTE_PERCEPCION_ELECTRONICA,
       LIQUIDACION_COMPRA: DocumentSeriesType.LIQUIDACION_COMPRA,
-      GUIA_REMISION_TRANSPORTISTA: DocumentSeriesType.GUIA_REMISION_TRANSPORTISTA,
+      GUIA_REMISION_TRANSPORTISTA:
+        DocumentSeriesType.GUIA_REMISION_TRANSPORTISTA,
     };
     const preferredSerieMap: Record<string, string> = {
       RETENCION: 'R001',
@@ -1822,7 +2059,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           ],
         },
         jobs: {
-          create: { jobType: BillingJobType.EMIT, status: BillingJobStatus.PENDIENTE },
+          create: {
+            jobType: BillingJobType.EMIT,
+            status: BillingJobStatus.PENDIENTE,
+          },
         },
       },
       select: { id: true },
@@ -1846,7 +2086,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   ) {
     const series =
       (await this.prisma.establishmentSeries.findFirst({
-        where: { establishmentId, documentType: seriesType, numero: preferredSerie },
+        where: {
+          establishmentId,
+          documentType: seriesType,
+          numero: preferredSerie,
+        },
         select: { numero: true },
       })) ??
       (await this.prisma.establishmentSeries.findFirst({
@@ -1860,7 +2104,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       orderBy: { numero: 'desc' },
       select: { numero: true },
     });
-    const next = String((Number.parseInt(last?.numero ?? '0', 10) || 0) + 1).padStart(8, '0');
+    const next = String(
+      (Number.parseInt(last?.numero ?? '0', 10) || 0) + 1,
+    ).padStart(8, '0');
     return { serie, numero: next };
   }
 
@@ -1907,8 +2153,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
     const fromEst = transfer.fromWarehouse.establishment;
     const toEst = transfer.toWarehouse.establishment;
-    const sameEstablishment = transfer.fromWarehouse.establishmentId === transfer.toWarehouse.establishmentId;
-    const modalidad: 'MISMA_EMPRESA' | 'PRIVADO' = sameEstablishment ? 'MISMA_EMPRESA' : 'PRIVADO';
+    const sameEstablishment =
+      transfer.fromWarehouse.establishmentId ===
+      transfer.toWarehouse.establishmentId;
+    const modalidad: 'MISMA_EMPRESA' | 'PRIVADO' = sameEstablishment
+      ? 'MISMA_EMPRESA'
+      : 'PRIVADO';
     const pesoBruto = transfer.items.reduce(
       (sum, item) => sum + Number(item.cantidad.toString()),
       0,
@@ -1919,10 +2169,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       motivoTraslado: '04',
       partidaUbigeo: fromEst.districtId ?? '150101',
       partidaDireccion:
-        fromEst.direccionFiscal ?? fromEst.direccionComercial ?? transfer.fromWarehouse.nombre,
+        fromEst.direccionFiscal ??
+        fromEst.direccionComercial ??
+        transfer.fromWarehouse.nombre,
       llegadaUbigeo: toEst.districtId ?? '150101',
       llegadaDireccion:
-        toEst.direccionFiscal ?? toEst.direccionComercial ?? transfer.toWarehouse.nombre,
+        toEst.direccionFiscal ??
+        toEst.direccionComercial ??
+        transfer.toWarehouse.nombre,
       pesoBrutoTotal: Math.max(pesoBruto, 1),
       numeroBultos: transfer.items.length,
       destinatarioTipoDoc: '6',

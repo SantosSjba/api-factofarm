@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, type RedisClientType } from 'redis';
+import { safeError } from '../logging/http-logger.config';
 import { namespacedCacheKey } from './cache-key.util';
 
 type CacheEntry<T> = { value: T; expiresAt: number };
@@ -16,16 +17,25 @@ export class CacheService implements OnModuleDestroy {
 
   constructor(config: ConfigService) {
     this.defaultTtlMs = config.get<number>('CACHE_TTL_MS', 300_000);
-    this.keyPrefix = config.get<string>('REDIS_KEY_PREFIX')?.trim() || 'factofarm';
+    this.keyPrefix =
+      config.get<string>('REDIS_KEY_PREFIX')?.trim() || 'factofarm';
     const redisUrl = config.get<string>('REDIS_URL')?.trim();
     if (redisUrl) {
       this.redis = createClient({ url: redisUrl });
-      this.redis.on('error', (err) => this.logger.warn(`Redis: ${err.message}`));
+      this.redis.on('error', (err: unknown) =>
+        this.logger.warn({ event: 'redis_error', error: safeError(err) }),
+      );
       void this.redis
         .connect()
-        .then(() => this.logger.log(`Redis cache listo (prefijo ${this.keyPrefix}:)`))
-        .catch((err) => {
-          this.logger.warn(`Redis no disponible, fallback memoria: ${err.message}`);
+        .then(() =>
+          this.logger.log(`Redis cache listo (prefijo ${this.keyPrefix}:)`),
+        )
+        .catch((err: unknown) => {
+          this.logger.warn({
+            event: 'redis_unavailable',
+            fallback: 'memory',
+            error: safeError(err),
+          });
         });
     }
     this.sweeper = setInterval(() => this.evictExpired(), 60_000);
@@ -60,7 +70,11 @@ export class CacheService implements OnModuleDestroy {
     return entry.value as T;
   }
 
-  async set<T>(key: string, value: T, ttlMs = this.defaultTtlMs): Promise<void> {
+  async set<T>(
+    key: string,
+    value: T,
+    ttlMs = this.defaultTtlMs,
+  ): Promise<void> {
     if (this.redis?.isOpen) {
       await this.redis.set(this.k(key), JSON.stringify(value), { PX: ttlMs });
       return;
@@ -76,7 +90,11 @@ export class CacheService implements OnModuleDestroy {
     this.store.delete(namespaced);
   }
 
-  async getOrSet<T>(key: string, factory: () => Promise<T>, ttlMs?: number): Promise<T> {
+  async getOrSet<T>(
+    key: string,
+    factory: () => Promise<T>,
+    ttlMs?: number,
+  ): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== undefined) return cached;
     const value = await factory();

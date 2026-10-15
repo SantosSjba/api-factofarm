@@ -1,4 +1,8 @@
-import { encodeCursor, decodeCursor, buildCursorPaginatedResult } from './cursor-pagination.dto';
+import {
+  encodeCursor,
+  decodeCursor,
+  buildCursorPaginatedResult,
+} from './cursor-pagination.dto';
 
 describe('cursor-pagination', () => {
   it('encode/decode cursor roundtrip', () => {
@@ -14,7 +18,9 @@ describe('cursor-pagination', () => {
       { id: '1', createdAt: new Date('2026-06-12T08:00:00.000Z') },
       { id: '0', createdAt: new Date('2026-06-12T07:00:00.000Z') },
     ];
-    const page = buildCursorPaginatedResult(rows, 2, (r) => encodeCursor(r.createdAt, r.id));
+    const page = buildCursorPaginatedResult(rows, 2, (r) =>
+      encodeCursor(r.createdAt, r.id),
+    );
     expect(page.items).toHaveLength(2);
     expect(page.nextCursor).toBeTruthy();
   });

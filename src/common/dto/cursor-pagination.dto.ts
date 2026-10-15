@@ -3,7 +3,10 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CursorPaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Cursor opaco (base64url) del último ítem de la página anterior' })
+  @ApiPropertyOptional({
+    description:
+      'Cursor opaco (base64url) del último ítem de la página anterior',
+  })
   @IsOptional()
   @IsString()
   cursor?: string;
@@ -27,7 +30,9 @@ export function encodeCursor(createdAt: Date, id: string): string {
   return Buffer.from(`${createdAt.toISOString()}|${id}`).toString('base64url');
 }
 
-export function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+export function decodeCursor(
+  cursor: string,
+): { createdAt: Date; id: string } | null {
   try {
     const raw = Buffer.from(cursor, 'base64url').toString('utf8');
     const sep = raw.lastIndexOf('|');

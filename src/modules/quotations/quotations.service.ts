@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, QuotationStatus } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -56,7 +59,11 @@ export class QuotationsService {
       include: {
         customer: { select: { id: true, nombre: true } },
         warehouse: { select: { id: true, nombre: true } },
-        items: { include: { product: { select: { nombre: true, codigoInterno: true } } } },
+        items: {
+          include: {
+            product: { select: { nombre: true, codigoInterno: true } },
+          },
+        },
       },
     });
     if (!row) throw new NotFoundException('Cotización no encontrada');
@@ -81,7 +88,12 @@ export class QuotationsService {
     };
   }
 
-  async create(establishmentId: string, sellerId: string, dto: CreateQuotationDto, actor: JwtRequestUser) {
+  async create(
+    establishmentId: string,
+    sellerId: string,
+    dto: CreateQuotationDto,
+    actor: JwtRequestUser,
+  ) {
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: dto.warehouseId, establishmentId, deletedAt: null },
@@ -108,7 +120,8 @@ export class QuotationsService {
           saleTaxAffectation: { select: { codigo: true } },
         },
       });
-      if (!product) throw new NotFoundException(`Producto ${line.productId} no encontrado`);
+      if (!product)
+        throw new NotFoundException(`Producto ${line.productId} no encontrado`);
 
       const unitPrice = line.unitPrice
         ? new Prisma.Decimal(line.unitPrice)
@@ -121,7 +134,9 @@ export class QuotationsService {
         taxCodigo: product.saleTaxAffectation.codigo,
         discountType: line.discountType,
         discountValue:
-          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+          line.discountValue !== undefined
+            ? new Prisma.Decimal(line.discountValue)
+            : null,
       });
 
       subtotal = subtotal.plus(totals.subtotalLinea);
@@ -134,7 +149,9 @@ export class QuotationsService {
         precioUnitario: unitPrice,
         discountType: line.discountType ?? null,
         discountValue:
-          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+          line.discountValue !== undefined
+            ? new Prisma.Decimal(line.discountValue)
+            : null,
         subtotalLinea: totals.subtotalLinea,
         igvLinea: totals.igvLinea,
         totalLinea: totals.totalLinea,

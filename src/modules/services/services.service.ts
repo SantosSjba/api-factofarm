@@ -1,6 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { actorFromJwt, assertTenantAccess, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  assertTenantAccess,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -71,16 +81,24 @@ export class ServicesService {
         searchable.push({ nombre: { contains: search, mode: 'insensitive' } });
       }
       if (field === 'all' || field === 'codigoInterno') {
-        searchable.push({ codigoInterno: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoInterno: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'codigoBarra') {
-        searchable.push({ codigoBarra: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoBarra: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'codigoBusqueda') {
-        searchable.push({ codigoBusqueda: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoBusqueda: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'descripcion') {
-        searchable.push({ descripcion: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          descripcion: { contains: search, mode: 'insensitive' },
+        });
       }
     }
 
@@ -164,7 +182,10 @@ export class ServicesService {
   listProductLocations(actor?: JwtRequestUser) {
     const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     return this.prisma.productLocation.findMany({
-      where: { deletedAt: null, ...(actor ? { establishment: tenantFilter } : {}) },
+      where: {
+        deletedAt: null,
+        ...(actor ? { establishment: tenantFilter } : {}),
+      },
       orderBy: [{ establishmentId: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,
@@ -176,14 +197,23 @@ export class ServicesService {
 
   async listHistoryStock(id: string, actor?: JwtRequestUser) {
     const exists = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      where: {
+        id,
+        deletedAt: null,
+        ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      },
       select: { id: true, tenantId: true },
     });
     if (!exists) throw new NotFoundException('Servicio no encontrado');
     if (actor) {
       assertTenantAccess(actorFromJwt(actor), exists.tenantId);
     }
-    return [] as { warehouseId: string; ubicacion: string; stock: string; series: string }[];
+    return [] as {
+      warehouseId: string;
+      ubicacion: string;
+      stock: string;
+      series: string;
+    }[];
   }
 
   async create(dto: CreateServiceDto, actor?: JwtRequestUser) {
@@ -220,7 +250,9 @@ export class ServicesService {
     });
     if (!current) throw new NotFoundException('Servicio no encontrado');
 
-    const unitId = await this.resolveServiceUnitId(dto.unitId ?? current.unitId);
+    const unitId = await this.resolveServiceUnitId(
+      dto.unitId ?? current.unitId,
+    );
     await this.validateReferences(dto, tenantId);
 
     await this.prisma.$transaction(async (tx) => {
@@ -253,10 +285,17 @@ export class ServicesService {
       select: { id: true },
     });
     if (!current) throw new NotFoundException('Servicio no encontrado');
-    await this.prisma.service.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.service.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
-  async updateStatus(id: string, dto: UpdateServiceStatusDto, actor?: JwtRequestUser) {
+  async updateStatus(
+    id: string,
+    dto: UpdateServiceStatusDto,
+    actor?: JwtRequestUser,
+  ) {
     const tenantId = this.requireTenant(actor);
     const row = await this.prisma.service.findFirst({
       where: { id, deletedAt: null, tenantId },
@@ -270,7 +309,11 @@ export class ServicesService {
     return this.getByIdOrThrow(id, actor);
   }
 
-  async updateBarcode(id: string, dto: UpdateServiceBarcodeDto, actor?: JwtRequestUser) {
+  async updateBarcode(
+    id: string,
+    dto: UpdateServiceBarcodeDto,
+    actor?: JwtRequestUser,
+  ) {
     const tenantId = this.requireTenant(actor);
     const row = await this.prisma.service.findFirst({
       where: { id, deletedAt: null, tenantId },
@@ -365,7 +408,11 @@ export class ServicesService {
 
   private async getByIdOrThrow(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.service.findFirst({
-      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      where: {
+        id,
+        deletedAt: null,
+        ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      },
       select: selectServiceList,
     });
     if (!row) throw new NotFoundException('Servicio no encontrado');
@@ -405,10 +452,12 @@ export class ServicesService {
       unitId,
       currencyId: dto.currencyId,
       saleTaxAffectationId: dto.saleTaxAffectationId,
-      purchaseTaxAffectationId: dto.purchaseTaxAffectationId || dto.saleTaxAffectationId,
+      purchaseTaxAffectationId:
+        dto.purchaseTaxAffectationId || dto.saleTaxAffectationId,
       precioUnitarioVenta: new Prisma.Decimal(dto.precioUnitarioVenta),
       precioUnitarioCompra:
-        dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null
+        dto.precioUnitarioCompra !== undefined &&
+        dto.precioUnitarioCompra !== null
           ? new Prisma.Decimal(dto.precioUnitarioCompra)
           : null,
       incluyeIgvVenta: dto.incluyeIgvVenta ?? true,
@@ -417,7 +466,10 @@ export class ServicesService {
       necesitaRecetaMedica: dto.necesitaRecetaMedica ?? false,
       incluyeIscVenta: dto.incluyeIscVenta ?? false,
       incluyeIscCompra: dto.incluyeIscCompra ?? false,
-      tipoSistemaIscId: dto.incluyeIscVenta || dto.incluyeIscCompra ? (dto.tipoSistemaIscId ?? null) : null,
+      tipoSistemaIscId:
+        dto.incluyeIscVenta || dto.incluyeIscCompra
+          ? (dto.tipoSistemaIscId ?? null)
+          : null,
       porcentajeIsc:
         dto.incluyeIscVenta || dto.incluyeIscCompra
           ? dto.porcentajeIsc !== undefined && dto.porcentajeIsc !== null
@@ -427,7 +479,9 @@ export class ServicesService {
       sujetoDetraccion: dto.sujetoDetraccion ?? false,
       sePuedeCanjearPorPuntos: dto.sePuedeCanjearPorPuntos ?? false,
       numeroPuntos:
-        dto.sePuedeCanjearPorPuntos && dto.numeroPuntos !== undefined && dto.numeroPuntos !== null
+        dto.sePuedeCanjearPorPuntos &&
+        dto.numeroPuntos !== undefined &&
+        dto.numeroPuntos !== null
           ? new Prisma.Decimal(dto.numeroPuntos)
           : null,
       categoryId: dto.categoryId || null,
@@ -444,7 +498,10 @@ export class ServicesService {
         select: { id: true, codigo: true },
       });
       if (!unit) throw new BadRequestException('Unidad base no encontrada.');
-      if (unit.codigo !== 'ZZ') throw new BadRequestException('Para servicios, la unidad debe ser "Servicio (ZZ)".');
+      if (unit.codigo !== 'ZZ')
+        throw new BadRequestException(
+          'Para servicios, la unidad debe ser "Servicio (ZZ)".',
+        );
       return unit.id;
     }
 
@@ -452,7 +509,10 @@ export class ServicesService {
       where: { codigo: 'ZZ', deletedAt: null },
       select: { id: true },
     });
-    if (!serviceUnit) throw new BadRequestException('No existe la unidad "Servicio (ZZ)" en catálogos.');
+    if (!serviceUnit)
+      throw new BadRequestException(
+        'No existe la unidad "Servicio (ZZ)" en catálogos.',
+      );
     return serviceUnit.id;
   }
 
@@ -460,39 +520,65 @@ export class ServicesService {
     const checks: Promise<unknown>[] = [];
 
     checks.push(
-      this.prisma.currency.findFirst({ where: { id: dto.currencyId, deletedAt: null }, select: { id: true } }).then((x) => {
-        if (!x) throw new BadRequestException('Moneda no encontrada.');
-      }),
+      this.prisma.currency
+        .findFirst({
+          where: { id: dto.currencyId, deletedAt: null },
+          select: { id: true },
+        })
+        .then((x) => {
+          if (!x) throw new BadRequestException('Moneda no encontrada.');
+        }),
     );
     checks.push(
       this.prisma.taxAffectationType
-        .findFirst({ where: { id: dto.saleTaxAffectationId, deletedAt: null }, select: { id: true } })
+        .findFirst({
+          where: { id: dto.saleTaxAffectationId, deletedAt: null },
+          select: { id: true },
+        })
         .then((x) => {
-          if (!x) throw new BadRequestException('Tipo de afectación de venta no encontrado.');
+          if (!x)
+            throw new BadRequestException(
+              'Tipo de afectación de venta no encontrado.',
+            );
         }),
     );
     if (dto.purchaseTaxAffectationId) {
       checks.push(
         this.prisma.taxAffectationType
-          .findFirst({ where: { id: dto.purchaseTaxAffectationId, deletedAt: null }, select: { id: true } })
+          .findFirst({
+            where: { id: dto.purchaseTaxAffectationId, deletedAt: null },
+            select: { id: true },
+          })
           .then((x) => {
-            if (!x) throw new BadRequestException('Tipo de afectación de compra no encontrado.');
+            if (!x)
+              throw new BadRequestException(
+                'Tipo de afectación de compra no encontrado.',
+              );
           }),
       );
     }
     if (dto.tipoSistemaIscId) {
       checks.push(
         this.prisma.productIscSystem
-          .findFirst({ where: { id: dto.tipoSistemaIscId, deletedAt: null }, select: { id: true } })
+          .findFirst({
+            where: { id: dto.tipoSistemaIscId, deletedAt: null },
+            select: { id: true },
+          })
           .then((x) => {
-            if (!x) throw new BadRequestException('Tipo de sistema ISC no encontrado.');
+            if (!x)
+              throw new BadRequestException(
+                'Tipo de sistema ISC no encontrado.',
+              );
           }),
       );
     }
     if (dto.categoryId) {
       checks.push(
         this.prisma.category
-          .findFirst({ where: { id: dto.categoryId, deletedAt: null, tenantId }, select: { id: true } })
+          .findFirst({
+            where: { id: dto.categoryId, deletedAt: null, tenantId },
+            select: { id: true },
+          })
           .then((x) => {
             if (!x) throw new BadRequestException('Categoría no encontrada.');
           }),
@@ -501,7 +587,10 @@ export class ServicesService {
     if (dto.brandId) {
       checks.push(
         this.prisma.brand
-          .findFirst({ where: { id: dto.brandId, deletedAt: null, tenantId }, select: { id: true } })
+          .findFirst({
+            where: { id: dto.brandId, deletedAt: null, tenantId },
+            select: { id: true },
+          })
           .then((x) => {
             if (!x) throw new BadRequestException('Marca no encontrada.');
           }),
@@ -527,9 +616,15 @@ export class ServicesService {
       for (const at of dto.attributes) {
         checks.push(
           this.prisma.productAttributeType
-            .findFirst({ where: { id: at.attributeTypeId, deletedAt: null }, select: { id: true } })
+            .findFirst({
+              where: { id: at.attributeTypeId, deletedAt: null },
+              select: { id: true },
+            })
             .then((x) => {
-              if (!x) throw new BadRequestException('Tipo de atributo no encontrado.');
+              if (!x)
+                throw new BadRequestException(
+                  'Tipo de atributo no encontrado.',
+                );
             }),
         );
       }

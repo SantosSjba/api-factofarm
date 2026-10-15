@@ -23,12 +23,16 @@ describe('tenant-scope', () => {
   });
 
   it('resolveTenantScope no deja al admin consultar otro cliente', () => {
-    expect(() => resolveTenantScope(admin, 'tenant-b')).toThrow(ForbiddenException);
+    expect(() => resolveTenantScope(admin, 'tenant-b')).toThrow(
+      ForbiddenException,
+    );
     expect(resolveTenantScope(admin)).toBe('tenant-a');
   });
 
   it('assertTenantAccess bloquea recurso de otro tenant', () => {
-    expect(() => assertTenantAccess(admin, 'tenant-b')).toThrow(ForbiddenException);
+    expect(() => assertTenantAccess(admin, 'tenant-b')).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('requireTenantId rechaza operadores de plataforma', () => {

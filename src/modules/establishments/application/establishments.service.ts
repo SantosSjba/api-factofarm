@@ -12,7 +12,10 @@ import {
 } from '../../../common/dto/pagination.dto';
 import { CacheService } from '../../../common/cache/cache.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
-import { assertTenantAccess, actorFromJwt } from '../../../common/scoping/tenant-scope.util';
+import {
+  assertTenantAccess,
+  actorFromJwt,
+} from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import {
   DEFAULT_TIME_ZONE,
@@ -50,12 +53,36 @@ const DEFAULT_SERIES: ReadonlyArray<{
   numero: string;
   esContingencia: boolean;
 }> = [
-  { documentType: DocumentSeriesType.FACTURA_ELECTRONICA, numero: 'F001', esContingencia: false },
-  { documentType: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA, numero: 'B001', esContingencia: false },
-  { documentType: DocumentSeriesType.NOTA_CREDITO, numero: 'FC01', esContingencia: false },
-  { documentType: DocumentSeriesType.NOTA_CREDITO, numero: 'BC01', esContingencia: false },
-  { documentType: DocumentSeriesType.NOTA_DEBITO, numero: 'FD01', esContingencia: false },
-  { documentType: DocumentSeriesType.NOTA_DEBITO, numero: 'BD01', esContingencia: false },
+  {
+    documentType: DocumentSeriesType.FACTURA_ELECTRONICA,
+    numero: 'F001',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
+    numero: 'B001',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.NOTA_CREDITO,
+    numero: 'FC01',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.NOTA_CREDITO,
+    numero: 'BC01',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.NOTA_DEBITO,
+    numero: 'FD01',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.NOTA_DEBITO,
+    numero: 'BD01',
+    esContingencia: false,
+  },
   {
     documentType: DocumentSeriesType.COMPROBANTE_RETENCION_ELECTRONICA,
     numero: 'R001',
@@ -71,10 +98,26 @@ const DEFAULT_SERIES: ReadonlyArray<{
     numero: 'P001',
     esContingencia: false,
   },
-  { documentType: DocumentSeriesType.NOTA_VENTA, numero: 'NV01', esContingencia: false },
-  { documentType: DocumentSeriesType.LIQUIDACION_COMPRA, numero: 'L001', esContingencia: false },
-  { documentType: DocumentSeriesType.GUIA_INGRESO_ALMACEN, numero: 'NIA1', esContingencia: false },
-  { documentType: DocumentSeriesType.GUIA_SALIDA_ALMACEN, numero: 'NSA1', esContingencia: false },
+  {
+    documentType: DocumentSeriesType.NOTA_VENTA,
+    numero: 'NV01',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.LIQUIDACION_COMPRA,
+    numero: 'L001',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.GUIA_INGRESO_ALMACEN,
+    numero: 'NIA1',
+    esContingencia: false,
+  },
+  {
+    documentType: DocumentSeriesType.GUIA_SALIDA_ALMACEN,
+    numero: 'NSA1',
+    esContingencia: false,
+  },
   {
     documentType: DocumentSeriesType.GUIA_TRANSFERENCIA_ALMACEN,
     numero: 'NTA1',
@@ -142,7 +185,11 @@ export class EstablishmentsService {
     const search = filters?.search?.trim();
     const hospital = filters?.hospital?.trim().toLowerCase();
     const hospitalFlag =
-      hospital === 'hospital' ? true : hospital === 'no-hospital' ? false : undefined;
+      hospital === 'hospital'
+        ? true
+        : hospital === 'no-hospital'
+          ? false
+          : undefined;
 
     const tenantId = this.resolveTenantFilter(actor, filters?.tenantId);
 
@@ -195,7 +242,10 @@ export class EstablishmentsService {
   async create(dto: CreateEstablishmentDto, actor?: JwtRequestUser) {
     const tenantId = this.resolveTenantIdForCreate(dto, actor);
     const tenant = await this.tenants.findOne(tenantId);
-    await this.tenants.assertEstablishmentQuota(tenantId, tenant.maxEstablishments);
+    await this.tenants.assertEstablishmentQuota(
+      tenantId,
+      tenant.maxEstablishments,
+    );
     const tenantTz = await this.prisma.tenant.findFirst({
       where: { id: tenantId },
       select: { defaultTimeZone: true },
@@ -206,18 +256,27 @@ export class EstablishmentsService {
         data: {
           ...this.mapEstablishmentCreateInput(dto),
           tenantId,
-          timeZone: normalizeTimeZone(tenantTz?.defaultTimeZone ?? DEFAULT_TIME_ZONE),
+          timeZone: normalizeTimeZone(
+            tenantTz?.defaultTimeZone ?? DEFAULT_TIME_ZONE,
+          ),
         },
         select: selectEstablishment,
       });
       await this.ensureDefaultSeries(created.id);
       return created;
     } catch (err) {
-      this.handleKnownError(err, 'Ya existe un establecimiento con ese código.');
+      this.handleKnownError(
+        err,
+        'Ya existe un establecimiento con ese código.',
+      );
     }
   }
 
-  async update(id: string, dto: UpdateEstablishmentDto, actor?: JwtRequestUser) {
+  async update(
+    id: string,
+    dto: UpdateEstablishmentDto,
+    actor?: JwtRequestUser,
+  ) {
     const current = await this.prisma.establishment.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, tenantId: true },
@@ -236,7 +295,10 @@ export class EstablishmentsService {
         select: selectEstablishment,
       });
     } catch (err) {
-      this.handleKnownError(err, 'Ya existe un establecimiento con ese código.');
+      this.handleKnownError(
+        err,
+        'Ya existe un establecimiento con ese código.',
+      );
     }
   }
 
@@ -311,7 +373,11 @@ export class EstablishmentsService {
     });
   }
 
-  async addSeries(establishmentId: string, dto: CreateEstablishmentSeriesDto, actor?: JwtRequestUser) {
+  async addSeries(
+    establishmentId: string,
+    dto: CreateEstablishmentSeriesDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureEstablishment(establishmentId, actor);
 
     try {
@@ -339,14 +405,23 @@ export class EstablishmentsService {
     }
   }
 
-  async deleteSeries(establishmentId: string, seriesId: string, actor?: JwtRequestUser) {
+  async deleteSeries(
+    establishmentId: string,
+    seriesId: string,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureEstablishment(establishmentId, actor);
-    await this.integrity.assertCanDeleteBillingSeries(establishmentId, seriesId);
+    await this.integrity.assertCanDeleteBillingSeries(
+      establishmentId,
+      seriesId,
+    );
     const removed = await this.prisma.establishmentSeries.deleteMany({
       where: { id: seriesId, establishmentId },
     });
     if (removed.count === 0) {
-      throw new NotFoundException('Serie no encontrada para el establecimiento');
+      throw new NotFoundException(
+        'Serie no encontrada para el establecimiento',
+      );
     }
   }
 
@@ -415,7 +490,8 @@ export class EstablishmentsService {
       direccionFiscal: this.normNullable(dto.direccionFiscal) ?? null,
       direccionComercial: this.normNullable(dto.direccionComercial) ?? null,
       telefono: this.normNullable(dto.telefono) ?? null,
-      correoContacto: this.normNullable(dto.correoContacto?.toLowerCase()) ?? null,
+      correoContacto:
+        this.normNullable(dto.correoContacto?.toLowerCase()) ?? null,
       direccionWeb: this.normNullable(dto.direccionWeb) ?? null,
       informacionAdicional: this.normNullable(dto.informacionAdicional) ?? null,
       urlImpresora: this.normNullable(dto.urlImpresora) ?? null,
@@ -431,8 +507,10 @@ export class EstablishmentsService {
         dto.adjustmentQtyThreshold !== undefined
           ? new Prisma.Decimal(dto.adjustmentQtyThreshold)
           : undefined,
-      numeroRegistroDigemid: this.normNullable(dto.numeroRegistroDigemid) ?? null,
-      titularPharmacistLicenseId: this.normNullable(dto.titularPharmacistLicenseId) ?? null,
+      numeroRegistroDigemid:
+        this.normNullable(dto.numeroRegistroDigemid) ?? null,
+      titularPharmacistLicenseId:
+        this.normNullable(dto.titularPharmacistLicenseId) ?? null,
       blockSalesAboveRegulatedPrice: dto.blockSalesAboveRegulatedPrice ?? false,
       posYapeNumero: this.normPaymentPhone(dto.posYapeNumero),
       posPlinNumero: this.normPaymentPhone(dto.posPlinNumero),
@@ -448,20 +526,36 @@ export class EstablishmentsService {
     if (dto.codigo !== undefined) data.codigo = this.normNullable(dto.codigo);
     if (dto.activo !== undefined) data.activo = dto.activo;
     if (dto.pais !== undefined) data.pais = dto.pais.trim().toUpperCase();
-    if (dto.departmentId !== undefined) data.departmentId = this.normNullable(dto.departmentId);
-    if (dto.provinceId !== undefined) data.provinceId = this.normNullable(dto.provinceId);
-    if (dto.districtId !== undefined) data.districtId = this.normNullable(dto.districtId);
-    if (dto.direccionFiscal !== undefined) data.direccionFiscal = this.normNullable(dto.direccionFiscal);
-    if (dto.direccionComercial !== undefined) data.direccionComercial = this.normNullable(dto.direccionComercial);
-    if (dto.telefono !== undefined) data.telefono = this.normNullable(dto.telefono);
-    if (dto.correoContacto !== undefined) data.correoContacto = this.normNullable(dto.correoContacto?.toLowerCase());
-    if (dto.direccionWeb !== undefined) data.direccionWeb = this.normNullable(dto.direccionWeb);
-    if (dto.informacionAdicional !== undefined) data.informacionAdicional = this.normNullable(dto.informacionAdicional);
-    if (dto.urlImpresora !== undefined) data.urlImpresora = this.normNullable(dto.urlImpresora);
-    if (dto.nombreImpresora !== undefined) data.nombreImpresora = this.normNullable(dto.nombreImpresora);
-    if (dto.clienteDefault !== undefined) data.clienteDefault = this.normNullable(dto.clienteDefault);
-    if (dto.logoArchivoId !== undefined) data.logoArchivoId = this.normNullable(dto.logoArchivoId);
-    if (dto.sujetoIgv31556 !== undefined) data.sujetoIgv31556 = dto.sujetoIgv31556;
+    if (dto.departmentId !== undefined)
+      data.departmentId = this.normNullable(dto.departmentId);
+    if (dto.provinceId !== undefined)
+      data.provinceId = this.normNullable(dto.provinceId);
+    if (dto.districtId !== undefined)
+      data.districtId = this.normNullable(dto.districtId);
+    if (dto.direccionFiscal !== undefined)
+      data.direccionFiscal = this.normNullable(dto.direccionFiscal);
+    if (dto.direccionComercial !== undefined)
+      data.direccionComercial = this.normNullable(dto.direccionComercial);
+    if (dto.telefono !== undefined)
+      data.telefono = this.normNullable(dto.telefono);
+    if (dto.correoContacto !== undefined)
+      data.correoContacto = this.normNullable(
+        dto.correoContacto?.toLowerCase(),
+      );
+    if (dto.direccionWeb !== undefined)
+      data.direccionWeb = this.normNullable(dto.direccionWeb);
+    if (dto.informacionAdicional !== undefined)
+      data.informacionAdicional = this.normNullable(dto.informacionAdicional);
+    if (dto.urlImpresora !== undefined)
+      data.urlImpresora = this.normNullable(dto.urlImpresora);
+    if (dto.nombreImpresora !== undefined)
+      data.nombreImpresora = this.normNullable(dto.nombreImpresora);
+    if (dto.clienteDefault !== undefined)
+      data.clienteDefault = this.normNullable(dto.clienteDefault);
+    if (dto.logoArchivoId !== undefined)
+      data.logoArchivoId = this.normNullable(dto.logoArchivoId);
+    if (dto.sujetoIgv31556 !== undefined)
+      data.sujetoIgv31556 = dto.sujetoIgv31556;
     if (dto.esHospital !== undefined) data.esHospital = dto.esHospital;
     if (dto.inventoryValuationMethod !== undefined) {
       data.inventoryValuationMethod = dto.inventoryValuationMethod;
@@ -473,13 +567,17 @@ export class EstablishmentsService {
       data.blockExpiredProductSales = dto.blockExpiredProductSales;
     }
     if (dto.adjustmentQtyThreshold !== undefined) {
-      data.adjustmentQtyThreshold = new Prisma.Decimal(dto.adjustmentQtyThreshold);
+      data.adjustmentQtyThreshold = new Prisma.Decimal(
+        dto.adjustmentQtyThreshold,
+      );
     }
     if (dto.numeroRegistroDigemid !== undefined) {
       data.numeroRegistroDigemid = this.normNullable(dto.numeroRegistroDigemid);
     }
     if (dto.titularPharmacistLicenseId !== undefined) {
-      data.titularPharmacistLicenseId = this.normNullable(dto.titularPharmacistLicenseId);
+      data.titularPharmacistLicenseId = this.normNullable(
+        dto.titularPharmacistLicenseId,
+      );
     }
     if (dto.blockSalesAboveRegulatedPrice !== undefined) {
       data.blockSalesAboveRegulatedPrice = dto.blockSalesAboveRegulatedPrice;
@@ -570,7 +668,8 @@ export class EstablishmentsService {
       applyDetraccion: billing.applyDetraccion,
       autoEmitGuiaOnTransfer: billing.autoEmitGuiaOnTransfer,
       hasOseCredentials: !!(billing.hasApiToken || billing.hasCertificate),
-      electronicInvoicingEnabled: electronicEnabled && !!(billing.hasApiToken || billing.hasCertificate),
+      electronicInvoicingEnabled:
+        electronicEnabled && !!(billing.hasApiToken || billing.hasCertificate),
       billingCapabilities: billing.capabilities ?? null,
       billingProviderOptions: [
         {
@@ -581,7 +680,11 @@ export class EstablishmentsService {
         { value: 'FACTILIZA', label: 'Factiliza', available: true },
         { value: 'NUBEFACT', label: 'Nubefact', available: true },
         { value: 'APISPERU', label: 'APIsPERU', available: true },
-        { value: 'BIZLINKS', label: 'Bizlinks (próximamente)', available: false },
+        {
+          value: 'BIZLINKS',
+          label: 'Bizlinks (próximamente)',
+          available: false,
+        },
       ],
     };
   }
@@ -596,13 +699,16 @@ export class EstablishmentsService {
     const establishmentPatch: UpdateEstablishmentDto = {};
     if (dto.nombre !== undefined) establishmentPatch.nombre = dto.nombre;
     if (dto.codigo !== undefined) establishmentPatch.codigo = dto.codigo;
-    if (dto.direccionFiscal !== undefined) establishmentPatch.direccionFiscal = dto.direccionFiscal;
+    if (dto.direccionFiscal !== undefined)
+      establishmentPatch.direccionFiscal = dto.direccionFiscal;
     if (dto.direccionComercial !== undefined) {
       establishmentPatch.direccionComercial = dto.direccionComercial;
     }
     if (dto.telefono !== undefined) establishmentPatch.telefono = dto.telefono;
-    if (dto.correoContacto !== undefined) establishmentPatch.correoContacto = dto.correoContacto;
-    if (dto.direccionWeb !== undefined) establishmentPatch.direccionWeb = dto.direccionWeb;
+    if (dto.correoContacto !== undefined)
+      establishmentPatch.correoContacto = dto.correoContacto;
+    if (dto.direccionWeb !== undefined)
+      establishmentPatch.direccionWeb = dto.direccionWeb;
     if (dto.informacionAdicional !== undefined) {
       establishmentPatch.informacionAdicional = dto.informacionAdicional;
     }
@@ -620,7 +726,8 @@ export class EstablishmentsService {
       // Allow explicit null clear via raw update below when needed
     }
     if (dto.numeroRegistroDigemid !== undefined) {
-      establishmentPatch.numeroRegistroDigemid = dto.numeroRegistroDigemid ?? undefined;
+      establishmentPatch.numeroRegistroDigemid =
+        dto.numeroRegistroDigemid ?? undefined;
     }
 
     if (
@@ -704,7 +811,9 @@ export class EstablishmentsService {
     return this.getPharmacyProfile(establishmentId, actor);
   }
 
-  private normPaymentPhone(value: string | undefined): string | null | undefined {
+  private normPaymentPhone(
+    value: string | undefined,
+  ): string | null | undefined {
     if (value === undefined) return undefined;
     const digits = value.replace(/\D/g, '');
     return digits ? digits : null;
@@ -717,7 +826,10 @@ export class EstablishmentsService {
   }
 
   private handleKnownError(err: unknown, conflictMessage: string): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException(conflictMessage);
     }
     throw err;

@@ -1,5 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CashMovementType, CashSessionStatus, PaymentMethod, Prisma } from '../../generated/prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CashMovementType,
+  CashSessionStatus,
+  PaymentMethod,
+  Prisma,
+} from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paymentRequiresReference } from '../sales/utils/payment-validation.util';
@@ -36,7 +45,11 @@ export class CashRegistersService {
     });
   }
 
-  async createRegister(establishmentId: string, dto: CreateCashRegisterDto, actorId?: string) {
+  async createRegister(
+    establishmentId: string,
+    dto: CreateCashRegisterDto,
+    actorId?: string,
+  ) {
     const created = await this.prisma.cashRegister.create({
       data: {
         establishmentId,
@@ -68,12 +81,18 @@ export class CashRegistersService {
     const updated = await this.prisma.cashRegister.update({
       where: { id: registerId },
       data: {
-        ...(dto.printerPaperWidth !== undefined ? { printerPaperWidth: dto.printerPaperWidth } : {}),
-        ...(dto.printerAutoPrint !== undefined ? { printerAutoPrint: dto.printerAutoPrint } : {}),
+        ...(dto.printerPaperWidth !== undefined
+          ? { printerPaperWidth: dto.printerPaperWidth }
+          : {}),
+        ...(dto.printerAutoPrint !== undefined
+          ? { printerAutoPrint: dto.printerAutoPrint }
+          : {}),
         ...(dto.openCashDrawerOnPrint !== undefined
           ? { openCashDrawerOnPrint: dto.openCashDrawerOnPrint }
           : {}),
-        ...(dto.barcodeWedgeEnabled !== undefined ? { barcodeWedgeEnabled: dto.barcodeWedgeEnabled } : {}),
+        ...(dto.barcodeWedgeEnabled !== undefined
+          ? { barcodeWedgeEnabled: dto.barcodeWedgeEnabled }
+          : {}),
         ...(dto.customerDisplayEnabled !== undefined
           ? { customerDisplayEnabled: dto.customerDisplayEnabled }
           : {}),
@@ -131,9 +150,18 @@ export class CashRegistersService {
     });
   }
 
-  async openSession(establishmentId: string, userId: string, dto: OpenCashSessionDto) {
+  async openSession(
+    establishmentId: string,
+    userId: string,
+    dto: OpenCashSessionDto,
+  ) {
     const register = await this.prisma.cashRegister.findFirst({
-      where: { id: dto.cashRegisterId, establishmentId, deletedAt: null, activo: true },
+      where: {
+        id: dto.cashRegisterId,
+        establishmentId,
+        deletedAt: null,
+        activo: true,
+      },
       select: { id: true },
     });
     if (!register) throw new NotFoundException('Caja no encontrada');
@@ -246,7 +274,12 @@ export class CashRegistersService {
     };
   }
 
-  async addMovement(sessionId: string, establishmentId: string, userId: string, dto: CreateCashMovementDto) {
+  async addMovement(
+    sessionId: string,
+    establishmentId: string,
+    userId: string,
+    dto: CreateCashMovementDto,
+  ) {
     const session = await this.prisma.cashSession.findFirst({
       where: {
         id: sessionId,
@@ -258,8 +291,13 @@ export class CashRegistersService {
     });
     if (!session) throw new NotFoundException('Sesión no abierta');
 
-    if (dto.tipo !== CashMovementType.INGRESO && dto.tipo !== CashMovementType.EGRESO) {
-      throw new BadRequestException('Solo ingresos o egresos manuales en sesión abierta');
+    if (
+      dto.tipo !== CashMovementType.INGRESO &&
+      dto.tipo !== CashMovementType.EGRESO
+    ) {
+      throw new BadRequestException(
+        'Solo ingresos o egresos manuales en sesión abierta',
+      );
     }
 
     const signed =
@@ -280,7 +318,11 @@ export class CashRegistersService {
     return { ok: true };
   }
 
-  async sessionSummary(sessionId: string, establishmentId: string, userId: string) {
+  async sessionSummary(
+    sessionId: string,
+    establishmentId: string,
+    userId: string,
+  ) {
     const session = await this.prisma.cashSession.findFirst({
       where: {
         id: sessionId,
@@ -296,7 +338,9 @@ export class CashRegistersService {
             documentType: true,
             serie: true,
             numero: true,
-            payments: { select: { metodo: true, monto: true, referencia: true } },
+            payments: {
+              select: { metodo: true, monto: true, referencia: true },
+            },
           },
         },
       },
@@ -319,13 +363,16 @@ export class CashRegistersService {
 
     for (const sale of session.sales) {
       for (const payment of sale.payments) {
-        totalesPorMetodo[payment.metodo] = (totalesPorMetodo[payment.metodo] ?? new Prisma.Decimal(0)).plus(
-          payment.monto,
-        );
+        totalesPorMetodo[payment.metodo] = (
+          totalesPorMetodo[payment.metodo] ?? new Prisma.Decimal(0)
+        ).plus(payment.monto);
         if (paymentRequiresReference(payment.metodo) || payment.referencia) {
           pagosDigitales.push({
             saleId: sale.id,
-            comprobante: `${sale.serie ?? ''}-${sale.numero ?? ''}`.replace(/^-/, ''),
+            comprobante: `${sale.serie ?? ''}-${sale.numero ?? ''}`.replace(
+              /^-/,
+              '',
+            ),
             metodo: payment.metodo,
             monto: payment.monto.toString(),
             referencia: payment.referencia,
@@ -340,7 +387,10 @@ export class CashRegistersService {
       montoApertura: session.montoApertura.toString(),
       saldoActual: saldo.toString(),
       totalesPorMetodo: Object.fromEntries(
-        Object.entries(totalesPorMetodo).map(([metodo, monto]) => [metodo, monto!.toString()]),
+        Object.entries(totalesPorMetodo).map(([metodo, monto]) => [
+          metodo,
+          monto.toString(),
+        ]),
       ),
       pagosDigitales,
       movimientos: session.movements.map((m) => ({

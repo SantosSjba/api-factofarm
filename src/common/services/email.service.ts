@@ -50,10 +50,11 @@ export class EmailService {
     ].join('\n');
 
     const host = await this.requireSmtpHostOrDevLog('password_reset', () => {
-      this.logger.warn(
-        `[DEV] Sin SMTP_HOST — enlace de recuperación para ${to}:`,
-      );
-      this.logger.warn(resetUrl);
+      this.logger.warn({
+        event: 'email_skipped',
+        context: 'password_reset',
+        reason: 'smtp_not_configured',
+      });
     });
     if (!host) return;
 
@@ -80,8 +81,11 @@ export class EmailService {
     text: string,
   ): Promise<void> {
     const host = await this.requireSmtpHostOrDevLog('transactional', () => {
-      this.logger.warn(`[DEV] Sin SMTP_HOST — correo a ${to}: ${subject}`);
-      this.logger.warn(text);
+      this.logger.warn({
+        event: 'email_skipped',
+        context: 'transactional',
+        reason: 'smtp_not_configured',
+      });
     });
     if (!host) return;
 

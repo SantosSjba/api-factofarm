@@ -1,7 +1,11 @@
 import { UserRole } from '../../generated/prisma/client';
 import { MENU_NAV_LEAF_CODES } from '../../../prisma/seed/steps/permissions';
 
-const POS_NAV = ['nav.punto_venta', 'nav.caja_chica_pos', 'nav.dashboard_admin'] as const;
+const POS_NAV = [
+  'nav.punto_venta',
+  'nav.caja_chica_pos',
+  'nav.dashboard_admin',
+] as const;
 const CLIENTES_NAV = ['nav.clientes_list', 'nav.tipo_clientes'] as const;
 const INVENTARIO_NAV = [
   'nav.inventario_movimientos',

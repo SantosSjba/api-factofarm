@@ -32,8 +32,13 @@ export class CategoriesController {
 
   @Get()
   @RequirePermissions('categories.read', 'nav.categorias')
-  @ApiOperation({ summary: 'Listar categorías (paginado si page está presente)' })
-  findAll(@Query() query: MaestroListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @ApiOperation({
+    summary: 'Listar categorías (paginado si page está presente)',
+  })
+  findAll(
+    @Query() query: MaestroListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.categoriesService.findAll(query, actor);
   }
 
@@ -69,7 +74,10 @@ export class CategoriesController {
   @RequirePermissions('categories.write')
   @ApiOperation({ summary: 'Eliminar categoría (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.categoriesService.remove(id, actor);
   }
 }

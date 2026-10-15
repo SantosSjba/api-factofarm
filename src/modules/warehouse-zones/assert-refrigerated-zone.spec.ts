@@ -34,8 +34,8 @@ describe('assertActiveColdZoneForRefrigeratedProducts', () => {
           warehouseId: 'wh-1',
           activo: true,
           tipo: WarehouseZoneType.REFRIGERADO,
-        }),
-      }),
+        }) as unknown,
+      }) as unknown,
     );
   });
 

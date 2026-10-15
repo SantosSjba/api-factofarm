@@ -34,25 +34,40 @@ export class PromotionsController {
 
   @Get()
   @RequirePermissions('promotions.read', 'nav.promociones')
-  async findAll(@Query() query: PromotionListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async findAll(
+    @Query() query: PromotionListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
   @Get('validate')
   @RequirePermissions('promotions.read', 'sales.write', 'nav.promociones')
-  async validate(@Query('code') code: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.validateCode(await this.scope.resolve(actor), code ?? '');
+  async validate(
+    @Query('code') code: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.validateCode(
+      await this.scope.resolve(actor),
+      code ?? '',
+    );
   }
 
   @Get(':id')
   @RequirePermissions('promotions.read', 'nav.promociones')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('promotions.write', 'nav.promociones')
-  async create(@Body() dto: CreatePromotionDto, @CurrentUser() actor: JwtRequestUser) {
+  async create(
+    @Body() dto: CreatePromotionDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(await this.scope.resolve(actor), dto, actor.sub);
   }
 
@@ -63,12 +78,20 @@ export class PromotionsController {
     @Body() dto: UpdatePromotionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.update(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.update(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete(':id')
   @RequirePermissions('promotions.write', 'nav.promociones')
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.remove(id, await this.scope.resolve(actor), actor.sub);
   }
 }
@@ -89,7 +112,10 @@ export class MarketingController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     await this.scope.assertCustomerInTenant(actor, customerId);
-    return this.loyalty.listHistory(customerId, await this.scope.resolve(actor));
+    return this.loyalty.listHistory(
+      customerId,
+      await this.scope.resolve(actor),
+    );
   }
 
   @Post('customers/:customerId/loyalty/adjust')
@@ -117,6 +143,9 @@ export class MarketingController {
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.loyalty.purchaseRecommendations(customerId, await this.scope.resolve(actor));
+    return this.loyalty.purchaseRecommendations(
+      customerId,
+      await this.scope.resolve(actor),
+    );
   }
 }

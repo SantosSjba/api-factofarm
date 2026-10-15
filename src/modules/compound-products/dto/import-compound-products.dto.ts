@@ -6,7 +6,8 @@ export const compoundProductImportModes = [
   'DETALLE_PRODUCTOS_COMPUESTOS',
 ] as const;
 
-export type CompoundProductImportMode = (typeof compoundProductImportModes)[number];
+export type CompoundProductImportMode =
+  (typeof compoundProductImportModes)[number];
 
 export class ImportCompoundProductsDto {
   @ApiProperty({ enum: compoundProductImportModes })

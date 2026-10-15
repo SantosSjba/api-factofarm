@@ -7,13 +7,15 @@ import {
 
 describe('billing-provider-guard.util', () => {
   it('permite mock en desarrollo sin credenciales', () => {
-    expect(() => assertOseCredentialsOrThrow('development', false, 'Factiliza')).not.toThrow();
+    expect(() =>
+      assertOseCredentialsOrThrow('development', false, 'Factiliza'),
+    ).not.toThrow();
   });
 
   it('rechaza emisión en producción sin credenciales', () => {
-    expect(() => assertOseCredentialsOrThrow('production', false, 'Factiliza')).toThrow(
-      BillingProviderConfigurationError,
-    );
+    expect(() =>
+      assertOseCredentialsOrThrow('production', false, 'Factiliza'),
+    ).toThrow(BillingProviderConfigurationError);
   });
 
   it('bloquea RC/baja Factiliza en producción', () => {
@@ -29,7 +31,11 @@ describe('billing-provider-guard.util', () => {
 
   it('bloquea tipos CPE no soportados en producción', () => {
     expect(() =>
-      assertEmitDocumentTypeSupportedOrThrow('production', 'Factiliza', 'RETENCION'),
+      assertEmitDocumentTypeSupportedOrThrow(
+        'production',
+        'Factiliza',
+        'RETENCION',
+      ),
     ).toThrow(/RETENCION/);
   });
 });

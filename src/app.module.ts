@@ -1,3 +1,4 @@
+import { createHttpLoggerOptions } from './common/logging/http-logger.config';
 import { ConfigurableThrottlerGuard } from './common/guards/configurable-throttler.guard';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -71,25 +72,11 @@ import { DataRetentionModule } from './modules/data-retention/data-retention.mod
         allowUnknown: true,
       },
     }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty', options: { singleLine: true } }
-            : undefined,
-        genReqId: (req, res) => {
-          const incoming = req.headers['x-request-id'];
-          const id =
-            typeof incoming === 'string' && incoming.trim()
-              ? incoming.trim()
-              : crypto.randomUUID();
-          res.setHeader('X-Request-Id', id);
-          return id;
-        },
-        customProps: (req) => ({ requestId: req.id }),
-        autoLogging: true,
-      },
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        pinoHttp: createHttpLoggerOptions(config),
+      }),
     }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

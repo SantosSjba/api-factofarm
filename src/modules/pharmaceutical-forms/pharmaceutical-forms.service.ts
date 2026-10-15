@@ -1,6 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -37,7 +44,13 @@ export class PharmaceuticalFormsService {
       pageSize: filters.pageSize,
     });
     const [items, total] = await Promise.all([
-      this.prisma.pharmaceuticalForm.findMany({ where, orderBy: { nombre: 'asc' }, skip, take, select: selectRow }),
+      this.prisma.pharmaceuticalForm.findMany({
+        where,
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+        select: selectRow,
+      }),
       this.prisma.pharmaceuticalForm.count({ where }),
     ]);
     return buildPaginatedResult(items, total, page, pageSize);
@@ -46,8 +59,16 @@ export class PharmaceuticalFormsService {
   async create(dto: CreatePharmaceuticalFormDto, actorId?: string) {
     const nombre = dto.nombre.trim().toUpperCase();
     try {
-      const created = await this.prisma.pharmaceuticalForm.create({ data: { nombre }, select: selectRow });
-      await this.audit.log({ userId: actorId, action: 'CREATE', entity: 'PharmaceuticalForm', entityId: created.id });
+      const created = await this.prisma.pharmaceuticalForm.create({
+        data: { nombre },
+        select: selectRow,
+      });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'PharmaceuticalForm',
+        entityId: created.id,
+      });
       return created;
     } catch (err) {
       this.handleKnownError(err);
@@ -59,11 +80,15 @@ export class PharmaceuticalFormsService {
       where: { id, deletedAt: null },
       select: { id: true },
     });
-    if (!current) throw new NotFoundException('Forma farmacéutica no encontrada');
+    if (!current)
+      throw new NotFoundException('Forma farmacéutica no encontrada');
     try {
       const updated = await this.prisma.pharmaceuticalForm.update({
         where: { id },
-        data: dto.nombre !== undefined ? { nombre: dto.nombre.trim().toUpperCase() } : {},
+        data:
+          dto.nombre !== undefined
+            ? { nombre: dto.nombre.trim().toUpperCase() }
+            : {},
         select: selectRow,
       });
       await this.audit.log({
@@ -84,13 +109,24 @@ export class PharmaceuticalFormsService {
       where: { id, deletedAt: null },
       select: { id: true },
     });
-    if (!current) throw new NotFoundException('Forma farmacéutica no encontrada');
+    if (!current)
+      throw new NotFoundException('Forma farmacéutica no encontrada');
     await this.integrity.assertCanDeletePharmaceuticalForm(id);
-    await this.prisma.pharmaceuticalForm.update({ where: { id }, data: { deletedAt: new Date() } });
-    await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'PharmaceuticalForm', entityId: id });
+    await this.prisma.pharmaceuticalForm.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'PharmaceuticalForm',
+      entityId: id,
+    });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.PharmaceuticalFormWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+  ): Prisma.PharmaceuticalFormWhereInput {
     const search = filters?.search?.trim();
     return {
       deletedAt: null,
@@ -99,8 +135,13 @@ export class PharmaceuticalFormsService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new ConflictException('Ya existe una forma farmacéutica con ese nombre.');
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'Ya existe una forma farmacéutica con ese nombre.',
+      );
     }
     throw err;
   }

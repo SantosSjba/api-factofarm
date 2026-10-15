@@ -8,7 +8,10 @@ import {
 
 describe('nav-permission-expansion', () => {
   it('expande nav.productos a RBAC completo', () => {
-    const result = expandUserPermissionCodes(['nav.productos'], UserRole.VENDEDOR);
+    const result = expandUserPermissionCodes(
+      ['nav.productos'],
+      UserRole.VENDEDOR,
+    );
     expect(result).toEqual(
       expect.arrayContaining([
         'nav.productos',
@@ -22,15 +25,26 @@ describe('nav-permission-expansion', () => {
   });
 
   it('agrega users.write para administrador', () => {
-    const result = expandUserPermissionCodes(['nav.clientes_list'], UserRole.ADMINISTRADOR);
+    const result = expandUserPermissionCodes(
+      ['nav.clientes_list'],
+      UserRole.ADMINISTRADOR,
+    );
     expect(result).toContain('users.write');
     expect(result).toContain('customers.delete');
   });
 
   it('expande nav.usuarios a users.read/write', () => {
-    const result = expandUserPermissionCodes(['nav.usuarios'], UserRole.GERENTE_SUCURSAL);
+    const result = expandUserPermissionCodes(
+      ['nav.usuarios'],
+      UserRole.GERENTE_SUCURSAL,
+    );
     expect(result).toEqual(
-      expect.arrayContaining(['nav.usuarios', 'users.read', 'users.write', 'audit.read']),
+      expect.arrayContaining([
+        'nav.usuarios',
+        'users.read',
+        'users.write',
+        'audit.read',
+      ]),
     );
   });
 
@@ -50,7 +64,10 @@ describe('nav-permission-expansion', () => {
   });
 
   it('revoca ventas al quitar nav.punto_venta', () => {
-    const result = expandUserPermissionCodes(['nav.caja_chica_pos'], UserRole.CAJERO);
+    const result = expandUserPermissionCodes(
+      ['nav.caja_chica_pos'],
+      UserRole.CAJERO,
+    );
     expect(result).not.toContain('sales.write');
     expect(result).toContain('cash.open');
   });

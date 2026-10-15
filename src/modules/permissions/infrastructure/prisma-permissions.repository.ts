@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { IPermissionsRepository, PermissionMenuNode } from '../domain/permissions.repository';
+import type {
+  IPermissionsRepository,
+  PermissionMenuNode,
+} from '../domain/permissions.repository';
 
 @Injectable()
 export class PrismaPermissionsRepository implements IPermissionsRepository {

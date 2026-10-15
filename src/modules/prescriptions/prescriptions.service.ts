@@ -1,8 +1,19 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrescriptionStatus, Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
-import { actorFromJwt, assertTenantAccess } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  assertTenantAccess,
+} from '../../common/scoping/tenant-scope.util';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -33,9 +44,23 @@ export class PrescriptionsService {
       ...(query.search?.trim()
         ? {
             OR: [
-              { numero: { contains: query.search.trim(), mode: 'insensitive' } },
-              { medicoNombre: { contains: query.search.trim(), mode: 'insensitive' } },
-              { customer: { nombre: { contains: query.search.trim(), mode: 'insensitive' } } },
+              {
+                numero: { contains: query.search.trim(), mode: 'insensitive' },
+              },
+              {
+                medicoNombre: {
+                  contains: query.search.trim(),
+                  mode: 'insensitive',
+                },
+              },
+              {
+                customer: {
+                  nombre: {
+                    contains: query.search.trim(),
+                    mode: 'insensitive',
+                  },
+                },
+              },
             ],
           }
         : {}),
@@ -54,7 +79,9 @@ export class PrescriptionsService {
           estado: true,
           medicoNombre: true,
           medicoCmp: true,
-          customer: { select: { id: true, nombre: true, numeroDocumento: true } },
+          customer: {
+            select: { id: true, nombre: true, numeroDocumento: true },
+          },
           items: {
             select: {
               id: true,
@@ -89,10 +116,34 @@ export class PrescriptionsService {
     const row = await this.prisma.prescription.findFirst({
       where: { id, establishmentId, deletedAt: null },
       include: {
-        customer: { select: { id: true, nombre: true, numeroDocumento: true, tipoDocumento: true } },
-        medico: { select: { id: true, cmp: true, nombres: true, apellidos: true, especialidad: true } },
+        customer: {
+          select: {
+            id: true,
+            nombre: true,
+            numeroDocumento: true,
+            tipoDocumento: true,
+          },
+        },
+        medico: {
+          select: {
+            id: true,
+            cmp: true,
+            nombres: true,
+            apellidos: true,
+            especialidad: true,
+          },
+        },
         items: {
-          include: { product: { select: { id: true, nombre: true, codigoInterno: true, necesitaRecetaMedica: true } } },
+          include: {
+            product: {
+              select: {
+                id: true,
+                nombre: true,
+                codigoInterno: true,
+                necesitaRecetaMedica: true,
+              },
+            },
+          },
         },
       },
     });
@@ -100,17 +151,32 @@ export class PrescriptionsService {
     return this.mapDetail(row);
   }
 
-  async findByCustomer(customerId: string, establishmentId: string, actor: JwtRequestUser) {
+  async findByCustomer(
+    customerId: string,
+    establishmentId: string,
+    actor: JwtRequestUser,
+  ) {
     await this.scope.assertCustomerInTenant(actor, customerId);
     const rows = await this.prisma.prescription.findMany({
       where: {
         customerId,
         establishmentId,
         deletedAt: null,
-        estado: { in: [PrescriptionStatus.ACTIVA, PrescriptionStatus.PARCIALMENTE_DISPENSADA] },
+        estado: {
+          in: [
+            PrescriptionStatus.ACTIVA,
+            PrescriptionStatus.PARCIALMENTE_DISPENSADA,
+          ],
+        },
       },
       orderBy: { fechaEmision: 'desc' },
-      select: { id: true, numero: true, fechaEmision: true, estado: true, medicoNombre: true },
+      select: {
+        id: true,
+        numero: true,
+        fechaEmision: true,
+        estado: true,
+        medicoNombre: true,
+      },
     });
     return rows.map((r) => ({
       ...r,
@@ -118,19 +184,34 @@ export class PrescriptionsService {
     }));
   }
 
-  async create(establishmentId: string, dto: CreatePrescriptionDto, actor: JwtRequestUser) {
-    if (dto.items.length === 0) throw new BadRequestException('La receta requiere al menos un ítem');
-    if (new Set(dto.items.map((item) => item.productId)).size !== dto.items.length) {
+  async create(
+    establishmentId: string,
+    dto: CreatePrescriptionDto,
+    actor: JwtRequestUser,
+  ) {
+    if (dto.items.length === 0)
+      throw new BadRequestException('La receta requiere al menos un ítem');
+    if (
+      new Set(dto.items.map((item) => item.productId)).size !== dto.items.length
+    ) {
       throw new BadRequestException('No repita productos en la receta');
     }
-    if (dto.validUntil && new Date(dto.validUntil) < new Date(dto.fechaEmision)) {
-      throw new BadRequestException('El vencimiento de la receta no puede ser anterior a su emisión');
+    if (
+      dto.validUntil &&
+      new Date(dto.validUntil) < new Date(dto.fechaEmision)
+    ) {
+      throw new BadRequestException(
+        'El vencimiento de la receta no puede ser anterior a su emisión',
+      );
     }
 
     await this.scope.assertCustomerInTenant(actor, dto.customerId);
     for (const item of dto.items) {
       const quantity = new Prisma.Decimal(item.cantidadPrescrita);
-      if (!quantity.isFinite() || quantity.lte(0)) throw new BadRequestException('La cantidad prescrita debe ser positiva');
+      if (!quantity.isFinite() || quantity.lte(0))
+        throw new BadRequestException(
+          'La cantidad prescrita debe ser positiva',
+        );
       await this.scope.assertProductInTenant(actor, item.productId);
     }
     if (dto.imagenArchivoId) {
@@ -167,7 +248,9 @@ export class PrescriptionsService {
         medicoCmp,
         diagnostico: encryptHealth ? null : diagnosticoPlain,
         notas: encryptHealth ? null : notasPlain,
-        diagnosticoCipher: encryptHealth ? this.crypto.encrypt(diagnosticoPlain) : null,
+        diagnosticoCipher: encryptHealth
+          ? this.crypto.encrypt(diagnosticoPlain)
+          : null,
         notasCipher: encryptHealth ? this.crypto.encrypt(notasPlain) : null,
         imagenArchivoId: dto.imagenArchivoId ?? null,
         registeredById: actor.sub,
@@ -192,7 +275,12 @@ export class PrescriptionsService {
     return this.findOne(created.id, establishmentId);
   }
 
-  async attachImage(id: string, establishmentId: string, imagenArchivoId: string, actor: JwtRequestUser) {
+  async attachImage(
+    id: string,
+    establishmentId: string,
+    imagenArchivoId: string,
+    actor: JwtRequestUser,
+  ) {
     const prescription = await this.prisma.prescription.findFirst({
       where: { id, establishmentId, deletedAt: null },
       select: { id: true },
@@ -217,7 +305,10 @@ export class PrescriptionsService {
     return this.findOne(id, establishmentId);
   }
 
-  private async assertArchivoInTenant(actor: JwtRequestUser, archivoId: string) {
+  private async assertArchivoInTenant(
+    actor: JwtRequestUser,
+    archivoId: string,
+  ) {
     const archivo = await this.prisma.archivo.findUnique({
       where: { id: archivoId },
       select: { id: true, tenantId: true },
@@ -234,7 +325,10 @@ export class PrescriptionsService {
     prescriptionId: string,
     establishmentId: string,
     saleItems: Array<{ productId: string; cantidad: Prisma.Decimal }>,
-    substitutions?: Array<{ originalProductId: string; substituteProductId: string }>,
+    substitutions?: Array<{
+      originalProductId: string;
+      substituteProductId: string;
+    }>,
     customerId?: string,
   ) {
     const prescription = await this.prisma.prescription.findFirst({
@@ -242,17 +336,27 @@ export class PrescriptionsService {
         id: prescriptionId,
         establishmentId,
         deletedAt: null,
-        estado: { in: [PrescriptionStatus.ACTIVA, PrescriptionStatus.PARCIALMENTE_DISPENSADA] },
+        estado: {
+          in: [
+            PrescriptionStatus.ACTIVA,
+            PrescriptionStatus.PARCIALMENTE_DISPENSADA,
+          ],
+        },
       },
       include: { items: true },
     });
-    if (!prescription) throw new BadRequestException('Receta no válida o no activa');
+    if (!prescription)
+      throw new BadRequestException('Receta no válida o no activa');
     if (customerId !== undefined) {
       if (!customerId) {
-        throw new BadRequestException('La venta con receta requiere el cliente titular');
+        throw new BadRequestException(
+          'La venta con receta requiere el cliente titular',
+        );
       }
       if (prescription.customerId !== customerId) {
-        throw new BadRequestException('La receta no pertenece al cliente de la venta');
+        throw new BadRequestException(
+          'La receta no pertenece al cliente de la venta',
+        );
       }
     }
     if (prescription.validUntil && prescription.validUntil < new Date()) {
@@ -260,15 +364,24 @@ export class PrescriptionsService {
     }
 
     for (const saleItem of saleItems) {
-      const substitution = substitutions?.find((s) => s.substituteProductId === saleItem.productId);
-      const prescribedProductId = substitution?.originalProductId ?? saleItem.productId;
-      const line = prescription.items.find((i) => i.productId === prescribedProductId);
+      const substitution = substitutions?.find(
+        (s) => s.substituteProductId === saleItem.productId,
+      );
+      const prescribedProductId =
+        substitution?.originalProductId ?? saleItem.productId;
+      const line = prescription.items.find(
+        (i) => i.productId === prescribedProductId,
+      );
       if (!line) {
-        throw new BadRequestException('El producto no está en la receta indicada');
+        throw new BadRequestException(
+          'El producto no está en la receta indicada',
+        );
       }
       const pendiente = line.cantidadPrescrita.minus(line.cantidadDispensada);
       if (pendiente.lessThan(saleItem.cantidad)) {
-        throw new BadRequestException('Cantidad a dispensar excede lo prescrito pendiente');
+        throw new BadRequestException(
+          'Cantidad a dispensar excede lo prescrito pendiente',
+        );
       }
     }
     return prescription;
@@ -280,7 +393,10 @@ export class PrescriptionsService {
     actorId?: string,
     transaction?: Prisma.TransactionClient,
     establishmentId?: string,
-    substitutions?: Array<{ originalProductId: string; substituteProductId: string }>,
+    substitutions?: Array<{
+      originalProductId: string;
+      substituteProductId: string;
+    }>,
     customerId?: string,
   ) {
     const dispense = async (tx: Prisma.TransactionClient) => {
@@ -290,43 +406,69 @@ export class PrescriptionsService {
           ...(establishmentId ? { establishmentId } : {}),
           ...(customerId ? { customerId } : {}),
           deletedAt: null,
-          estado: { in: [PrescriptionStatus.ACTIVA, PrescriptionStatus.PARCIALMENTE_DISPENSADA] },
+          estado: {
+            in: [
+              PrescriptionStatus.ACTIVA,
+              PrescriptionStatus.PARCIALMENTE_DISPENSADA,
+            ],
+          },
           OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
         },
         data: { estado: PrescriptionStatus.PARCIALMENTE_DISPENSADA },
       });
-      if (claimed.count !== 1) throw new BadRequestException('Receta no válida, vencida o completada');
+      if (claimed.count !== 1)
+        throw new BadRequestException('Receta no válida, vencida o completada');
       const prescription = await tx.prescription.findUniqueOrThrow({
         where: { id: prescriptionId },
         include: { items: true },
       });
       for (const saleItem of saleItems) {
-        const productId = substitutions?.find((s) => s.substituteProductId === saleItem.productId)?.originalProductId ?? saleItem.productId;
+        const productId =
+          substitutions?.find(
+            (s) => s.substituteProductId === saleItem.productId,
+          )?.originalProductId ?? saleItem.productId;
         const line = prescription.items.find((i) => i.productId === productId);
-        if (!line) throw new BadRequestException('El producto no está en la receta indicada');
+        if (!line)
+          throw new BadRequestException(
+            'El producto no está en la receta indicada',
+          );
         if (!saleItem.cantidad.isFinite() || saleItem.cantidad.lte(0)) {
           throw new BadRequestException('Cantidad a dispensar inválida');
         }
         const updated = await tx.prescriptionItem.updateMany({
           where: {
             id: line.id,
-            cantidadDispensada: { lte: line.cantidadPrescrita.minus(saleItem.cantidad) },
+            cantidadDispensada: {
+              lte: line.cantidadPrescrita.minus(saleItem.cantidad),
+            },
           },
           data: { cantidadDispensada: { increment: saleItem.cantidad } },
         });
-        if (updated.count !== 1) throw new BadRequestException('Cantidad a dispensar excede lo prescrito pendiente');
+        if (updated.count !== 1)
+          throw new BadRequestException(
+            'Cantidad a dispensar excede lo prescrito pendiente',
+          );
       }
 
-      const updatedItems = await tx.prescriptionItem.findMany({ where: { prescriptionId } });
-      const allDone = updatedItems.every((i) => i.cantidadDispensada.greaterThanOrEqualTo(i.cantidadPrescrita));
-      const anyDispensed = updatedItems.some((i) => i.cantidadDispensada.greaterThan(0));
+      const updatedItems = await tx.prescriptionItem.findMany({
+        where: { prescriptionId },
+      });
+      const allDone = updatedItems.every((i) =>
+        i.cantidadDispensada.greaterThanOrEqualTo(i.cantidadPrescrita),
+      );
+      const anyDispensed = updatedItems.some((i) =>
+        i.cantidadDispensada.greaterThan(0),
+      );
       const estado = allDone
         ? PrescriptionStatus.COMPLETADA
         : anyDispensed
           ? PrescriptionStatus.PARCIALMENTE_DISPENSADA
           : PrescriptionStatus.ACTIVA;
 
-      await tx.prescription.update({ where: { id: prescriptionId }, data: { estado } });
+      await tx.prescription.update({
+        where: { id: prescriptionId },
+        data: { estado },
+      });
     };
     if (transaction) {
       await dispense(transaction);
@@ -353,7 +495,13 @@ export class PrescriptionsService {
       cantidad: new Prisma.Decimal(i.cantidad),
     }));
     await this.validateForSale(id, establishmentId, items);
-    await this.applyDispenseFromSale(id, items, actorId, undefined, establishmentId);
+    await this.applyDispenseFromSale(
+      id,
+      items,
+      actorId,
+      undefined,
+      establishmentId,
+    );
     return this.findOne(id, establishmentId);
   }
 
@@ -363,16 +511,43 @@ export class PrescriptionsService {
       orderBy: { createdAt: 'desc' },
       select: { numero: true },
     });
-    const next = (Number.parseInt(last?.numero?.replace(/\D/g, '') ?? '0', 10) || 0) + 1;
+    const next =
+      (Number.parseInt(last?.numero?.replace(/\D/g, '') ?? '0', 10) || 0) + 1;
     return `RX-${String(next).padStart(6, '0')}`;
   }
 
   private mapDetail(
     row: Prisma.PrescriptionGetPayload<{
       include: {
-        customer: { select: { id: true; nombre: true; numeroDocumento: true; tipoDocumento: true } };
-        medico: { select: { id: true; cmp: true; nombres: true; apellidos: true; especialidad: true } };
-        items: { include: { product: { select: { id: true; nombre: true; codigoInterno: true; necesitaRecetaMedica: true } } } };
+        customer: {
+          select: {
+            id: true;
+            nombre: true;
+            numeroDocumento: true;
+            tipoDocumento: true;
+          };
+        };
+        medico: {
+          select: {
+            id: true;
+            cmp: true;
+            nombres: true;
+            apellidos: true;
+            especialidad: true;
+          };
+        };
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true;
+                nombre: true;
+                codigoInterno: true;
+                necesitaRecetaMedica: true;
+              };
+            };
+          };
+        };
       };
     }>,
   ) {

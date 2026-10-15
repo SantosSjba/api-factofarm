@@ -6,7 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import compression from 'compression';
 import helmet from 'helmet';
-import { Logger } from 'nestjs-pino';
+import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppService } from './app.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -26,6 +26,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const logger = app.get(Logger);
   app.useLogger(logger);
+  app.useGlobalInterceptors(new LoggerErrorInterceptor());
 
   app.set('trust proxy', 1);
   app.setGlobalPrefix('api/v1');
@@ -41,7 +42,8 @@ async function bootstrap() {
 
   app.use(
     helmet({
-      contentSecurityPolicy: config.get('NODE_ENV') === 'production' ? undefined : false,
+      contentSecurityPolicy:
+        config.get('NODE_ENV') === 'production' ? undefined : false,
       crossOriginEmbedderPolicy: false,
     }),
   );
@@ -58,7 +60,12 @@ async function bootstrap() {
         : (origin, callback) => callback(null, true),
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Idempotency-Key',
+      'X-Request-Id',
+    ],
   });
 
   const nodeEnv = config.get<string>('NODE_ENV', 'development');
@@ -111,4 +118,4 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+void bootstrap();

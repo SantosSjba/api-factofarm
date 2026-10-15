@@ -9,7 +9,13 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -37,7 +43,10 @@ export class WarehouseZonesController {
   @RequirePermissions('inventory.write')
   @ApiOperation({ summary: 'Crear zona de almacén (BPA)' })
   @ApiBody({ type: CreateWarehouseZoneDto })
-  create(@Body() dto: CreateWarehouseZoneDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateWarehouseZoneDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(dto, actor);
   }
 
@@ -57,7 +66,10 @@ export class WarehouseZonesController {
   @RequirePermissions('inventory.write')
   @ApiOperation({ summary: 'Eliminar zona de almacén' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.remove(id, actor);
   }
 }

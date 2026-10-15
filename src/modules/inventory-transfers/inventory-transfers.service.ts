@@ -9,7 +9,10 @@ import {
   InventoryTransferStatus,
   Prisma,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -36,7 +39,10 @@ export class InventoryTransfersService {
       pageSize: query.pageSize,
     });
 
-    const scopedEstablishmentId = await this.scope.resolve(actor, query.establishmentId);
+    const scopedEstablishmentId = await this.scope.resolve(
+      actor,
+      query.establishmentId,
+    );
     const scopedWarehouses = await this.prisma.warehouse.findMany({
       where: { establishmentId: scopedEstablishmentId, deletedAt: null },
       select: { id: true },
@@ -86,7 +92,9 @@ export class InventoryTransfersService {
               id: true,
               cantidad: true,
               codigoLote: true,
-              product: { select: { id: true, nombre: true, codigoInterno: true } },
+              product: {
+                select: { id: true, nombre: true, codigoInterno: true },
+              },
             },
           },
         },
@@ -99,7 +107,9 @@ export class InventoryTransfersService {
 
   async create(dto: CreateInventoryTransferDto, actor: JwtRequestUser) {
     if (dto.fromWarehouseId === dto.toWarehouseId) {
-      throw new BadRequestException('El almacén origen y destino deben ser distintos');
+      throw new BadRequestException(
+        'El almacén origen y destino deben ser distintos',
+      );
     }
 
     await this.scope.assertWarehouseInTenant(actor, dto.fromWarehouseId);
@@ -120,7 +130,9 @@ export class InventoryTransfersService {
     }
 
     if (fromWarehouse.establishmentId !== toWarehouse.establishmentId) {
-      const canCross = actor.permissionCodes.includes('inventory.transfer.cross');
+      const canCross = actor.permissionCodes.includes(
+        'inventory.transfer.cross',
+      );
       if (!canCross) {
         throw new ForbiddenException(
           'Transferencia entre sucursales requiere permiso inventory.transfer.cross',
@@ -161,7 +173,9 @@ export class InventoryTransfersService {
             codigoLote: item.codigoLote?.trim() || null,
             cantidad: new Prisma.Decimal(item.cantidad),
             costoUnitario:
-              item.costoUnitario != null ? new Prisma.Decimal(item.costoUnitario) : null,
+              item.costoUnitario != null
+                ? new Prisma.Decimal(item.costoUnitario)
+                : null,
           })),
         },
       },
@@ -181,7 +195,9 @@ export class InventoryTransfersService {
   async dispatch(id: string, actor: JwtRequestUser) {
     const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
-      throw new BadRequestException('Solo se pueden despachar transferencias en borrador');
+      throw new BadRequestException(
+        'Solo se pueden despachar transferencias en borrador',
+      );
     }
 
     await this.assertTransferLots(transfer.items);
@@ -191,15 +207,27 @@ export class InventoryTransfersService {
       select: { id: true },
     });
     if (!outReason) {
-      throw new BadRequestException('Motivo de salida por transferencia no configurado');
+      throw new BadRequestException(
+        'Motivo de salida por transferencia no configurado',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.inventoryStockTransfer.updateMany({
-        where: { id, estado: InventoryTransferStatus.BORRADOR, deletedAt: null },
-        data: { estado: InventoryTransferStatus.EN_TRANSITO, fechaEnvio: new Date() },
+        where: {
+          id,
+          estado: InventoryTransferStatus.BORRADOR,
+          deletedAt: null,
+        },
+        data: {
+          estado: InventoryTransferStatus.EN_TRANSITO,
+          fechaEnvio: new Date(),
+        },
       });
-      if (claimed.count !== 1) throw new BadRequestException('La transferencia ya fue despachada o anulada');
+      if (claimed.count !== 1)
+        throw new BadRequestException(
+          'La transferencia ya fue despachada o anulada',
+        );
       for (const item of transfer.items) {
         await this.applyStockDelta(tx, {
           productId: item.productId,
@@ -238,7 +266,9 @@ export class InventoryTransfersService {
   async receive(id: string, actor: JwtRequestUser) {
     const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.EN_TRANSITO) {
-      throw new BadRequestException('Solo se pueden recibir transferencias en tránsito');
+      throw new BadRequestException(
+        'Solo se pueden recibir transferencias en tránsito',
+      );
     }
 
     await this.assertTransferLots(transfer.items);
@@ -248,20 +278,37 @@ export class InventoryTransfersService {
       select: { id: true },
     });
     if (!inReason) {
-      throw new BadRequestException('Motivo de ingreso por transferencia no configurado');
+      throw new BadRequestException(
+        'Motivo de ingreso por transferencia no configurado',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.inventoryStockTransfer.updateMany({
-        where: { id, estado: InventoryTransferStatus.EN_TRANSITO, deletedAt: null },
-        data: { estado: InventoryTransferStatus.RECIBIDO, fechaRecepcion: new Date() },
+        where: {
+          id,
+          estado: InventoryTransferStatus.EN_TRANSITO,
+          deletedAt: null,
+        },
+        data: {
+          estado: InventoryTransferStatus.RECIBIDO,
+          fechaRecepcion: new Date(),
+        },
       });
-      if (claimed.count !== 1) throw new BadRequestException('La transferencia ya fue recibida');
+      if (claimed.count !== 1)
+        throw new BadRequestException('La transferencia ya fue recibida');
       for (const item of transfer.items) {
-        const sourceLot = item.codigoLote ? await tx.productLotStock.findFirst({
-          where: { productId: item.productId, warehouseId: transfer.fromWarehouseId, codigoLote: item.codigoLote, deletedAt: null },
-          select: { fechaVencimiento: true },
-        }) : null;
+        const sourceLot = item.codigoLote
+          ? await tx.productLotStock.findFirst({
+              where: {
+                productId: item.productId,
+                warehouseId: transfer.fromWarehouseId,
+                codigoLote: item.codigoLote,
+                deletedAt: null,
+              },
+              select: { fechaVencimiento: true },
+            })
+          : null;
         await this.applyStockDelta(tx, {
           productId: item.productId,
           warehouseId: transfer.toWarehouseId,
@@ -298,14 +345,17 @@ export class InventoryTransfersService {
   async cancel(id: string, actor: JwtRequestUser) {
     const transfer = await this.loadTransfer(id, actor);
     if (transfer.estado !== InventoryTransferStatus.BORRADOR) {
-      throw new BadRequestException('Solo se pueden anular transferencias en borrador');
+      throw new BadRequestException(
+        'Solo se pueden anular transferencias en borrador',
+      );
     }
 
     const cancelled = await this.prisma.inventoryStockTransfer.updateMany({
       where: { id, estado: InventoryTransferStatus.BORRADOR, deletedAt: null },
       data: { estado: InventoryTransferStatus.ANULADO },
     });
-    if (cancelled.count !== 1) throw new BadRequestException('La transferencia ya no está en borrador');
+    if (cancelled.count !== 1)
+      throw new BadRequestException('La transferencia ya no está en borrador');
 
     await this.audit.log({
       userId: actor.sub,
@@ -385,7 +435,9 @@ export class InventoryTransfersService {
       });
       const current = stock?.cantidad ?? new Prisma.Decimal(0);
       if (current.lessThan(absQty)) {
-        throw new BadRequestException('Stock insuficiente para despachar la transferencia');
+        throw new BadRequestException(
+          'Stock insuficiente para despachar la transferencia',
+        );
       }
     }
 
@@ -417,13 +469,18 @@ export class InventoryTransfersService {
 
       if (input.delta.isNegative()) {
         if (!lot || lot.stock.lessThan(absQty)) {
-          throw new BadRequestException(`Stock insuficiente en lote ${input.lotCode}`);
+          throw new BadRequestException(
+            `Stock insuficiente en lote ${input.lotCode}`,
+          );
         }
         const updated = await tx.productLotStock.updateMany({
           where: { id: lot.id, stock: { gte: absQty }, deletedAt: null },
           data: { stock: { decrement: absQty } },
         });
-        if (updated.count !== 1) throw new BadRequestException(`Stock insuficiente en lote ${input.lotCode}`);
+        if (updated.count !== 1)
+          throw new BadRequestException(
+            `Stock insuficiente en lote ${input.lotCode}`,
+          );
       } else if (lot) {
         await tx.productLotStock.update({
           where: { id: lot.id },
@@ -448,10 +505,17 @@ export class InventoryTransfersService {
 
     if (input.delta.isNegative()) {
       const updated = await tx.productWarehouseStock.updateMany({
-        where: { productId: input.productId, warehouseId: input.warehouseId, cantidad: { gte: absQty } },
+        where: {
+          productId: input.productId,
+          warehouseId: input.warehouseId,
+          cantidad: { gte: absQty },
+        },
         data: { cantidad: { decrement: absQty } },
       });
-      if (updated.count !== 1) throw new BadRequestException('Stock insuficiente para despachar la transferencia');
+      if (updated.count !== 1)
+        throw new BadRequestException(
+          'Stock insuficiente para despachar la transferencia',
+        );
       return;
     }
 
@@ -468,7 +532,9 @@ export class InventoryTransfersService {
       create: {
         productId: input.productId,
         warehouseId: input.warehouseId,
-        cantidad: input.delta.isNegative() ? new Prisma.Decimal(0) : input.delta,
+        cantidad: input.delta.isNegative()
+          ? new Prisma.Decimal(0)
+          : input.delta,
       },
     });
   }

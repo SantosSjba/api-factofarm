@@ -1,4 +1,7 @@
-import { decryptBillingSecret, encryptBillingSecret } from './billing-crypto.util';
+import {
+  decryptBillingSecret,
+  encryptBillingSecret,
+} from './billing-crypto.util';
 
 describe('billing-crypto', () => {
   const secret = 'test-billing-secret-key-with-enough-length';
@@ -12,6 +15,8 @@ describe('billing-crypto', () => {
 
   it('falla al descifrar con clave incorrecta', () => {
     const encrypted = encryptBillingSecret('x', secret);
-    expect(() => decryptBillingSecret(encrypted, 'wrong-key-wrong-key-wrong-key!!')).toThrow();
+    expect(() =>
+      decryptBillingSecret(encrypted, 'wrong-key-wrong-key-wrong-key!!'),
+    ).toThrow();
   });
 });

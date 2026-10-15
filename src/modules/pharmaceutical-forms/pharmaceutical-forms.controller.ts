@@ -1,5 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
@@ -12,7 +22,9 @@ import { PharmaceuticalFormsService } from './pharmaceutical-forms.service';
 @ApiBearerAuth()
 @Controller('pharmaceutical-forms')
 export class PharmaceuticalFormsController {
-  constructor(private readonly pharmaceuticalFormsService: PharmaceuticalFormsService) {}
+  constructor(
+    private readonly pharmaceuticalFormsService: PharmaceuticalFormsService,
+  ) {}
 
   @Get()
   @RequirePermissions('pharma-forms.read', 'nav.formas_farmaceuticas')
@@ -23,7 +35,10 @@ export class PharmaceuticalFormsController {
   @Post()
   @RequirePermissions('pharma-forms.write')
   @ApiBody({ type: CreatePharmaceuticalFormDto })
-  create(@Body() dto: CreatePharmaceuticalFormDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreatePharmaceuticalFormDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.pharmaceuticalFormsService.create(dto, actor.sub);
   }
 
@@ -41,7 +56,10 @@ export class PharmaceuticalFormsController {
   @Delete(':id')
   @RequirePermissions('pharma-forms.write')
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.pharmaceuticalFormsService.remove(id, actor.sub);
   }
 }

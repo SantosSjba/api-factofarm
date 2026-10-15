@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, PromotionType } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -74,7 +77,8 @@ export class PromotionsService {
 
   async validateCode(establishmentId: string, code: string) {
     const promo = await this.findActivePromotion(establishmentId, code);
-    if (!promo) return { valid: false as const, reason: 'Código no válido o vencido' };
+    if (!promo)
+      return { valid: false as const, reason: 'Código no válido o vencido' };
     return {
       valid: true as const,
       promotion: this.map(promo),
@@ -98,7 +102,11 @@ export class PromotionsService {
     });
   }
 
-  async create(establishmentId: string, dto: CreatePromotionDto, actorId?: string) {
+  async create(
+    establishmentId: string,
+    dto: CreatePromotionDto,
+    actorId?: string,
+  ) {
     const created = await this.prisma.promotion.create({
       data: {
         establishmentId,
@@ -133,8 +141,12 @@ export class PromotionsService {
       data: {
         ...(dto.nombre !== undefined ? { nombre: dto.nombre.trim() } : {}),
         ...(dto.tipo !== undefined ? { tipo: dto.tipo } : {}),
-        ...(dto.valor !== undefined ? { valor: new Prisma.Decimal(dto.valor) } : {}),
-        ...(dto.cantidadMinima !== undefined ? { cantidadMinima: dto.cantidadMinima } : {}),
+        ...(dto.valor !== undefined
+          ? { valor: new Prisma.Decimal(dto.valor) }
+          : {}),
+        ...(dto.cantidadMinima !== undefined
+          ? { cantidadMinima: dto.cantidadMinima }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
         ...(dto.validFrom !== undefined
           ? { validFrom: dto.validFrom ? new Date(dto.validFrom) : null }

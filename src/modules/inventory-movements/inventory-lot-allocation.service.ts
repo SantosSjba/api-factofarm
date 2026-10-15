@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   InventoryLotAllocationMethod,
   Prisma,
@@ -32,7 +36,10 @@ export type LotAllocationLine = {
 export class InventoryLotAllocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPolicyFromWarehouse(warehouseId: string, tx?: Prisma.TransactionClient): Promise<EstablishmentInventoryPolicy> {
+  async getPolicyFromWarehouse(
+    warehouseId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<EstablishmentInventoryPolicy> {
     const warehouse = await (tx ?? this.prisma).warehouse.findFirst({
       where: { id: warehouseId, deletedAt: null },
       select: {
@@ -49,7 +56,8 @@ export class InventoryLotAllocationService {
     return {
       establishmentId: warehouse.establishmentId,
       blockExpiredProductSales: true,
-      inventoryLotAllocationMethod: warehouse.establishment.inventoryLotAllocationMethod,
+      inventoryLotAllocationMethod:
+        warehouse.establishment.inventoryLotAllocationMethod,
     };
   }
 
@@ -59,7 +67,8 @@ export class InventoryLotAllocationService {
     policy?: EstablishmentInventoryPolicy,
     tx?: Prisma.TransactionClient,
   ): Promise<EligibleLotRow[]> {
-    const resolvedPolicy = policy ?? (await this.getPolicyFromWarehouse(warehouseId, tx));
+    const resolvedPolicy =
+      policy ?? (await this.getPolicyFromWarehouse(warehouseId, tx));
     const now = new Date();
     const rows = await (tx ?? this.prisma).productLotStock.findMany({
       where: {
@@ -83,7 +92,13 @@ export class InventoryLotAllocationService {
         vencido: this.isExpired(row.fechaVencimiento, now),
       }))
       .filter((row) => !row.vencido)
-      .sort((a, b) => this.compareLotsForAllocation(a, b, resolvedPolicy.inventoryLotAllocationMethod));
+      .sort((a, b) =>
+        this.compareLotsForAllocation(
+          a,
+          b,
+          resolvedPolicy.inventoryLotAllocationMethod,
+        ),
+      );
   }
 
   planAutoAllocation(
@@ -118,7 +133,10 @@ export class InventoryLotAllocationService {
   }
 
   sumEligibleStock(lots: EligibleLotRow[]): Prisma.Decimal {
-    return lots.reduce((acc, lot) => acc.plus(lot.stock), new Prisma.Decimal(0));
+    return lots.reduce(
+      (acc, lot) => acc.plus(lot.stock),
+      new Prisma.Decimal(0),
+    );
   }
 
   /** Solo los lotes no vencidos forman parte del stock vendible. */
@@ -165,21 +183,28 @@ export class InventoryLotAllocationService {
     manualLots: { lotCode: string; quantity: number }[],
     policy: EstablishmentInventoryPolicy,
   ): LotAllocationLine[] {
-    const lotByCode = new Map(lots.map((lot) => [lot.codigoLote.toLowerCase(), lot]));
+    void policy;
+    const lotByCode = new Map(
+      lots.map((lot) => [lot.codigoLote.toLowerCase(), lot]),
+    );
     const lines: LotAllocationLine[] = [];
     const allocated = new Map<string, Prisma.Decimal>();
 
     for (const item of manualLots) {
       const code = item.lotCode.trim();
       if (!code) {
-        throw new BadRequestException('Código de lote requerido en asignación manual');
+        throw new BadRequestException(
+          'Código de lote requerido en asignación manual',
+        );
       }
       const lot = lotByCode.get(code.toLowerCase());
       if (!lot) {
         throw new BadRequestException(`Lote no disponible para venta: ${code}`);
       }
       if (lot.vencido) {
-        throw new BadRequestException(`No se puede vender el lote vencido: ${code}`);
+        throw new BadRequestException(
+          `No se puede vender el lote vencido: ${code}`,
+        );
       }
       const qty = new Prisma.Decimal(item.quantity);
       if (!qty.isFinite() || qty.lte(0)) {
@@ -210,7 +235,10 @@ export class InventoryLotAllocationService {
     }
   }
 
-  private toAllocationLine(lot: EligibleLotRow, cantidad: Prisma.Decimal): LotAllocationLine {
+  private toAllocationLine(
+    lot: EligibleLotRow,
+    cantidad: Prisma.Decimal,
+  ): LotAllocationLine {
     return {
       lotId: lot.id,
       codigoLote: lot.codigoLote,
@@ -220,7 +248,10 @@ export class InventoryLotAllocationService {
     };
   }
 
-  private isExpired(fechaVencimiento: Date | null | undefined, now = new Date()) {
+  private isExpired(
+    fechaVencimiento: Date | null | undefined,
+    now = new Date(),
+  ) {
     if (!fechaVencimiento) return false;
     return fechaVencimiento.getTime() < now.getTime();
   }

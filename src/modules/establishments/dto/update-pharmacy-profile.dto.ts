@@ -8,7 +8,10 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { BillingProviderType, SalePdfFormat } from '../../../generated/prisma/client';
+import {
+  BillingProviderType,
+  SalePdfFormat,
+} from '../../../generated/prisma/client';
 
 /** Actualización del perfil comercial/fiscal + OSE del establecimiento activo. */
 export class UpdatePharmacyProfileDto {
@@ -38,7 +41,8 @@ export class UpdatePharmacyProfileDto {
 
   @ApiPropertyOptional({
     enum: BillingProviderType,
-    description: 'MOCK = sin OSE (solo notas de venta). FACTILIZA / NUBEFACT = CPE.',
+    description:
+      'MOCK = sin OSE (solo notas de venta). FACTILIZA / NUBEFACT = CPE.',
   })
   @IsOptional()
   @IsEnum(BillingProviderType)
@@ -56,7 +60,9 @@ export class UpdatePharmacyProfileDto {
   @MaxLength(500)
   consultaApiUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Token API OSE en texto plano; se guarda encriptado' })
+  @ApiPropertyOptional({
+    description: 'Token API OSE en texto plano; se guarda encriptado',
+  })
   @IsOptional()
   @IsString()
   apiToken?: string;
@@ -66,7 +72,9 @@ export class UpdatePharmacyProfileDto {
   @IsBoolean()
   modoSandbox?: boolean;
 
-  @ApiPropertyOptional({ description: 'Emitir boleta/factura automáticamente al vender' })
+  @ApiPropertyOptional({
+    description: 'Emitir boleta/factura automáticamente al vender',
+  })
   @IsOptional()
   @IsBoolean()
   autoEmitOnSale?: boolean;
@@ -168,7 +176,9 @@ export class UpdatePharmacyProfileDto {
   @MaxLength(64)
   timeZone?: string;
 
-  @ApiPropertyOptional({ description: 'Número de registro DIGEMID del establecimiento' })
+  @ApiPropertyOptional({
+    description: 'Número de registro DIGEMID del establecimiento',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(80)

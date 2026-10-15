@@ -37,20 +37,26 @@ describe('Módulos administrativos y complementarios', () => {
         .set(bearer)
         .send({ nombre: `QA beta ${route} ${suffix}` })
         .expect(201);
-      const id = created.body.id;
+      const id = (created.body as { id: string }).id;
       expect(id).toBeDefined();
       const update = await request(app.getHttpServer())
         .patch(`${path}/${id}`)
         .set(bearer)
         .send({ nombre: `QA actualizado ${suffix}` })
         .expect(200);
-      expect(update.body.nombre.toLowerCase()).toContain('actualizado');
+      expect(
+        (update.body as { nombre: string }).nombre.toLowerCase(),
+      ).toContain('actualizado');
       const listed = await request(app.getHttpServer())
         .get(path)
         .query({ search: suffix, page: 1, pageSize: 100 })
         .set(bearer)
         .expect(200);
-      expect(listed.body.items.some((row: any) => row.id === id)).toBe(true);
+      expect(
+        (listed.body as { items: { id: string; monto?: string }[] }).items.some(
+          (row: { id: string }) => row.id === id,
+        ),
+      ).toBe(true);
       await request(app.getHttpServer())
         .delete(`${path}/${id}`)
         .set(bearer)
@@ -60,7 +66,11 @@ describe('Módulos administrativos y complementarios', () => {
         .query({ search: suffix, page: 1, pageSize: 100 })
         .set(bearer)
         .expect(200);
-      expect(after.body.items.some((row: any) => row.id === id)).toBe(false);
+      expect(
+        (after.body as { items: { id: string }[] }).items.some(
+          (row: { id: string }) => row.id === id,
+        ),
+      ).toBe(false);
     },
     60000,
   );
@@ -81,9 +91,9 @@ describe('Módulos administrativos y complementarios', () => {
       .set(bearer)
       .query({ code })
       .expect(200);
-    expect(active.body.valid).toBe(true);
+    expect((active.body as { valid: boolean }).valid).toBe(true);
     await request(app.getHttpServer())
-      .patch(`/api/v1/promotions/${created.body.id}`)
+      .patch(`/api/v1/promotions/${(created.body as { id: string }).id}`)
       .set(bearer)
       .send({ activo: false })
       .expect(200);
@@ -92,17 +102,19 @@ describe('Módulos administrativos y complementarios', () => {
       .set(bearer)
       .query({ code })
       .expect(200);
-    expect(inactive.body.valid).toBe(false);
+    expect((inactive.body as { valid: boolean }).valid).toBe(false);
     const filtered = await request(app.getHttpServer())
       .get('/api/v1/promotions')
       .set(bearer)
       .query({ activo: 'false', search: 'QA beta promoción' })
       .expect(200);
-    expect(filtered.body.items.some((p: any) => p.id === created.body.id)).toBe(
-      true,
-    );
+    expect(
+      (filtered.body as { items: { id: string }[] }).items.some(
+        (p: { id: string }) => p.id === (created.body as { id: string }).id,
+      ),
+    ).toBe(true);
     await request(app.getHttpServer())
-      .delete(`/api/v1/promotions/${created.body.id}`)
+      .delete(`/api/v1/promotions/${(created.body as { id: string }).id}`)
       .set(bearer)
       .expect(200);
   }, 60000);
@@ -116,7 +128,7 @@ describe('Módulos administrativos y complementarios', () => {
       .post('/api/v1/finance/bank-movements')
       .set(bearer)
       .send({
-        bankAccountId: account.body.id,
+        bankAccountId: (account.body as { id: string }).id,
         tipo: 'INGRESO',
         monto: 100,
         referencia: `QA-${suffix}`,
@@ -125,31 +137,46 @@ describe('Módulos administrativos y complementarios', () => {
     await request(app.getHttpServer())
       .post('/api/v1/finance/bank-movements')
       .set(bearer)
-      .send({ bankAccountId: account.body.id, tipo: 'INGRESO', monto: -1 })
+      .send({
+        bankAccountId: (account.body as { id: string }).id,
+        tipo: 'INGRESO',
+        monto: -1,
+      })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/v1/finance/bank-movements/reconcile')
       .set(bearer)
-      .send({ movementIds: [movement.body.id] })
+      .send({ movementIds: [(movement.body as { id: string }).id] })
       .expect(201);
     const listed = await request(app.getHttpServer())
       .get('/api/v1/finance/bank-movements')
       .set(bearer)
-      .query({ bankAccountId: account.body.id, conciliado: 'true' })
+      .query({
+        bankAccountId: (account.body as { id: string }).id,
+        conciliado: 'true',
+      })
       .expect(200);
     expect(
-      listed.body.items.some(
-        (m: any) => m.id === movement.body.id && Number(m.monto) === 100,
+      (listed.body as { items: { id: string; monto?: string }[] }).items.some(
+        (m: { id: string; monto?: string }) =>
+          m.id === (movement.body as { id: string }).id &&
+          Number(m.monto) === 100,
       ),
     ).toBe(true);
     const pending = await request(app.getHttpServer())
       .get('/api/v1/finance/bank-movements')
       .set(bearer)
-      .query({ bankAccountId: account.body.id, conciliado: 'false' })
+      .query({
+        bankAccountId: (account.body as { id: string }).id,
+        conciliado: 'false',
+      })
       .expect(200);
-    expect(pending.body.items.some((m: any) => m.id === movement.body.id)).toBe(
-      false,
-    );
+    expect(
+      (pending.body as { items: { id: string }[] }).items.some(
+        (m: { id: string; monto?: string }) =>
+          m.id === (movement.body as { id: string }).id,
+      ),
+    ).toBe(false);
   }, 60000);
   it('consumo hospitalario dispensa una vez y descuenta stock una vez', async () => {
     const ctx = await resolvePosContext(app, auth);
@@ -183,11 +210,11 @@ describe('Módulos administrativos y complementarios', () => {
         .set(bearer)
         .send({
           warehouseId: ctx.warehouseId,
-          hospitalAreaId: area.body.id,
+          hospitalAreaId: (area.body as { id: string }).id,
           items: [{ productId: ctx.productId, cantidad: 1 }],
         })
         .expect(201);
-      const path = `/api/v1/hospital/consumptions/${consumption.body.id}/dispense`;
+      const path = `/api/v1/hospital/consumptions/${(consumption.body as { id: string }).id}/dispense`;
       await request(app.getHttpServer()).patch(path).set(bearer).expect(200);
       await request(app.getHttpServer()).patch(path).set(bearer).expect(400);
       expect(
@@ -220,11 +247,13 @@ describe('Módulos administrativos y complementarios', () => {
       })
       .expect(201);
     const cancelled = await request(app.getHttpServer())
-      .patch(`/api/v1/delivery-orders/${created.body.id}/status`)
+      .patch(
+        `/api/v1/delivery-orders/${(created.body as { id: string }).id}/status`,
+      )
       .set(bearer)
       .send({ estado: 'CANCELADO', cancelReason: 'QA beta' })
       .expect(200);
-    expect(cancelled.body.estado).toBe('CANCELADO');
+    expect((cancelled.body as { estado: string }).estado).toBe('CANCELADO');
     expect(
       await readPosStock(app, bearer, ctx.warehouseId, ctx.productId),
     ).toBe(before);

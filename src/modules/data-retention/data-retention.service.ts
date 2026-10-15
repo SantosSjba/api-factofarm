@@ -1,3 +1,4 @@
+import { scalarText } from '../../common/utils/scalar-text.util';
 import { PlatformSettingsService } from '../../common/settings/platform-settings.service';
 import {
   ForbiddenException,
@@ -6,7 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import {
   dateRangeBoundsInTimeZone,
@@ -33,30 +37,41 @@ export class DataRetentionService {
     private readonly settings: PlatformSettingsService,
   ) {}
 
-  onSettingsChange(listener: () => Promise<void>): void { this.settings.onChange(listener); }
+  onSettingsChange(listener: () => Promise<void>): void {
+    this.settings.onChange(listener);
+  }
 
   assertPlatformAdmin(actor: JwtRequestUser): void {
     if (!isPlatformAdmin(actor.role)) {
-      throw new ForbiddenException('Solo SUPER_ADMIN puede gestionar retención de datos');
+      throw new ForbiddenException(
+        'Solo SUPER_ADMIN puede gestionar retención de datos',
+      );
     }
   }
 
   async getAuditRetentionDays(): Promise<number> {
-    return Number((await this.settings.get('DATA_RETENTION_AUDIT_DAYS')) ?? 730);
+    return Number(
+      (await this.settings.get('DATA_RETENTION_AUDIT_DAYS')) ?? 730,
+    );
   }
 
   async getArchiveDays(): Promise<number> {
-    return Number((await this.settings.get('DATA_RETENTION_ARCHIVE_DAYS')) ?? 1825);
+    return Number(
+      (await this.settings.get('DATA_RETENTION_ARCHIVE_DAYS')) ?? 1825,
+    );
   }
 
   async isPurgeEnabled(): Promise<boolean> {
-    const value = (await this.settings.get('DATA_RETENTION_PURGE_ENABLED'));
+    const value = await this.settings.get('DATA_RETENTION_PURGE_ENABLED');
     return value === 'true';
   }
 
   /** Soft-protect hard delete (B-LOG-20): requires explicit confirm token. */
   async isPurgeConfirmed(): Promise<boolean> {
-    return (await this.settings.get('DATA_RETENTION_PURGE_CONFIRM')) === 'I_UNDERSTAND';
+    return (
+      (await this.settings.get('DATA_RETENTION_PURGE_CONFIRM')) ===
+      'I_UNDERSTAND'
+    );
   }
 
   async canPurge(): Promise<boolean> {
@@ -64,12 +79,14 @@ export class DataRetentionService {
   }
 
   async isArchiveEnabled(): Promise<boolean> {
-    const value = (await this.settings.get('DATA_RETENTION_ARCHIVE_ENABLED'));
+    const value = await this.settings.get('DATA_RETENTION_ARCHIVE_ENABLED');
     return value === 'true';
   }
 
   async getBatchSize(): Promise<number> {
-    return Number((await this.settings.get('DATA_RETENTION_BATCH_SIZE')) ?? 5000);
+    return Number(
+      (await this.settings.get('DATA_RETENTION_BATCH_SIZE')) ?? 5000,
+    );
   }
 
   async getCronExpression(): Promise<string> {
@@ -77,12 +94,16 @@ export class DataRetentionService {
   }
 
   async getArchiveCronExpression(): Promise<string> {
-    return (await this.settings.get('DATA_RETENTION_ARCHIVE_CRON')) ?? '0 4 * * 0';
+    return (
+      (await this.settings.get('DATA_RETENTION_ARCHIVE_CRON')) ?? '0 4 * * 0'
+    );
   }
 
   async cutoffForAudit(): Promise<Date> {
     const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - (await this.getAuditRetentionDays()));
+    cutoff.setUTCDate(
+      cutoff.getUTCDate() - (await this.getAuditRetentionDays()),
+    );
     return cutoff;
   }
 
@@ -123,17 +144,21 @@ export class DataRetentionService {
       table: row.table_name,
       approxRows: Number(row.approx_rows),
       totalBytes: Number(row.total_bytes),
-      totalMb: Math.round((Number(row.total_bytes) / (1024 * 1024)) * 100) / 100,
+      totalMb:
+        Math.round((Number(row.total_bytes) / (1024 * 1024)) * 100) / 100,
     }));
 
-    const [hotSales, archivedSales, hotKardex, archivedKardex] = await Promise.all([
-      this.prisma.sale.count({ where: { archivedAt: null, deletedAt: null } }),
-      this.prisma.archivedSale.count(),
-      this.prisma.inventoryInboundMovement.count({
-        where: { archivedAt: null, deletedAt: null },
-      }),
-      this.prisma.archivedInventoryInboundMovement.count(),
-    ]);
+    const [hotSales, archivedSales, hotKardex, archivedKardex] =
+      await Promise.all([
+        this.prisma.sale.count({
+          where: { archivedAt: null, deletedAt: null },
+        }),
+        this.prisma.archivedSale.count(),
+        this.prisma.inventoryInboundMovement.count({
+          where: { archivedAt: null, deletedAt: null },
+        }),
+        this.prisma.archivedInventoryInboundMovement.count(),
+      ]);
 
     const recentRuns = await this.prisma.dataRetentionRun.findMany({
       orderBy: { startedAt: 'desc' },
@@ -143,15 +168,15 @@ export class DataRetentionService {
     return {
       generatedAt: new Date().toISOString(),
       config: {
-        auditRetentionDays: (await this.getAuditRetentionDays()),
-        archiveDays: (await this.getArchiveDays()),
-        purgeEnabled: (await this.isPurgeEnabled()),
-        purgeConfirmed: (await this.isPurgeConfirmed()),
-        canPurge: (await this.canPurge()),
-        archiveEnabled: (await this.isArchiveEnabled()),
-        cron: (await this.getCronExpression()),
-        archiveCron: (await this.getArchiveCronExpression()),
-        batchSize: (await this.getBatchSize()),
+        auditRetentionDays: await this.getAuditRetentionDays(),
+        archiveDays: await this.getArchiveDays(),
+        purgeEnabled: await this.isPurgeEnabled(),
+        purgeConfirmed: await this.isPurgeConfirmed(),
+        canPurge: await this.canPurge(),
+        archiveEnabled: await this.isArchiveEnabled(),
+        cron: await this.getCronExpression(),
+        archiveCron: await this.getArchiveCronExpression(),
+        batchSize: await this.getBatchSize(),
       },
       hotPath: {
         sales: hotSales,
@@ -183,8 +208,8 @@ export class DataRetentionService {
       );
     }
 
-    const cutoffAt = (await this.cutoffForAudit());
-    const batchSize = (await this.getBatchSize());
+    const cutoffAt = await this.cutoffForAudit();
+    const batchSize = await this.getBatchSize();
     const startedAt = new Date();
 
     const run = await this.prisma.dataRetentionRun.create({
@@ -224,7 +249,15 @@ export class DataRetentionService {
         }
       }
 
-      return this.finishRun(run.id, deletedCount, startedAt, batchSize, mode, cutoffAt, AUDIT_JOB);
+      return this.finishRun(
+        run.id,
+        deletedCount,
+        startedAt,
+        batchSize,
+        mode,
+        cutoffAt,
+        AUDIT_JOB,
+      );
     } catch (error) {
       await this.failRun(run.id, deletedCount, error);
       throw error;
@@ -238,8 +271,8 @@ export class DataRetentionService {
       );
     }
 
-    const cutoffAt = (await this.cutoffForArchive());
-    const batchSize = (await this.getBatchSize());
+    const cutoffAt = await this.cutoffForArchive();
+    const batchSize = await this.getBatchSize();
     const startedAt = new Date();
     const run = await this.prisma.dataRetentionRun.create({
       data: {
@@ -287,10 +320,10 @@ export class DataRetentionService {
                   id: sale.id,
                   establishmentId: sale.establishmentId,
                   originalCreatedAt: sale.createdAt,
-                  payload: sale as unknown as Prisma.InputJsonValue,
+                  payload: sale,
                 },
                 update: {
-                  payload: sale as unknown as Prisma.InputJsonValue,
+                  payload: sale,
                   archivedAt: new Date(),
                 },
               });
@@ -302,7 +335,9 @@ export class DataRetentionService {
             archivedCount += 1;
           }
 
-          this.logger.log(`Archivo ventas lote: ${batch.length} (acumulado ${archivedCount})`);
+          this.logger.log(
+            `Archivo ventas lote: ${batch.length} (acumulado ${archivedCount})`,
+          );
         }
       }
 
@@ -328,8 +363,8 @@ export class DataRetentionService {
       );
     }
 
-    const cutoffAt = (await this.cutoffForArchive());
-    const batchSize = (await this.getBatchSize());
+    const cutoffAt = await this.cutoffForArchive();
+    const batchSize = await this.getBatchSize();
     const startedAt = new Date();
     const run = await this.prisma.dataRetentionRun.create({
       data: {
@@ -374,10 +409,10 @@ export class DataRetentionService {
                   warehouseId: movement.warehouseId,
                   productId: movement.productId,
                   originalFechaRegistro: movement.fechaRegistro,
-                  payload: movement as unknown as Prisma.InputJsonValue,
+                  payload: movement,
                 },
                 update: {
-                  payload: movement as unknown as Prisma.InputJsonValue,
+                  payload: movement,
                   archivedAt: new Date(),
                 },
               });
@@ -389,7 +424,9 @@ export class DataRetentionService {
             archivedCount += 1;
           }
 
-          this.logger.log(`Archivo kardex lote: ${batch.length} (acumulado ${archivedCount})`);
+          this.logger.log(
+            `Archivo kardex lote: ${batch.length} (acumulado ${archivedCount})`,
+          );
         }
       }
 
@@ -419,7 +456,9 @@ export class DataRetentionService {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const dateFilter = await this.archiveDateFilter(query);
     const where: Prisma.ArchivedSaleWhereInput = {
-      ...(query.establishmentId ? { establishmentId: query.establishmentId } : {}),
+      ...(query.establishmentId
+        ? { establishmentId: query.establishmentId }
+        : {}),
       ...(dateFilter ? { originalCreatedAt: dateFilter } : {}),
     };
 
@@ -445,7 +484,7 @@ export class DataRetentionService {
           serie: payload.serie ?? null,
           numero: payload.numero ?? null,
           estado: payload.estado ?? null,
-          total: payload.total != null ? String(payload.total) : null,
+          total: payload.total != null ? scalarText(payload.total) : null,
         };
       }),
       total,
@@ -507,7 +546,8 @@ export class DataRetentionService {
           originalFechaRegistro: row.originalFechaRegistro,
           archivedAt: row.archivedAt,
           movementType: payload.movementType ?? null,
-          cantidad: payload.cantidad != null ? String(payload.cantidad) : null,
+          cantidad:
+            payload.cantidad != null ? scalarText(payload.cantidad) : null,
           codigoLote: payload.codigoLote ?? null,
         };
       }),
@@ -535,7 +575,9 @@ export class DataRetentionService {
 
   /** Vuelve a listados hot: limpia archivedAt. La copia en cold permanece (upsert seguro). */
   async restoreSaleToHot(id: string) {
-    const archived = await this.prisma.archivedSale.findUnique({ where: { id } });
+    const archived = await this.prisma.archivedSale.findUnique({
+      where: { id },
+    });
     if (!archived) throw new NotFoundException('Venta archivada no encontrada');
 
     const sale = await this.prisma.sale.findFirst({
@@ -559,10 +601,12 @@ export class DataRetentionService {
   }
 
   async restoreKardexToHot(id: string) {
-    const archived = await this.prisma.archivedInventoryInboundMovement.findUnique({
-      where: { id },
-    });
-    if (!archived) throw new NotFoundException('Movimiento archivado no encontrado');
+    const archived =
+      await this.prisma.archivedInventoryInboundMovement.findUnique({
+        where: { id },
+      });
+    if (!archived)
+      throw new NotFoundException('Movimiento archivado no encontrado');
 
     const movement = await this.prisma.inventoryInboundMovement.findFirst({
       where: { id, deletedAt: null },

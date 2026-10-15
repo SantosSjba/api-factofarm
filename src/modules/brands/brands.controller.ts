@@ -33,7 +33,10 @@ export class BrandsController {
   @Get()
   @RequirePermissions('brands.read', 'nav.marcas')
   @ApiOperation({ summary: 'Listar marcas (paginado si page está presente)' })
-  findAll(@Query() query: MaestroListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: MaestroListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.brandsService.findAll(query, actor);
   }
 
@@ -62,7 +65,10 @@ export class BrandsController {
   @RequirePermissions('brands.write')
   @ApiOperation({ summary: 'Eliminar marca (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.brandsService.remove(id, actor);
   }
 }

@@ -34,7 +34,10 @@ export class SuppliersController {
   @Get()
   @RequirePermissions('suppliers.read', 'nav.proveedores')
   @ApiOperation({ summary: 'Listar proveedores con paginación' })
-  list(@Query() query: SupplierListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: SupplierListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.suppliersService.list(query, actor);
   }
 
@@ -49,7 +52,10 @@ export class SuppliersController {
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Detalle de proveedor' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.suppliersService.findOne(id, actor);
   }
 
@@ -77,21 +83,32 @@ export class SuppliersController {
   @RequirePermissions('suppliers.write')
   @ApiOperation({ summary: 'Eliminar proveedor (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.suppliersService.remove(id, actor);
   }
 
   @Get(':id/purchase-history')
   @RequirePermissions('suppliers.read')
-  @ApiOperation({ summary: 'Historial de compras del proveedor (placeholder Fase 4)' })
-  listPurchaseHistory(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  @ApiOperation({
+    summary: 'Historial de compras del proveedor (placeholder Fase 4)',
+  })
+  listPurchaseHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.suppliersService.listPurchaseHistory(id, actor);
   }
 
   @Get(':id/products')
   @RequirePermissions('suppliers.read')
   @ApiOperation({ summary: 'Productos vinculados al proveedor' })
-  listProducts(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  listProducts(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.suppliersService.listProducts(id, actor);
   }
 

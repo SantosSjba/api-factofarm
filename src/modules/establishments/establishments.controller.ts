@@ -9,7 +9,13 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
@@ -59,11 +65,18 @@ export class EstablishmentsController {
   }
 
   @Get()
-  @RequirePermissions('establishments.read', 'nav.establecimientos', 'users.write')
+  @RequirePermissions(
+    'establishments.read',
+    'nav.establecimientos',
+    'users.write',
+  )
   @ApiOperation({
     summary: 'Listar establecimientos activos (paginado si se envía page)',
   })
-  findAll(@Query() query: EstablishmentListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: EstablishmentListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.establishmentsService.findAll(
       {
         search: query.search,
@@ -78,9 +91,14 @@ export class EstablishmentsController {
 
   @Get('pos-payment-settings')
   @RequirePermissions('sales.read', 'nav.punto_venta')
-  @ApiOperation({ summary: 'Números Yape/Plin del establecimiento activo (referencia POS)' })
+  @ApiOperation({
+    summary: 'Números Yape/Plin del establecimiento activo (referencia POS)',
+  })
   posPaymentSettings(@CurrentUser() actor: JwtRequestUser) {
-    return this.establishmentsService.getPosPaymentSettings(actor.establecimientoId, actor);
+    return this.establishmentsService.getPosPaymentSettings(
+      actor.establecimientoId,
+      actor,
+    );
   }
 
   @Get('pharmacy-profile')
@@ -92,17 +110,22 @@ export class EstablishmentsController {
     'nav.punto_venta',
   )
   @ApiOperation({
-    summary: 'Perfil de farmacia del establecimiento activo (logo, contacto y datos de facturación)',
+    summary:
+      'Perfil de farmacia del establecimiento activo (logo, contacto y datos de facturación)',
   })
   async getPharmacyProfile(@CurrentUser() actor: JwtRequestUser) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.establishmentsService.getPharmacyProfile(establishmentId, actor);
+    return this.establishmentsService.getPharmacyProfile(
+      establishmentId,
+      actor,
+    );
   }
 
   @Patch('pharmacy-profile')
   @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({
-    summary: 'Actualizar perfil de farmacia (identidad del local + RUC/razón social emisor)',
+    summary:
+      'Actualizar perfil de farmacia (identidad del local + RUC/razón social emisor)',
   })
   @ApiBody({ type: UpdatePharmacyProfileDto })
   async updatePharmacyProfile(
@@ -110,14 +133,21 @@ export class EstablishmentsController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.establishmentsService.updatePharmacyProfile(establishmentId, dto, actor);
+    return this.establishmentsService.updatePharmacyProfile(
+      establishmentId,
+      dto,
+      actor,
+    );
   }
 
   @Post()
   @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Crear establecimiento' })
   @ApiBody({ type: CreateEstablishmentDto })
-  create(@Body() dto: CreateEstablishmentDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateEstablishmentDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.establishmentsService.create(dto, actor);
   }
 
@@ -138,7 +168,10 @@ export class EstablishmentsController {
   @RequirePermissions('establishments.write', 'nav.establecimientos')
   @ApiOperation({ summary: 'Eliminar establecimiento (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.establishmentsService.remove(id, actor);
   }
 
@@ -146,7 +179,10 @@ export class EstablishmentsController {
   @RequirePermissions('establishments.read', 'nav.establecimientos')
   @ApiOperation({ summary: 'Listar series de un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  listSeries(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  listSeries(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.establishmentsService.listSeries(id, actor);
   }
 

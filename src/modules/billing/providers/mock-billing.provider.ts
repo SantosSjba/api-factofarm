@@ -13,7 +13,7 @@ import type {
 
 @Injectable()
 export class MockBillingProvider implements IBillingProvider {
-  async emit(input: EmitDocumentInput): Promise<EmitDocumentResult> {
+  emit(input: EmitDocumentInput): Promise<EmitDocumentResult> {
     const externalId = `MOCK-${input.serie}-${input.numero}-${Date.now()}`;
     const signedXml = `${input.ublXml}\n<!-- XMLDSig: firmado por OSE mock -->`;
     const pdfContent = Buffer.from(
@@ -24,7 +24,7 @@ export class MockBillingProvider implements IBillingProvider {
       `CDR MOCK ACEPTADO\nCodigo: 0\nDescripcion: La Factura ha sido aceptada`,
       'utf8',
     );
-    return {
+    return Promise.resolve({
       externalId,
       sunatStatus: SunatDocumentStatus.ACEPTADO,
       sunatCodigo: '0',
@@ -32,31 +32,31 @@ export class MockBillingProvider implements IBillingProvider {
       xmlContent: signedXml,
       pdfContent,
       cdrContent,
-    };
+    });
   }
 
-  async getStatus(externalId: string): Promise<DocumentStatusResult> {
-    return {
+  getStatus(externalId: string): Promise<DocumentStatusResult> {
+    return Promise.resolve({
       sunatStatus: SunatDocumentStatus.ACEPTADO,
       sunatCodigo: '0',
       sunatDescripcion: `Estado mock para ${externalId}`,
-    };
+    });
   }
 
-  async voidDocument(input: VoidDocumentInput): Promise<VoidDocumentResult> {
-    return {
+  voidDocument(input: VoidDocumentInput): Promise<VoidDocumentResult> {
+    return Promise.resolve({
       sunatStatus: SunatDocumentStatus.ANULADO,
       sunatCodigo: '0',
       sunatDescripcion: `Baja registrada mock ${input.serie}-${input.numero}`,
-    };
+    });
   }
 
-  async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
-    return {
+  sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
+    return Promise.resolve({
       externalId: `RC-MOCK-${input.fecha}`,
       sunatStatus: SunatDocumentStatus.ACEPTADO,
       sunatCodigo: '0',
       sunatDescripcion: `Resumen diario mock (${input.documentIds.length} docs)`,
-    };
+    });
   }
 }

@@ -1,4 +1,13 @@
-import { Controller, Delete, Get, Param, Patch, Query, Res, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -15,7 +24,10 @@ export class SeriesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar series' })
-  list(@Query() query: SeriesListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: SeriesListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.seriesService.list(query, actor);
   }
 
@@ -44,8 +56,14 @@ export class SeriesController {
   ): Promise<StreamableFile> {
     const buffer = await this.seriesService.buildExportBuffer(query, actor);
     const filename = 'series.xlsx';
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 }

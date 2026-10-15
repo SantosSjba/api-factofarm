@@ -25,7 +25,8 @@ const MENU_ROOT_CODES = [
 @Injectable()
 export class PermissionsService {
   constructor(
-    @Inject(PERMISSIONS_REPOSITORY) private readonly permissions: IPermissionsRepository,
+    @Inject(PERMISSIONS_REPOSITORY)
+    private readonly permissions: IPermissionsRepository,
     private readonly cache: CacheService,
   ) {}
 

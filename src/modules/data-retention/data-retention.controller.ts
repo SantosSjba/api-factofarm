@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -54,7 +61,9 @@ export class DataRetentionController {
 
   @Post('archive/sales/dry-run')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
-  @ApiOperation({ summary: 'Simular archivado de ventas antiguas (sin DELETE)' })
+  @ApiOperation({
+    summary: 'Simular archivado de ventas antiguas (sin DELETE)',
+  })
   async salesArchiveDryRun(@CurrentUser() actor: JwtRequestUser) {
     this.retention.assertPlatformAdmin(actor);
     return this.retention.runSalesArchive('dry-run');
@@ -63,7 +72,8 @@ export class DataRetentionController {
   @Post('archive/sales')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({
-    summary: 'Archivar ventas antiguas a cold storage (requiere DATA_RETENTION_ARCHIVE_ENABLED=true)',
+    summary:
+      'Archivar ventas antiguas a cold storage (requiere DATA_RETENTION_ARCHIVE_ENABLED=true)',
   })
   async salesArchive(@CurrentUser() actor: JwtRequestUser) {
     this.retention.assertPlatformAdmin(actor);
@@ -95,7 +105,8 @@ export class DataRetentionController {
   @Post('archive/sales/:id/restore')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({
-    summary: 'Restaurar venta al hot path (limpia archivedAt; conserva copia cold)',
+    summary:
+      'Restaurar venta al hot path (limpia archivedAt; conserva copia cold)',
   })
   async restoreSale(
     @CurrentUser() actor: JwtRequestUser,
@@ -116,7 +127,8 @@ export class DataRetentionController {
   @Post('archive/kardex')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({
-    summary: 'Archivar kardex antiguo a cold storage (requiere DATA_RETENTION_ARCHIVE_ENABLED=true)',
+    summary:
+      'Archivar kardex antiguo a cold storage (requiere DATA_RETENTION_ARCHIVE_ENABLED=true)',
   })
   async kardexArchive(@CurrentUser() actor: JwtRequestUser) {
     this.retention.assertPlatformAdmin(actor);
@@ -125,7 +137,9 @@ export class DataRetentionController {
 
   @Get('archive/kardex')
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
-  @ApiOperation({ summary: 'Listar movimientos kardex en cold storage (plataforma)' })
+  @ApiOperation({
+    summary: 'Listar movimientos kardex en cold storage (plataforma)',
+  })
   async listArchivedKardex(
     @CurrentUser() actor: JwtRequestUser,
     @Query() query: ArchiveListQueryDto,

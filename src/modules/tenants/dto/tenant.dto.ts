@@ -133,7 +133,9 @@ export class UpdateTenantDto {
   @IsString({ each: true })
   enabledModules?: string[];
 
-  @ApiPropertyOptional({ description: 'Aplicar límites y módulos del plan seleccionado' })
+  @ApiPropertyOptional({
+    description: 'Aplicar límites y módulos del plan seleccionado',
+  })
   @IsOptional()
   @IsBoolean()
   applyPlanDefaults?: boolean;

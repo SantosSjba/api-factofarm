@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CustomerListQueryDto {
   @ApiPropertyOptional()
@@ -8,7 +16,9 @@ export class CustomerListQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'all|nombre|numeroDocumento|codigoInterno' })
+  @ApiPropertyOptional({
+    description: 'all|nombre|numeroDocumento|codigoInterno',
+  })
   @IsOptional()
   @IsIn(['all', 'nombre', 'numeroDocumento', 'codigoInterno'])
   field?: 'all' | 'nombre' | 'numeroDocumento' | 'codigoInterno';

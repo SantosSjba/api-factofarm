@@ -12,7 +12,10 @@ import type {
   VoidDocumentResult,
 } from '../domain/billing-provider.port';
 import { assertOseCredentialsOrThrow } from '../utils/billing-provider-guard.util';
-import { buildNubefactAuthHeader, nubefactEmissionDate } from '../utils/nubefact.helpers';
+import {
+  buildNubefactAuthHeader,
+  nubefactEmissionDate,
+} from '../utils/nubefact.helpers';
 import { MockBillingProvider } from './mock-billing.provider';
 
 type NubefactResponse = {
@@ -51,7 +54,9 @@ export class NubefactBillingProvider implements IBillingProvider {
     const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
     assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
     if (!hasCredentials) {
-      this.logger.warn('Nubefact sin credenciales; usando mock (solo desarrollo)');
+      this.logger.warn(
+        'Nubefact sin credenciales; usando mock (solo desarrollo)',
+      );
       return this.mock.emit(input);
     }
 
@@ -62,11 +67,15 @@ export class NubefactBillingProvider implements IBillingProvider {
       serie: input.serie,
       numero: Number.parseInt(input.numero, 10),
       sunat_transaction: input.esContingencia ? 2 : 1,
-      cliente_tipo_de_documento: Number.parseInt(input.receptor.tipoDoc, 10) || 0,
+      cliente_tipo_de_documento:
+        Number.parseInt(input.receptor.tipoDoc, 10) || 0,
       cliente_numero_de_documento: input.receptor.numeroDoc,
       cliente_denominacion: input.receptor.nombre,
       cliente_direccion: input.receptor.direccion?.trim() || '-',
-      fecha_de_emision: nubefactEmissionDate(input.fechaEmision, input.timeZone),
+      fecha_de_emision: nubefactEmissionDate(
+        input.fechaEmision,
+        input.timeZone,
+      ),
       moneda: input.moneda === 'PEN' ? 1 : 2,
       porcentaje_de_igv: 18,
       total_gravada: Number(input.subtotal),
@@ -91,7 +100,10 @@ export class NubefactBillingProvider implements IBillingProvider {
       body.documento_que_se_modifica_tipo =
         input.relatedDocument.documentType === 'FACTURA' ? 1 : 2;
       body.documento_que_se_modifica_serie = input.relatedDocument.serie;
-      body.documento_que_se_modifica_numero = Number.parseInt(input.relatedDocument.numero, 10);
+      body.documento_que_se_modifica_numero = Number.parseInt(
+        input.relatedDocument.numero,
+        10,
+      );
       body.tipo_de_nota_de_credito = Number(input.creditNoteReasonCode ?? '09');
     }
 
@@ -118,7 +130,8 @@ export class NubefactBillingProvider implements IBillingProvider {
     return {
       sunatStatus: this.mapSunatStatus(response),
       sunatCodigo: response.codigo_respuesta_sunat ?? '0',
-      sunatDescripcion: response.descripcion_respuesta_sunat ?? 'Consulta Nubefact',
+      sunatDescripcion:
+        response.descripcion_respuesta_sunat ?? 'Consulta Nubefact',
     };
   }
 
@@ -127,7 +140,9 @@ export class NubefactBillingProvider implements IBillingProvider {
     const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
     assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
     if (!hasCredentials) {
-      this.logger.warn('Nubefact sin credenciales; mock baja (solo desarrollo)');
+      this.logger.warn(
+        'Nubefact sin credenciales; mock baja (solo desarrollo)',
+      );
       return this.mock.voidDocument(input);
     }
     const response = await this.postJson({
@@ -141,11 +156,15 @@ export class NubefactBillingProvider implements IBillingProvider {
       sunatStatus: this.mapSunatStatus(response),
       sunatCodigo: response.codigo_respuesta_sunat ?? '0',
       sunatDescripcion:
-        response.descripcion_respuesta_sunat ?? response.errors ?? 'Comunicación de baja enviada',
+        response.descripcion_respuesta_sunat ??
+        response.errors ??
+        'Comunicación de baja enviada',
     };
   }
 
-  async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
+  async sendDailySummary(
+    input: DailySummaryInput,
+  ): Promise<DailySummaryResult> {
     const nodeEnv = this.config.get<string>('NODE_ENV');
     const hasCredentials = !!this.apiUrl?.trim() && !!this.apiToken?.trim();
     assertOseCredentialsOrThrow(nodeEnv, hasCredentials, 'Nubefact');
@@ -164,13 +183,17 @@ export class NubefactBillingProvider implements IBillingProvider {
       sunatStatus: this.mapSunatStatus(response),
       sunatCodigo: response.codigo_respuesta_sunat ?? '0',
       sunatDescripcion:
-        response.descripcion_respuesta_sunat ?? response.errors ?? 'Resumen diario enviado',
+        response.descripcion_respuesta_sunat ??
+        response.errors ??
+        'Resumen diario enviado',
     };
   }
 
-  private async postJson(body: Record<string, unknown>): Promise<NubefactResponse> {
+  private async postJson(
+    body: Record<string, unknown>,
+  ): Promise<NubefactResponse> {
     const url = this.buildUrl();
-    this.logger.log(`Nubefact POST ${url}`);
+    this.logger.log({ event: 'billing_request', provider: 'nubefact' });
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -231,14 +254,19 @@ export class NubefactBillingProvider implements IBillingProvider {
       sunatStatus: this.mapSunatStatus(response),
       sunatCodigo: response.codigo_respuesta_sunat ?? '0',
       sunatDescripcion:
-        response.descripcion_respuesta_sunat ?? response.errors ?? 'Emitido vía Nubefact',
+        response.descripcion_respuesta_sunat ??
+        response.errors ??
+        'Emitido vía Nubefact',
       xmlContent,
       pdfContent,
       cdrContent,
     };
   }
 
-  private async fetchArtifact(url: string | undefined, fallback: string): Promise<string> {
+  private async fetchArtifact(
+    url: string | undefined,
+    fallback: string,
+  ): Promise<string> {
     if (!url?.trim()) return fallback;
     try {
       const res = await fetch(url);

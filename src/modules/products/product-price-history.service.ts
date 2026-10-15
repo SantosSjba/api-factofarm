@@ -5,7 +5,10 @@ import {
   ProductPriceField,
 } from '../../generated/prisma/client';
 import { buildPaginatedResult } from '../../common/dto/pagination.dto';
-import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import type { CreateProductDto } from './dto/create-product.dto';
@@ -55,7 +58,11 @@ const SOURCE_LABELS: Record<ProductPriceChangeSource, string> = {
 export class ProductPriceHistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(productId: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+  async list(
+    productId: string,
+    query: ProductPriceHistoryQueryDto,
+    actor?: JwtRequestUser,
+  ) {
     const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
     const exists = await this.prisma.product.findFirst({
       where: { id: productId, deletedAt: null, ...tenantFilter },
@@ -93,7 +100,11 @@ export class ProductPriceHistoryService {
       source: row.source,
       sourceLabel: SOURCE_LABELS[row.source],
       changedBy: row.changedBy
-        ? { id: row.changedBy.id, nombre: row.changedBy.nombre, email: row.changedBy.email }
+        ? {
+            id: row.changedBy.id,
+            nombre: row.changedBy.nombre,
+            email: row.changedBy.email,
+          }
         : null,
       createdAt: row.createdAt.toISOString(),
     }));
@@ -138,7 +149,10 @@ export class ProductPriceHistoryService {
       newValue: new Prisma.Decimal(dto.precioUnitarioVenta),
     });
 
-    if (dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null) {
+    if (
+      dto.precioUnitarioCompra !== undefined &&
+      dto.precioUnitarioCompra !== null
+    ) {
       entries.push({
         field: ProductPriceField.PRECIO_COMPRA,
         previousValue: null,
@@ -215,7 +229,8 @@ export class ProductPriceHistoryService {
     );
 
     const newCompra =
-      dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null
+      dto.precioUnitarioCompra !== undefined &&
+      dto.precioUnitarioCompra !== null
         ? new Prisma.Decimal(dto.precioUnitarioCompra)
         : null;
     this.pushNullableDecimalChange(
@@ -237,7 +252,9 @@ export class ProductPriceHistoryService {
     );
 
     if (dto.warehousePrices) {
-      const beforeMap = new Map(before.warehousePrices.map((w) => [w.warehouseId, w.precio]));
+      const beforeMap = new Map(
+        before.warehousePrices.map((w) => [w.warehouseId, w.precio]),
+      );
       const afterIds = new Set<string>();
       for (const wp of dto.warehousePrices) {
         afterIds.add(wp.warehouseId);
@@ -266,7 +283,10 @@ export class ProductPriceHistoryService {
 
     if (dto.presentations) {
       const beforeMap = new Map(
-        before.presentations.map((p) => [this.presentationKey(p.unitId, p.factor), p]),
+        before.presentations.map((p) => [
+          this.presentationKey(p.unitId, p.factor),
+          p,
+        ]),
       );
       const afterKeys = new Set<string>();
       for (const pr of dto.presentations) {
@@ -336,7 +356,8 @@ export class ProductPriceHistoryService {
   ) {
     const entries: HistoryEntry[] = [];
     const venta = new Prisma.Decimal(precioVenta);
-    const compra = precioCompra !== null ? new Prisma.Decimal(precioCompra) : null;
+    const compra =
+      precioCompra !== null ? new Prisma.Decimal(precioCompra) : null;
 
     if (!before) {
       entries.push({
@@ -352,7 +373,12 @@ export class ProductPriceHistoryService {
         });
       }
     } else {
-      this.pushDecimalChange(entries, ProductPriceField.PRECIO_VENTA, before.precioUnitarioVenta, venta);
+      this.pushDecimalChange(
+        entries,
+        ProductPriceField.PRECIO_VENTA,
+        before.precioUnitarioVenta,
+        venta,
+      );
       this.pushNullableDecimalChange(
         entries,
         ProductPriceField.PRECIO_COMPRA,
@@ -364,7 +390,13 @@ export class ProductPriceHistoryService {
     if (!entries.length) return;
 
     await this.prisma.$transaction(async (tx) => {
-      await this.persist(tx, productId, entries, actorId, ProductPriceChangeSource.IMPORT);
+      await this.persist(
+        tx,
+        productId,
+        entries,
+        actorId,
+        ProductPriceChangeSource.IMPORT,
+      );
     });
   }
 
@@ -414,13 +446,22 @@ export class ProductPriceHistoryService {
     next: Prisma.Decimal | null,
   ) {
     if (previous === null && next === null) return;
-    if (previous !== null && next !== null && this.decimalsEqual(previous, next)) return;
+    if (
+      previous !== null &&
+      next !== null &&
+      this.decimalsEqual(previous, next)
+    )
+      return;
     if (previous === null && next !== null) {
       entries.push({ field, previousValue: null, newValue: next });
       return;
     }
     if (previous !== null && next === null) {
-      entries.push({ field, previousValue: previous, newValue: new Prisma.Decimal(0) });
+      entries.push({
+        field,
+        previousValue: previous,
+        newValue: new Prisma.Decimal(0),
+      });
       return;
     }
     if (previous !== null && next !== null) {
@@ -428,13 +469,19 @@ export class ProductPriceHistoryService {
     }
   }
 
-  private decimalsEqual(a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean {
+  private decimalsEqual(
+    a: Prisma.Decimal | null,
+    b: Prisma.Decimal | null,
+  ): boolean {
     if (a === null && b === null) return true;
     if (a === null || b === null) return false;
     return a.equals(b);
   }
 
-  private presentationKey(unitId: string, factor: number | Prisma.Decimal): string {
+  private presentationKey(
+    unitId: string,
+    factor: number | Prisma.Decimal,
+  ): string {
     const f = typeof factor === 'number' ? factor : factor.toNumber();
     return `${unitId}:${f}`;
   }

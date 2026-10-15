@@ -9,7 +9,10 @@ import {
   Prisma,
   SaleDocumentType,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
 import {
   formatDateYmdInTimeZone,
@@ -106,7 +109,9 @@ export class DeliveryOrdersService {
         sale: { select: { id: true, serie: true, numero: true, total: true } },
         items: {
           include: {
-            product: { select: { id: true, nombre: true, codigoInterno: true } },
+            product: {
+              select: { id: true, nombre: true, codigoInterno: true },
+            },
           },
         },
         notifications: { orderBy: { createdAt: 'desc' }, take: 20 },
@@ -140,7 +145,9 @@ export class DeliveryOrdersService {
           where: {
             id: dto.customerId,
             deletedAt: null,
-            ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
+            ...(establishment?.tenantId
+              ? { tenantId: establishment.tenantId }
+              : {}),
           },
           select: { id: true },
         });
@@ -176,7 +183,9 @@ export class DeliveryOrdersService {
         total: total.plus(costoDelivery),
         notasCliente: dto.notasCliente?.trim() || null,
         notasInternas: dto.notasInternas?.trim() || null,
-        programadoPara: dto.programadoPara ? new Date(dto.programadoPara) : null,
+        programadoPara: dto.programadoPara
+          ? new Date(dto.programadoPara)
+          : null,
         items: { create: itemRows },
       },
       select: { id: true },
@@ -189,12 +198,18 @@ export class DeliveryOrdersService {
       entityId: created.id,
     });
 
-    await this.notifications.notifyStatusChange(created.id, DeliveryOrderStatus.RECIBIDO);
+    await this.notifications.notifyStatusChange(
+      created.id,
+      DeliveryOrderStatus.RECIBIDO,
+    );
 
     return this.findOne(created.id, establishmentId);
   }
 
-  async createFromPublicPortal(slug: string, dto: PublicCreateDeliveryOrderDto) {
+  async createFromPublicPortal(
+    slug: string,
+    dto: PublicCreateDeliveryOrderDto,
+  ) {
     const establishment = await this.prisma.establishment.findFirst({
       where: {
         deliveryPublicSlug: slug.trim(),
@@ -204,7 +219,8 @@ export class DeliveryOrdersService {
       },
       select: { id: true },
     });
-    if (!establishment) throw new NotFoundException('Portal de pedidos no disponible');
+    if (!establishment)
+      throw new NotFoundException('Portal de pedidos no disponible');
 
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { establishmentId: establishment.id, deletedAt: null },
@@ -272,9 +288,14 @@ export class DeliveryOrdersService {
 
     const allowed = STATUS_FLOW[order.estado];
     if (!allowed.includes(dto.estado)) {
-      throw new BadRequestException(`No se puede cambiar de ${order.estado} a ${dto.estado}`);
+      throw new BadRequestException(
+        `No se puede cambiar de ${order.estado} a ${dto.estado}`,
+      );
     }
-    if (dto.estado === DeliveryOrderStatus.CANCELADO && !dto.cancelReason?.trim()) {
+    if (
+      dto.estado === DeliveryOrderStatus.CANCELADO &&
+      !dto.cancelReason?.trim()
+    ) {
       throw new BadRequestException('Indique el motivo de cancelación');
     }
 
@@ -283,8 +304,11 @@ export class DeliveryOrdersService {
       data: {
         estado: dto.estado,
         cancelReason:
-          dto.estado === DeliveryOrderStatus.CANCELADO ? dto.cancelReason?.trim() : null,
-        entregadoAt: dto.estado === DeliveryOrderStatus.ENTREGADO ? new Date() : undefined,
+          dto.estado === DeliveryOrderStatus.CANCELADO
+            ? dto.cancelReason?.trim()
+            : null,
+        entregadoAt:
+          dto.estado === DeliveryOrderStatus.ENTREGADO ? new Date() : undefined,
       },
     });
 
@@ -314,10 +338,17 @@ export class DeliveryOrdersService {
 
     if (dto.assignedToId) {
       const user = await this.prisma.user.findFirst({
-        where: { id: dto.assignedToId, establecimientoId: establishmentId, deletedAt: null },
+        where: {
+          id: dto.assignedToId,
+          establecimientoId: establishmentId,
+          deletedAt: null,
+        },
         select: { id: true },
       });
-      if (!user) throw new NotFoundException('Usuario no encontrado en el establecimiento');
+      if (!user)
+        throw new NotFoundException(
+          'Usuario no encontrado en el establecimiento',
+        );
     }
 
     await this.prisma.deliveryOrder.update({
@@ -347,12 +378,15 @@ export class DeliveryOrdersService {
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Pedido no encontrado');
-    if (order.saleId) throw new BadRequestException('El pedido ya tiene venta asociada');
+    if (order.saleId)
+      throw new BadRequestException('El pedido ya tiene venta asociada');
     if (
       order.estado === DeliveryOrderStatus.CANCELADO ||
       order.estado === DeliveryOrderStatus.ENTREGADO
     ) {
-      throw new BadRequestException('El pedido no puede facturarse en este estado');
+      throw new BadRequestException(
+        'El pedido no puede facturarse en este estado',
+      );
     }
 
     const sale = await this.sales.create(
@@ -397,7 +431,8 @@ export class DeliveryOrdersService {
     let subtotal = new Prisma.Decimal(0);
     let igvTotal = new Prisma.Decimal(0);
     let total = new Prisma.Decimal(0);
-    const itemRows: Prisma.DeliveryOrderItemCreateWithoutDeliveryOrderInput[] = [];
+    const itemRows: Prisma.DeliveryOrderItemCreateWithoutDeliveryOrderInput[] =
+      [];
 
     let tenantId: string | null = null;
     if (!actor && establishmentId) {
@@ -424,7 +459,8 @@ export class DeliveryOrdersService {
           saleTaxAffectation: { select: { codigo: true } },
         },
       });
-      if (!product) throw new NotFoundException(`Producto ${line.productId} no encontrado`);
+      if (!product)
+        throw new NotFoundException(`Producto ${line.productId} no encontrado`);
 
       const unitPrice = line.unitPrice
         ? new Prisma.Decimal(line.unitPrice)
@@ -455,12 +491,16 @@ export class DeliveryOrdersService {
     return { subtotal, igvTotal, total, itemRows };
   }
 
-  private async validateWarehouse(warehouseId: string, establishmentId: string) {
+  private async validateWarehouse(
+    warehouseId: string,
+    establishmentId: string,
+  ) {
     const wh = await this.prisma.warehouse.findFirst({
       where: { id: warehouseId, establishmentId, deletedAt: null },
       select: { id: true },
     });
-    if (!wh) throw new NotFoundException('Almacén no válido para el establecimiento');
+    if (!wh)
+      throw new NotFoundException('Almacén no válido para el establecimiento');
   }
 
   private async nextNumber(establishmentId: string): Promise<string> {
@@ -472,7 +512,8 @@ export class DeliveryOrdersService {
       orderBy: { numero: 'desc' },
       select: { numero: true },
     });
-    const seq = (Number.parseInt(last?.numero?.slice(prefix.length) ?? '0', 10) || 0) + 1;
+    const seq =
+      (Number.parseInt(last?.numero?.slice(prefix.length) ?? '0', 10) || 0) + 1;
     return `${prefix}${String(seq).padStart(4, '0')}`;
   }
 
@@ -510,7 +551,12 @@ export class DeliveryOrdersService {
     warehouse: { id: string; nombre: string };
     createdBy: { id: string; nombre: string };
     assignedTo: { id: string; nombre: string } | null;
-    sale: { id: string; serie: string | null; numero: string | null; total: Prisma.Decimal } | null;
+    sale: {
+      id: string;
+      serie: string | null;
+      numero: string | null;
+      total: Prisma.Decimal;
+    } | null;
     items: Array<{
       id: string;
       productId: string;

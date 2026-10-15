@@ -13,7 +13,9 @@ describe('SensitiveHealthCryptoService', () => {
   it('cifra y descifra con clave configurada', () => {
     const service = new SensitiveHealthCryptoService({
       get: (key: string) =>
-        key === 'LPDP_SENSITIVE_ENCRYPTION_KEY' ? 'clave-secreta-test-32chars!!' : undefined,
+        key === 'LPDP_SENSITIVE_ENCRYPTION_KEY'
+          ? 'clave-secreta-test-32chars!!'
+          : undefined,
     } as never);
     expect(service.isEnabled()).toBe(true);
     const encrypted = service.encrypt('receta-123');
@@ -22,7 +24,9 @@ describe('SensitiveHealthCryptoService', () => {
   });
 
   it('genera hash determinístico', () => {
-    const service = new SensitiveHealthCryptoService({ get: () => undefined } as never);
+    const service = new SensitiveHealthCryptoService({
+      get: () => undefined,
+    } as never);
     const a = service.hashSignature('payload');
     const b = service.hashSignature('payload');
     expect(a).toBe(b);

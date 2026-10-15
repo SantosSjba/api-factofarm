@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import {
   buildPaginatedResult,
@@ -7,7 +11,12 @@ import {
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  assertTenantAccess,
+  actorFromJwt,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -29,7 +38,10 @@ export class BrandsService {
   ) {}
 
   async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
-    const where = this.buildWhere(filters, actor ? tenantWhere(actorFromJwt(actor)) : {});
+    const where = this.buildWhere(
+      filters,
+      actor ? tenantWhere(actorFromJwt(actor)) : {},
+    );
 
     if (filters?.page == null) {
       return this.prisma.brand.findMany({
@@ -169,7 +181,10 @@ export class BrandsService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe una marca con ese nombre.');
     }
     throw err;

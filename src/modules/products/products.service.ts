@@ -1,10 +1,32 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProductPriceChangeSource } from '../../generated/prisma/client';
+import {
+  writeWorkbookBuffer,
+  parseSpreadsheetDate,
+} from '../../common/utils/spreadsheet.util';
+import { scalarText } from '../../common/utils/scalar-text.util';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  ProductPriceChangeSource,
+} from '../../generated/prisma/client';
 import { PresentationDefaultPrice } from '../../generated/prisma/enums';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { actorFromJwt, assertTenantAccess, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  assertTenantAccess,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
@@ -84,14 +106,24 @@ type ProductDetailRow = Prisma.ProductGetPayload<{
     supplierLinks: {
       include: {
         supplier: {
-          select: { id: true; razonSocial: true; numeroDocumento: true; habilitado: true };
+          select: {
+            id: true;
+            razonSocial: true;
+            numeroDocumento: true;
+            habilitado: true;
+          };
         };
       };
     };
     equivalents: {
       include: {
         equivalentProduct: {
-          select: { id: true; nombre: true; codigoInterno: true; generico: true };
+          select: {
+            id: true;
+            nombre: true;
+            codigoInterno: true;
+            generico: true;
+          };
         };
       };
     };
@@ -126,16 +158,24 @@ export class ProductsService {
         searchable.push({ nombre: { contains: search, mode: 'insensitive' } });
       }
       if (field === 'all' || field === 'codigoInterno') {
-        searchable.push({ codigoInterno: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoInterno: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'codigoBarra') {
-        searchable.push({ codigoBarra: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoBarra: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'codigoBusqueda') {
-        searchable.push({ codigoBusqueda: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          codigoBusqueda: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'descripcion') {
-        searchable.push({ descripcion: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          descripcion: { contains: search, mode: 'insensitive' },
+        });
       }
     }
 
@@ -145,7 +185,9 @@ export class ProductsService {
       ...(searchable.length ? { OR: searchable } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.brandId ? { brandId: query.brandId } : {}),
-      ...(query.habilitado !== undefined ? { habilitado: query.habilitado } : {}),
+      ...(query.habilitado !== undefined
+        ? { habilitado: query.habilitado }
+        : {}),
       ...(query.generico !== undefined ? { generico: query.generico } : {}),
       ...(query.necesitaRecetaMedica !== undefined
         ? { necesitaRecetaMedica: query.necesitaRecetaMedica }
@@ -178,7 +220,8 @@ export class ProductsService {
       modelo: row.modelo,
       lineaProducto: row.lineaProducto,
       registroSanitario: row.registroSanitario,
-      registroSanitarioVigencia: row.registroSanitarioVigencia?.toISOString() ?? null,
+      registroSanitarioVigencia:
+        row.registroSanitarioVigencia?.toISOString() ?? null,
       codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
       saleTaxAffectationId: row.saleTaxAffectationId,
       purchaseTaxAffectationId: row.purchaseTaxAffectationId,
@@ -215,7 +258,11 @@ export class ProductsService {
 
   async findOne(id: string, actor?: JwtRequestUser) {
     const row = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      where: {
+        id,
+        deletedAt: null,
+        ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      },
       include: {
         unit: { select: { id: true, codigo: true, nombre: true } },
         currency: { select: { id: true, codigo: true, nombre: true } },
@@ -241,7 +288,12 @@ export class ProductsService {
         equivalents: {
           include: {
             equivalentProduct: {
-              select: { id: true, nombre: true, codigoInterno: true, generico: true },
+              select: {
+                id: true,
+                nombre: true,
+                codigoInterno: true,
+                generico: true,
+              },
             },
           },
         },
@@ -266,7 +318,8 @@ export class ProductsService {
       modelo: row.modelo,
       lineaProducto: row.lineaProducto,
       registroSanitario: row.registroSanitario,
-      registroSanitarioVigencia: row.registroSanitarioVigencia?.toISOString() ?? null,
+      registroSanitarioVigencia:
+        row.registroSanitarioVigencia?.toISOString() ?? null,
       codigoMedicamentoDigemid: row.codigoMedicamentoDigemid,
       saleTaxAffectationId: row.saleTaxAffectationId,
       purchaseTaxAffectationId: row.purchaseTaxAffectationId,
@@ -298,7 +351,9 @@ export class ProductsService {
       esRefrigerado: row.esRefrigerado,
       esHospitalario: row.esHospitalario,
       necesitaRecetaMedica: row.necesitaRecetaMedica,
-      imagenUrl: row.imagenArchivoId ? `/api/v1/files/${row.imagenArchivoId}` : null,
+      imagenUrl: row.imagenArchivoId
+        ? `/api/v1/files/${row.imagenArchivoId}`
+        : null,
       equivalents: row.equivalents.map((eq) => ({
         id: eq.equivalentProduct.id,
         nombre: eq.equivalentProduct.nombre,
@@ -333,7 +388,8 @@ export class ProductsService {
         precio2: Number(pr.precio2),
         precio3: Number(pr.precio3),
         precioDefecto: pr.precioDefecto,
-        precioPuntos: pr.precioPuntos != null ? Number(pr.precioPuntos) : undefined,
+        precioPuntos:
+          pr.precioPuntos != null ? Number(pr.precioPuntos) : undefined,
       })),
       attributes: row.attributes.map((at) => ({
         attributeTypeId: at.attributeTypeId,
@@ -343,7 +399,8 @@ export class ProductsService {
         id: link.id,
         supplierId: link.supplierId,
         codigoProveedor: link.codigoProveedor,
-        precioCompra: link.precioCompra != null ? Number(link.precioCompra) : null,
+        precioCompra:
+          link.precioCompra != null ? Number(link.precioCompra) : null,
         plazoDias: link.plazoDias,
         supplier: link.supplier,
       })),
@@ -357,7 +414,12 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
       include: {
         supplier: {
-          select: { id: true, razonSocial: true, numeroDocumento: true, habilitado: true },
+          select: {
+            id: true,
+            razonSocial: true,
+            numeroDocumento: true,
+            habilitado: true,
+          },
         },
       },
     });
@@ -374,7 +436,12 @@ export class ProductsService {
 
   async upsertSupplierLink(
     productId: string,
-    dto: { supplierId: string; codigoProveedor?: string; precioCompra?: number; plazoDias?: number },
+    dto: {
+      supplierId: string;
+      codigoProveedor?: string;
+      precioCompra?: number;
+      plazoDias?: number;
+    },
     actor?: JwtRequestUser,
   ) {
     await this.findOne(productId, actor);
@@ -396,7 +463,9 @@ export class ProductsService {
     }
 
     const row = await this.prisma.supplierProduct.upsert({
-      where: { supplierId_productId: { supplierId: dto.supplierId, productId } },
+      where: {
+        supplierId_productId: { supplierId: dto.supplierId, productId },
+      },
       create: {
         supplierId: dto.supplierId,
         productId,
@@ -417,7 +486,12 @@ export class ProductsService {
       },
       include: {
         supplier: {
-          select: { id: true, razonSocial: true, numeroDocumento: true, habilitado: true },
+          select: {
+            id: true,
+            razonSocial: true,
+            numeroDocumento: true,
+            habilitado: true,
+          },
         },
       },
     });
@@ -441,13 +515,18 @@ export class ProductsService {
     };
   }
 
-  async removeSupplierLink(productId: string, supplierId: string, actor?: JwtRequestUser) {
+  async removeSupplierLink(
+    productId: string,
+    supplierId: string,
+    actor?: JwtRequestUser,
+  ) {
     await this.findOne(productId, actor);
     const link = await this.prisma.supplierProduct.findUnique({
       where: { supplierId_productId: { supplierId, productId } },
       select: { id: true },
     });
-    if (!link) throw new NotFoundException('Proveedor no vinculado al producto');
+    if (!link)
+      throw new NotFoundException('Proveedor no vinculado al producto');
 
     await this.prisma.supplierProduct.delete({
       where: { supplierId_productId: { supplierId, productId } },
@@ -475,13 +554,15 @@ export class ProductsService {
     const saleTax = await this.prisma.taxAffectationType.findFirst({
       where: { id: dto.saleTaxAffectationId, deletedAt: null },
     });
-    if (!saleTax) throw new BadRequestException('Tipo de afectación (venta) no válido');
+    if (!saleTax)
+      throw new BadRequestException('Tipo de afectación (venta) no válido');
 
     if (dto.purchaseTaxAffectationId) {
       const pt = await this.prisma.taxAffectationType.findFirst({
         where: { id: dto.purchaseTaxAffectationId, deletedAt: null },
       });
-      if (!pt) throw new BadRequestException('Tipo de afectación (compra) no válido');
+      if (!pt)
+        throw new BadRequestException('Tipo de afectación (compra) no válido');
     }
 
     if (dto.categoryId) {
@@ -507,23 +588,35 @@ export class ProductsService {
           },
         })
       : null;
-    if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
+    if (dto.productLocationId && !productLocation)
+      throw new BadRequestException('Ubicación no válida');
 
     const defaultWarehouse = dto.defaultWarehouseId
       ? await this.prisma.warehouse.findFirst({
-          where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
+          where: {
+            id: dto.defaultWarehouseId,
+            deletedAt: null,
+            establishment: { tenantId },
+          },
         })
       : null;
-    if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
+    if (dto.defaultWarehouseId && !defaultWarehouse)
+      throw new BadRequestException('Almacén por defecto no válido');
 
-    if (productLocation && defaultWarehouse && productLocation.establishmentId !== defaultWarehouse.establishmentId) {
+    if (
+      productLocation &&
+      defaultWarehouse &&
+      productLocation.establishmentId !== defaultWarehouse.establishmentId
+    ) {
       throw new BadRequestException(
         'La ubicación debe pertenecer al mismo establecimiento del almacén por defecto.',
       );
     }
 
     if (dto.imagenArchivoId) {
-      const a = await this.prisma.archivo.findUnique({ where: { id: dto.imagenArchivoId } });
+      const a = await this.prisma.archivo.findUnique({
+        where: { id: dto.imagenArchivoId },
+      });
       if (!a) throw new BadRequestException('Archivo de imagen no válido');
     }
 
@@ -531,9 +624,13 @@ export class ProductsService {
       const iscSystem = await this.prisma.productIscSystem.findFirst({
         where: { id: dto.tipoSistemaIscId, deletedAt: null, activo: true },
       });
-      if (!iscSystem) throw new BadRequestException('Tipo de sistema ISC no válido');
+      if (!iscSystem)
+        throw new BadRequestException('Tipo de sistema ISC no válido');
     }
-    if ((dto.incluyeIscVenta || dto.incluyeIscCompra) && !dto.tipoSistemaIscId) {
+    if (
+      (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
+      !dto.tipoSistemaIscId
+    ) {
       throw new BadRequestException('Debe seleccionar un tipo de sistema ISC');
     }
 
@@ -552,7 +649,9 @@ export class ProductsService {
     }
 
     for (const pr of dto.presentations ?? []) {
-      const u = await this.prisma.unitOfMeasure.findFirst({ where: { id: pr.unitId, deletedAt: null } });
+      const u = await this.prisma.unitOfMeasure.findFirst({
+        where: { id: pr.unitId, deletedAt: null },
+      });
       if (!u) throw new BadRequestException('Unidad en presentación no válida');
     }
 
@@ -563,7 +662,8 @@ export class ProductsService {
       if (!t) throw new BadRequestException('Tipo de atributo no válido');
     }
 
-    const purchaseTaxId = dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
+    const purchaseTaxId =
+      dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
 
     const created = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
@@ -582,7 +682,8 @@ export class ProductsService {
           codigoInterno: dto.codigoInterno?.trim() || null,
           codigoBarra: dto.codigoBarra?.trim() || null,
           codigoSunat: dto.codigoSunat?.trim() || null,
-          codigoMedicamentoDigemid: dto.codigoMedicamentoDigemid?.trim() || null,
+          codigoMedicamentoDigemid:
+            dto.codigoMedicamentoDigemid?.trim() || null,
           lineaProducto: dto.lineaProducto?.trim() || null,
           modelo: dto.modelo?.trim() || null,
           marcaLaboratorio: dto.marcaLaboratorio?.trim() || null,
@@ -592,7 +693,8 @@ export class ProductsService {
           purchaseTaxAffectationId: purchaseTaxId,
           precioUnitarioVenta: new Prisma.Decimal(dto.precioUnitarioVenta),
           precioUnitarioCompra:
-            dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null
+            dto.precioUnitarioCompra !== undefined &&
+            dto.precioUnitarioCompra !== null
               ? new Prisma.Decimal(dto.precioUnitarioCompra)
               : null,
           incluyeIgvVenta: dto.incluyeIgvVenta ?? true,
@@ -606,10 +708,15 @@ export class ProductsService {
           manejaLotes: dto.manejaLotes ?? false,
           codigoLote: dto.manejaLotes ? dto.codigoLote?.trim() || null : null,
           fechaVencimientoLote:
-            dto.manejaLotes && dto.fechaVencimientoLote ? new Date(dto.fechaVencimientoLote) : null,
+            dto.manejaLotes && dto.fechaVencimientoLote
+              ? new Date(dto.fechaVencimientoLote)
+              : null,
           incluyeIscVenta: dto.incluyeIscVenta ?? false,
           incluyeIscCompra: dto.incluyeIscCompra ?? false,
-          tipoSistemaIscId: dto.incluyeIscVenta || dto.incluyeIscCompra ? dto.tipoSistemaIscId ?? null : null,
+          tipoSistemaIscId:
+            dto.incluyeIscVenta || dto.incluyeIscCompra
+              ? (dto.tipoSistemaIscId ?? null)
+              : null,
           porcentajeIsc:
             (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
             dto.porcentajeIsc !== undefined &&
@@ -619,12 +726,15 @@ export class ProductsService {
           sujetoDetraccion: dto.sujetoDetraccion ?? false,
           sePuedeCanjearPorPuntos: dto.sePuedeCanjearPorPuntos ?? false,
           numeroPuntos:
-            dto.sePuedeCanjearPorPuntos && dto.numeroPuntos !== undefined && dto.numeroPuntos !== null
+            dto.sePuedeCanjearPorPuntos &&
+            dto.numeroPuntos !== undefined &&
+            dto.numeroPuntos !== null
               ? new Prisma.Decimal(dto.numeroPuntos)
               : null,
           aplicaGanancia: dto.aplicaGanancia ?? false,
           porcentajeGanancia:
-            dto.porcentajeGanancia !== undefined && dto.porcentajeGanancia !== null
+            dto.porcentajeGanancia !== undefined &&
+            dto.porcentajeGanancia !== null
               ? new Prisma.Decimal(dto.porcentajeGanancia)
               : null,
           costoUnitario:
@@ -668,16 +778,23 @@ export class ProductsService {
         const precio1 = Number(pr.precio1 ?? 0);
         const precio2 = Number(pr.precio2 ?? 0);
         const precio3 = Number(pr.precio3 ?? 0);
-        const precioDefecto = pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
+        const precioDefecto =
+          pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
 
         if (!(factor > 0)) {
-          throw new BadRequestException('En presentaciones, el factor debe ser mayor a 0');
+          throw new BadRequestException(
+            'En presentaciones, el factor debe ser mayor a 0',
+          );
         }
         if (precio1 < 0 || precio2 < 0 || precio3 < 0) {
-          throw new BadRequestException('En presentaciones, los precios deben ser mayores o iguales a 0');
+          throw new BadRequestException(
+            'En presentaciones, los precios deben ser mayores o iguales a 0',
+          );
         }
         if (precio1 <= 0 && precio2 <= 0 && precio3 <= 0) {
-          throw new BadRequestException('En presentaciones, al menos un precio debe ser mayor a 0');
+          throw new BadRequestException(
+            'En presentaciones, al menos un precio debe ser mayor a 0',
+          );
         }
         const precioPorDefecto =
           precioDefecto === PresentationDefaultPrice.PRECIO_1
@@ -739,7 +856,12 @@ export class ProductsService {
     const tenantId = this.requireTenant(actor);
     const exists = await this.prisma.product.findFirst({
       where: { id, deletedAt: null, tenantId },
-      select: { id: true, manejaLotes: true, codigoLote: true, fechaVencimientoLote: true },
+      select: {
+        id: true,
+        manejaLotes: true,
+        codigoLote: true,
+        fechaVencimientoLote: true,
+      },
     });
     if (!exists) throw new NotFoundException('Producto no encontrado');
 
@@ -756,13 +878,15 @@ export class ProductsService {
     const saleTax = await this.prisma.taxAffectationType.findFirst({
       where: { id: dto.saleTaxAffectationId, deletedAt: null },
     });
-    if (!saleTax) throw new BadRequestException('Tipo de afectación (venta) no válido');
+    if (!saleTax)
+      throw new BadRequestException('Tipo de afectación (venta) no válido');
 
     if (dto.purchaseTaxAffectationId) {
       const pt = await this.prisma.taxAffectationType.findFirst({
         where: { id: dto.purchaseTaxAffectationId, deletedAt: null },
       });
-      if (!pt) throw new BadRequestException('Tipo de afectación (compra) no válido');
+      if (!pt)
+        throw new BadRequestException('Tipo de afectación (compra) no válido');
     }
 
     if (dto.categoryId) {
@@ -788,23 +912,35 @@ export class ProductsService {
           },
         })
       : null;
-    if (dto.productLocationId && !productLocation) throw new BadRequestException('Ubicación no válida');
+    if (dto.productLocationId && !productLocation)
+      throw new BadRequestException('Ubicación no válida');
 
     const defaultWarehouse = dto.defaultWarehouseId
       ? await this.prisma.warehouse.findFirst({
-          where: { id: dto.defaultWarehouseId, deletedAt: null, establishment: { tenantId } },
+          where: {
+            id: dto.defaultWarehouseId,
+            deletedAt: null,
+            establishment: { tenantId },
+          },
         })
       : null;
-    if (dto.defaultWarehouseId && !defaultWarehouse) throw new BadRequestException('Almacén por defecto no válido');
+    if (dto.defaultWarehouseId && !defaultWarehouse)
+      throw new BadRequestException('Almacén por defecto no válido');
 
-    if (productLocation && defaultWarehouse && productLocation.establishmentId !== defaultWarehouse.establishmentId) {
+    if (
+      productLocation &&
+      defaultWarehouse &&
+      productLocation.establishmentId !== defaultWarehouse.establishmentId
+    ) {
       throw new BadRequestException(
         'La ubicación debe pertenecer al mismo establecimiento del almacén por defecto.',
       );
     }
 
     if (dto.imagenArchivoId) {
-      const a = await this.prisma.archivo.findUnique({ where: { id: dto.imagenArchivoId } });
+      const a = await this.prisma.archivo.findUnique({
+        where: { id: dto.imagenArchivoId },
+      });
       if (!a) throw new BadRequestException('Archivo de imagen no válido');
     }
 
@@ -812,9 +948,13 @@ export class ProductsService {
       const iscSystem = await this.prisma.productIscSystem.findFirst({
         where: { id: dto.tipoSistemaIscId, deletedAt: null, activo: true },
       });
-      if (!iscSystem) throw new BadRequestException('Tipo de sistema ISC no válido');
+      if (!iscSystem)
+        throw new BadRequestException('Tipo de sistema ISC no válido');
     }
-    if ((dto.incluyeIscVenta || dto.incluyeIscCompra) && !dto.tipoSistemaIscId) {
+    if (
+      (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
+      !dto.tipoSistemaIscId
+    ) {
       throw new BadRequestException('Debe seleccionar un tipo de sistema ISC');
     }
 
@@ -833,7 +973,9 @@ export class ProductsService {
     }
 
     for (const pr of dto.presentations ?? []) {
-      const u = await this.prisma.unitOfMeasure.findFirst({ where: { id: pr.unitId, deletedAt: null } });
+      const u = await this.prisma.unitOfMeasure.findFirst({
+        where: { id: pr.unitId, deletedAt: null },
+      });
       if (!u) throw new BadRequestException('Unidad en presentación no válida');
     }
 
@@ -844,7 +986,8 @@ export class ProductsService {
       if (!t) throw new BadRequestException('Tipo de atributo no válido');
     }
 
-    const purchaseTaxId = dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
+    const purchaseTaxId =
+      dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
 
     const beforeSnapshot = await this.priceHistory.loadSnapshot(id);
     if (!beforeSnapshot) throw new NotFoundException('Producto no encontrado');
@@ -866,7 +1009,8 @@ export class ProductsService {
           codigoInterno: dto.codigoInterno?.trim() || null,
           codigoBarra: dto.codigoBarra?.trim() || null,
           codigoSunat: dto.codigoSunat?.trim() || null,
-          codigoMedicamentoDigemid: dto.codigoMedicamentoDigemid?.trim() || null,
+          codigoMedicamentoDigemid:
+            dto.codigoMedicamentoDigemid?.trim() || null,
           lineaProducto: dto.lineaProducto?.trim() || null,
           modelo: dto.modelo?.trim() || null,
           marcaLaboratorio: dto.marcaLaboratorio?.trim() || null,
@@ -876,7 +1020,8 @@ export class ProductsService {
           purchaseTaxAffectationId: purchaseTaxId,
           precioUnitarioVenta: new Prisma.Decimal(dto.precioUnitarioVenta),
           precioUnitarioCompra:
-            dto.precioUnitarioCompra !== undefined && dto.precioUnitarioCompra !== null
+            dto.precioUnitarioCompra !== undefined &&
+            dto.precioUnitarioCompra !== null
               ? new Prisma.Decimal(dto.precioUnitarioCompra)
               : null,
           incluyeIgvVenta: dto.incluyeIgvVenta ?? true,
@@ -893,7 +1038,10 @@ export class ProductsService {
           fechaVencimientoLote: exists.fechaVencimientoLote,
           incluyeIscVenta: dto.incluyeIscVenta ?? false,
           incluyeIscCompra: dto.incluyeIscCompra ?? false,
-          tipoSistemaIscId: dto.incluyeIscVenta || dto.incluyeIscCompra ? dto.tipoSistemaIscId ?? null : null,
+          tipoSistemaIscId:
+            dto.incluyeIscVenta || dto.incluyeIscCompra
+              ? (dto.tipoSistemaIscId ?? null)
+              : null,
           porcentajeIsc:
             (dto.incluyeIscVenta || dto.incluyeIscCompra) &&
             dto.porcentajeIsc !== undefined &&
@@ -903,12 +1051,15 @@ export class ProductsService {
           sujetoDetraccion: dto.sujetoDetraccion ?? false,
           sePuedeCanjearPorPuntos: dto.sePuedeCanjearPorPuntos ?? false,
           numeroPuntos:
-            dto.sePuedeCanjearPorPuntos && dto.numeroPuntos !== undefined && dto.numeroPuntos !== null
+            dto.sePuedeCanjearPorPuntos &&
+            dto.numeroPuntos !== undefined &&
+            dto.numeroPuntos !== null
               ? new Prisma.Decimal(dto.numeroPuntos)
               : null,
           aplicaGanancia: dto.aplicaGanancia ?? false,
           porcentajeGanancia:
-            dto.porcentajeGanancia !== undefined && dto.porcentajeGanancia !== null
+            dto.porcentajeGanancia !== undefined &&
+            dto.porcentajeGanancia !== null
               ? new Prisma.Decimal(dto.porcentajeGanancia)
               : null,
           costoUnitario:
@@ -953,16 +1104,23 @@ export class ProductsService {
           const precio1 = Number(pr.precio1 ?? 0);
           const precio2 = Number(pr.precio2 ?? 0);
           const precio3 = Number(pr.precio3 ?? 0);
-          const precioDefecto = pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
+          const precioDefecto =
+            pr.precioDefecto ?? PresentationDefaultPrice.PRECIO_1;
 
           if (!(factor > 0)) {
-            throw new BadRequestException('En presentaciones, el factor debe ser mayor a 0');
+            throw new BadRequestException(
+              'En presentaciones, el factor debe ser mayor a 0',
+            );
           }
           if (precio1 < 0 || precio2 < 0 || precio3 < 0) {
-            throw new BadRequestException('En presentaciones, los precios deben ser mayores o iguales a 0');
+            throw new BadRequestException(
+              'En presentaciones, los precios deben ser mayores o iguales a 0',
+            );
           }
           if (precio1 <= 0 && precio2 <= 0 && precio3 <= 0) {
-            throw new BadRequestException('En presentaciones, al menos un precio debe ser mayor a 0');
+            throw new BadRequestException(
+              'En presentaciones, al menos un precio debe ser mayor a 0',
+            );
           }
           const precioPorDefecto =
             precioDefecto === PresentationDefaultPrice.PRECIO_1
@@ -1010,7 +1168,13 @@ export class ProductsService {
         }
       }
 
-      await this.priceHistory.recordOnUpdate(tx, id, beforeSnapshot, dto, actor?.sub);
+      await this.priceHistory.recordOnUpdate(
+        tx,
+        id,
+        beforeSnapshot,
+        dto,
+        actor?.sub,
+      );
     });
 
     await this.audit.log({
@@ -1043,7 +1207,11 @@ export class ProductsService {
     return { ok: true };
   }
 
-  async updateStatus(id: string, dto: UpdateProductStatusDto, actor?: JwtRequestUser) {
+  async updateStatus(
+    id: string,
+    dto: UpdateProductStatusDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.findOne(id, actor);
     const updated = await this.prisma.product.update({
       where: { id },
@@ -1060,7 +1228,11 @@ export class ProductsService {
     return updated;
   }
 
-  async updateBarcode(id: string, dto: UpdateProductBarcodeDto, actor?: JwtRequestUser) {
+  async updateBarcode(
+    id: string,
+    dto: UpdateProductBarcodeDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.findOne(id, actor);
     const updated = await this.prisma.product.update({
       where: { id },
@@ -1231,11 +1403,19 @@ export class ProductsService {
     return this.findOne(cloneId, actor);
   }
 
-  async previewImportFromExcel(mode: ProductImportMode, file: Express.Multer.File, actor?: JwtRequestUser) {
+  async previewImportFromExcel(
+    mode: ProductImportMode,
+    file: Express.Multer.File,
+    actor?: JwtRequestUser,
+  ) {
     return this.parseAndImportExcel(mode, file, actor, { dryRun: true });
   }
 
-  async importFromExcel(mode: ProductImportMode, file: Express.Multer.File, actor?: JwtRequestUser) {
+  async importFromExcel(
+    mode: ProductImportMode,
+    file: Express.Multer.File,
+    actor?: JwtRequestUser,
+  ) {
     return this.parseAndImportExcel(mode, file, actor, { dryRun: false });
   }
 
@@ -1257,13 +1437,14 @@ export class ProductsService {
       'Código Interno': p.codigoInterno ?? '',
       'Cód barras': p.codigoBarra ?? '',
       'Precio Unitario Venta': Number(p.precioUnitarioVenta),
-      'Precio Unitario Compra': p.precioUnitarioCompra != null ? Number(p.precioUnitarioCompra) : '',
+      'Precio Unitario Compra':
+        p.precioUnitarioCompra != null ? Number(p.precioUnitarioCompra) : '',
       'Código Tipo de Unidad': p.unit.codigo,
       'Código Tipo de Moneda': p.currency.codigo,
       Categoria: p.category?.nombre ?? '',
       Marca: p.brand?.nombre ?? '',
       'Principio Activo': p.principioActivo ?? '',
-      'Concentración': p.concentracion ?? '',
+      Concentración: p.concentracion ?? '',
       Presentación: p.formaFarmaceutica ?? '',
       'Vía administración': p.administrationRoute?.nombre ?? '',
       'Es Generico': p.generico ? 'SI' : 'NO',
@@ -1277,7 +1458,7 @@ export class ProductsService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(sheetRows);
     XLSX.utils.book_append_sheet(workbook, sheet, 'Productos');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
   async listEquivalents(productId: string, actor?: JwtRequestUser) {
@@ -1286,28 +1467,44 @@ export class ProductsService {
       where: { productId },
       include: {
         equivalentProduct: {
-          select: { id: true, nombre: true, codigoInterno: true, generico: true },
+          select: {
+            id: true,
+            nombre: true,
+            codigoInterno: true,
+            generico: true,
+          },
         },
       },
     });
     return links.map((l) => l.equivalentProduct);
   }
 
-  async setEquivalents(productId: string, equivalentProductIds: string[], actor?: JwtRequestUser) {
+  async setEquivalents(
+    productId: string,
+    equivalentProductIds: string[],
+    actor?: JwtRequestUser,
+  ) {
     const tenantId = this.requireTenant(actor);
     await this.findOne(productId, actor);
-    const uniqueIds = [...new Set(equivalentProductIds.filter((id) => id !== productId))];
+    const uniqueIds = [
+      ...new Set(equivalentProductIds.filter((id) => id !== productId)),
+    ];
     for (const eqId of uniqueIds) {
       const exists = await this.prisma.product.findFirst({
         where: { id: eqId, deletedAt: null, tenantId },
         select: { id: true },
       });
-      if (!exists) throw new NotFoundException(`Producto equivalente no encontrado: ${eqId}`);
+      if (!exists)
+        throw new NotFoundException(
+          `Producto equivalente no encontrado: ${eqId}`,
+        );
     }
     await this.prisma.$transaction([
       this.prisma.productEquivalent.deleteMany({ where: { productId } }),
       ...uniqueIds.map((equivalentProductId) =>
-        this.prisma.productEquivalent.create({ data: { productId, equivalentProductId } }),
+        this.prisma.productEquivalent.create({
+          data: { productId, equivalentProductId },
+        }),
       ),
     ]);
     await this.audit.log({
@@ -1333,10 +1530,18 @@ export class ProductsService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: '',
+    });
 
     if (!rows.length) {
-      const empty = { totalRows: 0, created: 0, updated: 0, errors: [] as string[], preview: options?.dryRun ?? false };
+      const empty = {
+        totalRows: 0,
+        created: 0,
+        updated: 0,
+        errors: [] as string[],
+        preview: options?.dryRun ?? false,
+      };
       if (!options?.dryRun) {
         await this.audit.log({
           userId: actor?.sub,
@@ -1348,7 +1553,12 @@ export class ProductsService {
       return empty;
     }
 
-    let result: { totalRows: number; created: number; updated: number; errors: string[] };
+    let result: {
+      totalRows: number;
+      created: number;
+      updated: number;
+      errors: string[];
+    };
     switch (mode) {
       case 'PRODUCTOS':
         result = await this.importItemsRows(rows, actor, options);
@@ -1426,7 +1636,7 @@ export class ProductsService {
           'Código lote': '',
           'Fec. Vencimiento': '',
           'Cód barras': 10000001,
-          'Concentración': '0.5 mg',
+          Concentración: '0.5 mg',
           'Código Medicamento DIGEMID': 'A000001',
           Presentación: 'Tabletas',
           'Registro Sanitario': '1234-1235',
@@ -1437,7 +1647,7 @@ export class ProductsService {
     }
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
   private async importItemsRows(
@@ -1456,24 +1666,43 @@ export class ProductsService {
       select: { id: true, establishmentId: true, nombre: true },
     });
     if (!warehouses.length) {
-      throw new BadRequestException('No hay almacenes configurados para importar productos.');
+      throw new BadRequestException(
+        'No hay almacenes configurados para importar productos.',
+      );
     }
     const defaultWarehouse =
-      warehouses.find((w) => w.nombre.toUpperCase().includes('OFICINA PRINCIPAL')) ?? warehouses[0];
+      warehouses.find((w) =>
+        w.nombre.toUpperCase().includes('OFICINA PRINCIPAL'),
+      ) ?? warehouses[0];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const displayRow = i + 2;
       const nombre = this.cellString(row, 'Nombre');
       const codigoInterno = this.cellString(row, 'Código Interno');
-      const unitCode = this.cellString(row, 'Código Tipo de Unidad').toUpperCase();
-      const currencyCode = this.cellString(row, 'Código Tipo de Moneda').toUpperCase();
-      const saleTaxCode = this.cellString(row, 'Codigo Tipo de Afectación del Igv Venta');
+      const unitCode = this.cellString(
+        row,
+        'Código Tipo de Unidad',
+      ).toUpperCase();
+      const currencyCode = this.cellString(
+        row,
+        'Código Tipo de Moneda',
+      ).toUpperCase();
+      const saleTaxCode = this.cellString(
+        row,
+        'Codigo Tipo de Afectación del Igv Venta',
+      );
 
       if (!nombre && !codigoInterno && !unitCode && !currencyCode) {
         continue;
       }
-      if (!nombre || !codigoInterno || !unitCode || !currencyCode || !saleTaxCode) {
+      if (
+        !nombre ||
+        !codigoInterno ||
+        !unitCode ||
+        !currencyCode ||
+        !saleTaxCode
+      ) {
         errors.push(`Fila ${displayRow}: faltan campos obligatorios.`);
         continue;
       }
@@ -1483,31 +1712,48 @@ export class ProductsService {
           where: { codigo: unitCode, deletedAt: null },
           select: { id: true },
         });
-        if (!unit) throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
+        if (!unit)
+          throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
 
         const currency = await this.prisma.currency.findFirst({
           where: { codigo: currencyCode, deletedAt: null },
           select: { id: true },
         });
-        if (!currency) throw new BadRequestException(`Moneda no encontrada (${currencyCode})`);
+        if (!currency)
+          throw new BadRequestException(
+            `Moneda no encontrada (${currencyCode})`,
+          );
 
         const saleTax = await this.prisma.taxAffectationType.findFirst({
           where: { codigo: saleTaxCode, deletedAt: null },
           select: { id: true },
         });
-        if (!saleTax) throw new BadRequestException(`Tipo afectación venta no encontrado (${saleTaxCode})`);
+        if (!saleTax)
+          throw new BadRequestException(
+            `Tipo afectación venta no encontrado (${saleTaxCode})`,
+          );
 
-        const purchaseTaxCode = this.cellString(row, 'Codigo Tipo de Afectación del Igv Compra') || saleTaxCode;
+        const purchaseTaxCode =
+          this.cellString(row, 'Codigo Tipo de Afectación del Igv Compra') ||
+          saleTaxCode;
         const purchaseTax = await this.prisma.taxAffectationType.findFirst({
           where: { codigo: purchaseTaxCode, deletedAt: null },
           select: { id: true },
         });
         if (!purchaseTax) {
-          throw new BadRequestException(`Tipo afectación compra no encontrado (${purchaseTaxCode})`);
+          throw new BadRequestException(
+            `Tipo afectación compra no encontrado (${purchaseTaxCode})`,
+          );
         }
 
-        const categoryId = await this.resolveCategoryId(tenantId, this.cellString(row, 'Categoria'));
-        const brandId = await this.resolveBrandId(tenantId, this.cellString(row, 'Marca'));
+        const categoryId = await this.resolveCategoryId(
+          tenantId,
+          this.cellString(row, 'Categoria'),
+        );
+        const brandId = await this.resolveBrandId(
+          tenantId,
+          this.cellString(row, 'Marca'),
+        );
         const productLocationId = await this.resolveProductLocationId(
           defaultWarehouse.establishmentId,
           this.cellString(row, 'Ubicación'),
@@ -1558,12 +1804,16 @@ export class ProductsService {
               where: { id: current.id },
               data: {
                 nombre,
-                codigoBusqueda: this.cellString(row, 'Código Interno') || codigoInterno,
+                codigoBusqueda:
+                  this.cellString(row, 'Código Interno') || codigoInterno,
                 codigoInterno,
                 modelo: this.cellString(row, 'Modelo') || null,
                 codigoSunat: this.cellString(row, 'Código Sunat') || null,
                 precioUnitarioVenta: new Prisma.Decimal(precioVenta),
-                precioUnitarioCompra: precioCompra !== null ? new Prisma.Decimal(precioCompra) : null,
+                precioUnitarioCompra:
+                  precioCompra !== null
+                    ? new Prisma.Decimal(precioCompra)
+                    : null,
                 saleTaxAffectationId: saleTax.id,
                 purchaseTaxAffectationId: purchaseTax.id,
                 incluyeIgvVenta: tieneIgv,
@@ -1572,18 +1822,24 @@ export class ProductsService {
                 categoryId,
                 brandId,
                 descripcion: this.cellString(row, 'Descripcion') || null,
-                principioActivo: this.cellString(row, 'Principio Activo') || null,
+                principioActivo:
+                  this.cellString(row, 'Principio Activo') || null,
                 concentracion: this.cellString(row, 'Concentración') || null,
                 formaFarmaceutica: this.cellString(row, 'Presentación') || null,
-                registroSanitario: this.cellString(row, 'Registro Sanitario') || null,
+                registroSanitario:
+                  this.cellString(row, 'Registro Sanitario') || null,
                 codigoBarra: this.cellString(row, 'Cód barras') || null,
-                codigoMedicamentoDigemid: this.cellString(row, 'Código Medicamento DIGEMID') || null,
+                codigoMedicamentoDigemid:
+                  this.cellString(row, 'Código Medicamento DIGEMID') || null,
                 unitId: unit.id,
                 currencyId: currency.id,
                 generico: esGenerico,
                 manejaLotes,
                 codigoLote: manejaLotes ? codigoLote || null : null,
-                fechaVencimientoLote: manejaLotes && fechaVencimiento ? new Date(fechaVencimiento) : null,
+                fechaVencimientoLote:
+                  manejaLotes && fechaVencimiento
+                    ? new Date(fechaVencimiento)
+                    : null,
                 defaultWarehouseId: defaultWarehouse.id,
                 productLocationId,
               },
@@ -1593,12 +1849,16 @@ export class ProductsService {
               data: {
                 tenantId,
                 nombre,
-                codigoBusqueda: this.cellString(row, 'Código Interno') || codigoInterno,
+                codigoBusqueda:
+                  this.cellString(row, 'Código Interno') || codigoInterno,
                 codigoInterno,
                 modelo: this.cellString(row, 'Modelo') || null,
                 codigoSunat: this.cellString(row, 'Código Sunat') || null,
                 precioUnitarioVenta: new Prisma.Decimal(precioVenta),
-                precioUnitarioCompra: precioCompra !== null ? new Prisma.Decimal(precioCompra) : null,
+                precioUnitarioCompra:
+                  precioCompra !== null
+                    ? new Prisma.Decimal(precioCompra)
+                    : null,
                 saleTaxAffectationId: saleTax.id,
                 purchaseTaxAffectationId: purchaseTax.id,
                 incluyeIgvVenta: tieneIgv,
@@ -1607,18 +1867,24 @@ export class ProductsService {
                 categoryId,
                 brandId,
                 descripcion: this.cellString(row, 'Descripcion') || null,
-                principioActivo: this.cellString(row, 'Principio Activo') || null,
+                principioActivo:
+                  this.cellString(row, 'Principio Activo') || null,
                 concentracion: this.cellString(row, 'Concentración') || null,
                 formaFarmaceutica: this.cellString(row, 'Presentación') || null,
-                registroSanitario: this.cellString(row, 'Registro Sanitario') || null,
+                registroSanitario:
+                  this.cellString(row, 'Registro Sanitario') || null,
                 codigoBarra: this.cellString(row, 'Cód barras') || null,
-                codigoMedicamentoDigemid: this.cellString(row, 'Código Medicamento DIGEMID') || null,
+                codigoMedicamentoDigemid:
+                  this.cellString(row, 'Código Medicamento DIGEMID') || null,
                 unitId: unit.id,
                 currencyId: currency.id,
                 generico: esGenerico,
                 manejaLotes,
                 codigoLote: manejaLotes ? codigoLote || null : null,
-                fechaVencimientoLote: manejaLotes && fechaVencimiento ? new Date(fechaVencimiento) : null,
+                fechaVencimientoLote:
+                  manejaLotes && fechaVencimiento
+                    ? new Date(fechaVencimiento)
+                    : null,
                 defaultWarehouseId: defaultWarehouse.id,
                 productLocationId,
               },
@@ -1646,20 +1912,23 @@ export class ProductsService {
                 warehouseId: defaultWarehouse.id,
                 codigoLote,
                 stock: new Prisma.Decimal(stock),
-                fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+                fechaVencimiento: fechaVencimiento
+                  ? new Date(fechaVencimiento)
+                  : null,
               },
             });
           }
         } else if (stock > 0) {
-          const existingStock = await this.prisma.productWarehouseStock.findUnique({
-            where: {
-              productId_warehouseId: {
-                productId: product.id,
-                warehouseId: defaultWarehouse.id,
+          const existingStock =
+            await this.prisma.productWarehouseStock.findUnique({
+              where: {
+                productId_warehouseId: {
+                  productId: product.id,
+                  warehouseId: defaultWarehouse.id,
+                },
               },
-            },
-            select: { cantidad: true },
-          });
+              select: { cantidad: true },
+            });
           const currentQty = existingStock ? Number(existingStock.cantidad) : 0;
           if (currentQty !== stock) {
             errors.push(
@@ -1681,7 +1950,10 @@ export class ProductsService {
       } catch (error) {
         const message =
           error instanceof BadRequestException
-            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            ? String(
+                (error.getResponse() as { message?: string })?.message ??
+                  error.message,
+              )
             : error instanceof Error
               ? error.message
               : 'Error no controlado';
@@ -1706,11 +1978,16 @@ export class ProductsService {
       const row = rows[i];
       const displayRow = i + 2;
       const codigoInterno = this.cellString(row, 'Código Interno (Producto)');
-      const unitCode = this.cellString(row, 'Código Tipo de Unidad').toUpperCase();
+      const unitCode = this.cellString(
+        row,
+        'Código Tipo de Unidad',
+      ).toUpperCase();
 
       if (!codigoInterno && !unitCode) continue;
       if (!codigoInterno || !unitCode) {
-        errors.push(`Fila ${displayRow}: código interno y unidad son obligatorios.`);
+        errors.push(
+          `Fila ${displayRow}: código interno y unidad son obligatorios.`,
+        );
         continue;
       }
 
@@ -1719,13 +1996,17 @@ export class ProductsService {
           where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
-        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+        if (!product)
+          throw new BadRequestException(
+            `Producto no encontrado (${codigoInterno})`,
+          );
 
         const unit = await this.prisma.unitOfMeasure.findFirst({
           where: { codigo: unitCode, deletedAt: null },
           select: { id: true },
         });
-        if (!unit) throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
+        if (!unit)
+          throw new BadRequestException(`Unidad no encontrada (${unitCode})`);
 
         const factor = this.toNumber(row['Factor']);
         const precio1 = this.toNumber(row['Precio 1']);
@@ -1733,7 +2014,8 @@ export class ProductsService {
         const precio3 = this.toNumber(row['Precio 3']);
         const defaultNo = this.toInteger(row['Precio por defecto']) ?? 1;
 
-        if (factor === null || factor <= 0) throw new BadRequestException('Factor inválido.');
+        if (factor === null || factor <= 0)
+          throw new BadRequestException('Factor inválido.');
         if (precio1 === null || precio2 === null || precio3 === null) {
           throw new BadRequestException('Precios 1, 2 y 3 son obligatorios.');
         }
@@ -1748,13 +2030,24 @@ export class ProductsService {
               ? PresentationDefaultPrice.PRECIO_3
               : PresentationDefaultPrice.PRECIO_1;
         const descripcion = this.cellString(row, 'Descripcion') || null;
-        const selectedPrice = precioDefecto === 'PRECIO_1' ? precio1 : precioDefecto === 'PRECIO_2' ? precio2 : precio3;
+        const selectedPrice =
+          precioDefecto === 'PRECIO_1'
+            ? precio1
+            : precioDefecto === 'PRECIO_2'
+              ? precio2
+              : precio3;
         if (selectedPrice <= 0) {
-          throw new BadRequestException('El precio por defecto debe ser mayor a 0.');
+          throw new BadRequestException(
+            'El precio por defecto debe ser mayor a 0.',
+          );
         }
 
         const exists = await this.prisma.productPresentation.findFirst({
-          where: { productId: product.id, unitId: unit.id, descripcion: descripcion ?? undefined },
+          where: {
+            productId: product.id,
+            unitId: unit.id,
+            descripcion: descripcion ?? undefined,
+          },
           orderBy: { orden: 'asc' },
           select: { id: true },
         });
@@ -1800,7 +2093,10 @@ export class ProductsService {
       } catch (error) {
         const message =
           error instanceof BadRequestException
-            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            ? String(
+                (error.getResponse() as { message?: string })?.message ??
+                  error.message,
+              )
             : error instanceof Error
               ? error.message
               : 'Error no controlado';
@@ -1823,7 +2119,10 @@ export class ProductsService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const displayRow = i + 2;
-      const codigoInterno = this.cellStringAlias(row, ['Código Interno', 'medcod']);
+      const codigoInterno = this.cellStringAlias(row, [
+        'Código Interno',
+        'medcod',
+      ]);
       if (!codigoInterno) continue;
 
       try {
@@ -1831,10 +2130,20 @@ export class ProductsService {
           where: { deletedAt: null, codigoInterno, tenantId },
           select: { id: true },
         });
-        if (!product) throw new BadRequestException(`Producto no encontrado (${codigoInterno})`);
+        if (!product)
+          throw new BadRequestException(
+            `Producto no encontrado (${codigoInterno})`,
+          );
 
-        const venta = this.toNumberAlias(row, ['Precio Unitario Venta', 'prdpreadq', 'prdpreope']);
-        const compra = this.toNumberAlias(row, ['Precio Unitario Compra (Opcional)', 'prdpredist']);
+        const venta = this.toNumberAlias(row, [
+          'Precio Unitario Venta',
+          'prdpreadq',
+          'prdpreope',
+        ]);
+        const compra = this.toNumberAlias(row, [
+          'Precio Unitario Compra (Opcional)',
+          'prdpredist',
+        ]);
         if (venta === null || venta < 0) {
           throw new BadRequestException('Precio Unitario Venta inválido.');
         }
@@ -1847,7 +2156,9 @@ export class ProductsService {
             where: { id: product.id },
             data: {
               precioUnitarioVenta: new Prisma.Decimal(venta),
-              ...(compra !== null ? { precioUnitarioCompra: new Prisma.Decimal(compra) } : {}),
+              ...(compra !== null
+                ? { precioUnitarioCompra: new Prisma.Decimal(compra) }
+                : {}),
             },
           });
         }
@@ -1855,7 +2166,10 @@ export class ProductsService {
       } catch (error) {
         const message =
           error instanceof BadRequestException
-            ? String((error.getResponse() as { message?: string })?.message ?? error.message)
+            ? String(
+                (error.getResponse() as { message?: string })?.message ??
+                  error.message,
+              )
             : error instanceof Error
               ? error.message
               : 'Error no controlado';
@@ -1866,7 +2180,10 @@ export class ProductsService {
     return { totalRows: rows.length, created: 0, updated, errors };
   }
 
-  private cellStringAlias(row: Record<string, unknown>, keys: string[]): string {
+  private cellStringAlias(
+    row: Record<string, unknown>,
+    keys: string[],
+  ): string {
     for (const key of keys) {
       const val = this.cellString(row, key);
       if (val) return val;
@@ -1874,7 +2191,10 @@ export class ProductsService {
     return '';
   }
 
-  private toNumberAlias(row: Record<string, unknown>, keys: string[]): number | null {
+  private toNumberAlias(
+    row: Record<string, unknown>,
+    keys: string[],
+  ): number | null {
     for (const key of keys) {
       const value = row[key];
       const parsed = this.toNumber(value);
@@ -1887,12 +2207,12 @@ export class ProductsService {
     const raw = row[key];
     if (raw === null || raw === undefined) return '';
     if (typeof raw === 'number') return String(raw).trim();
-    return String(raw).trim();
+    return scalarText(raw).trim();
   }
 
   private toNumber(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null;
-    const n = Number(String(value).replace(',', '.'));
+    const n = Number(scalarText(value).replace(',', '.'));
     return Number.isFinite(n) ? n : null;
   }
 
@@ -1904,7 +2224,7 @@ export class ProductsService {
 
   private toBooleanSiNo(value: unknown, fallback = false): boolean {
     if (value === null || value === undefined || value === '') return fallback;
-    const v = String(value).trim().toUpperCase();
+    const v = scalarText(value).trim().toUpperCase();
     if (['SI', 'SÍ', 'YES', 'TRUE', '1'].includes(v)) return true;
     if (['NO', 'FALSE', '0'].includes(v)) return false;
     return fallback;
@@ -1912,22 +2232,30 @@ export class ProductsService {
 
   private toDateIso(value: unknown): string | null {
     if (value === null || value === undefined || value === '') return null;
-    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+    if (value instanceof Date && !Number.isNaN(value.getTime()))
+      return value.toISOString();
     if (typeof value === 'number') {
-      const date = XLSX.SSF.parse_date_code(value);
+      const date = parseSpreadsheetDate(value);
       if (!date) return null;
       const d = new Date(Date.UTC(date.y, date.m - 1, date.d));
       return Number.isNaN(d.getTime()) ? null : d.toISOString();
     }
-    const d = new Date(String(value));
+    const d = new Date(scalarText(value));
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
 
-  private async resolveCategoryId(tenantId: string, nombre: string): Promise<string | null> {
+  private async resolveCategoryId(
+    tenantId: string,
+    nombre: string,
+  ): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.category.findFirst({
-      where: { tenantId, deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: {
+        tenantId,
+        deletedAt: null,
+        nombre: { equals: clean, mode: 'insensitive' },
+      },
       select: { id: true },
     });
     if (existing) return existing.id;
@@ -1938,11 +2266,18 @@ export class ProductsService {
     return created.id;
   }
 
-  private async resolveBrandId(tenantId: string, nombre: string): Promise<string | null> {
+  private async resolveBrandId(
+    tenantId: string,
+    nombre: string,
+  ): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.brand.findFirst({
-      where: { tenantId, deletedAt: null, nombre: { equals: clean, mode: 'insensitive' } },
+      where: {
+        tenantId,
+        deletedAt: null,
+        nombre: { equals: clean, mode: 'insensitive' },
+      },
       select: { id: true },
     });
     if (existing) return existing.id;
@@ -1953,7 +2288,10 @@ export class ProductsService {
     return created.id;
   }
 
-  private async resolveProductLocationId(establishmentId: string, nombre: string): Promise<string | null> {
+  private async resolveProductLocationId(
+    establishmentId: string,
+    nombre: string,
+  ): Promise<string | null> {
     const clean = nombre.trim();
     if (!clean) return null;
     const existing = await this.prisma.productLocation.findFirst({
@@ -2008,11 +2346,21 @@ export class ProductsService {
     });
   }
 
-  listPriceHistory(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
-    return this.findOne(id, actor).then(() => this.priceHistory.list(id, query, actor));
+  listPriceHistory(
+    id: string,
+    query: ProductPriceHistoryQueryDto,
+    actor?: JwtRequestUser,
+  ) {
+    return this.findOne(id, actor).then(() =>
+      this.priceHistory.list(id, query, actor),
+    );
   }
 
-  async historySales(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+  async historySales(
+    id: string,
+    query: ProductPriceHistoryQueryDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.findOne(id, actor);
 
     const { page, pageSize, skip, take } = paginationArgs(query);
@@ -2052,7 +2400,8 @@ export class ProductsService {
         id: r.id,
         saleId: r.sale.id,
         fecha: r.sale.createdAt.toISOString(),
-        documento: `${r.sale.documentType} ${r.sale.serie ?? ''}-${r.sale.numero ?? ''}`.trim(),
+        documento:
+          `${r.sale.documentType} ${r.sale.serie ?? ''}-${r.sale.numero ?? ''}`.trim(),
         cliente: r.sale.customer?.nombre ?? null,
         cantidad: r.cantidad.toString(),
         precioUnitario: r.precioUnitario.toString(),
@@ -2064,7 +2413,11 @@ export class ProductsService {
     );
   }
 
-  async historyPurchases(id: string, query: ProductPriceHistoryQueryDto, actor?: JwtRequestUser) {
+  async historyPurchases(
+    id: string,
+    query: ProductPriceHistoryQueryDto,
+    actor?: JwtRequestUser,
+  ) {
     await this.findOne(id, actor);
 
     const { page, pageSize, skip, take } = paginationArgs(query);
@@ -2130,7 +2483,10 @@ export class ProductsService {
           ...(tenantId ? { establishment: { tenantId, deletedAt: null } } : {}),
         },
       },
-      orderBy: [{ warehouse: { establishment: { codigo: 'asc' } } }, { warehouseId: 'asc' }],
+      orderBy: [
+        { warehouse: { establishment: { codigo: 'asc' } } },
+        { warehouseId: 'asc' },
+      ],
       select: {
         cantidad: true,
         warehouse: {
@@ -2164,7 +2520,9 @@ export class ProductsService {
           where: {
             warehouse: {
               deletedAt: null,
-              ...(tenantId ? { establishment: { tenantId, deletedAt: null } } : {}),
+              ...(tenantId
+                ? { establishment: { tenantId, deletedAt: null } }
+                : {}),
             },
           },
           orderBy: { warehouseId: 'asc' },
@@ -2231,7 +2589,9 @@ export class ProductsService {
   async createProductLocation(dto: CreateProductLocationDto) {
     const nombre = dto.nombre.trim().toUpperCase();
     if (!nombre) {
-      throw new BadRequestException('El nombre de la ubicación es obligatorio.');
+      throw new BadRequestException(
+        'El nombre de la ubicación es obligatorio.',
+      );
     }
 
     const establishment = await this.prisma.establishment.findFirst({
@@ -2255,8 +2615,13 @@ export class ProductsService {
         },
       });
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Ya existe una ubicación con ese nombre en el establecimiento.');
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Ya existe una ubicación con ese nombre en el establecimiento.',
+        );
       }
       throw err;
     }

@@ -1,4 +1,9 @@
 import {
+  writeWorkbookBuffer,
+  parseSpreadsheetDate,
+} from '../../common/utils/spreadsheet.util';
+import { scalarText } from '../../common/utils/scalar-text.util';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -10,7 +15,10 @@ import {
   Prisma,
   ProductSerialStatus,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
@@ -65,7 +73,10 @@ export class InventoryMovementsService {
   ) {}
 
   async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
-    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
+    const establishmentId = await this.scope.resolve(
+      actor,
+      query.establishmentId,
+    );
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const search = query.search?.trim();
@@ -73,13 +84,21 @@ export class InventoryMovementsService {
     const or: Prisma.ProductWarehouseStockWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'producto') {
-        or.push({ product: { nombre: { contains: search, mode: 'insensitive' } } });
+        or.push({
+          product: { nombre: { contains: search, mode: 'insensitive' } },
+        });
       }
       if (field === 'all' || field === 'marca') {
-        or.push({ product: { brand: { nombre: { contains: search, mode: 'insensitive' } } } });
+        or.push({
+          product: {
+            brand: { nombre: { contains: search, mode: 'insensitive' } },
+          },
+        });
       }
       if (field === 'all' || field === 'almacen') {
-        or.push({ warehouse: { nombre: { contains: search, mode: 'insensitive' } } });
+        or.push({
+          warehouse: { nombre: { contains: search, mode: 'insensitive' } },
+        });
       }
     }
     const where: Prisma.ProductWarehouseStockWhereInput = {
@@ -99,7 +118,10 @@ export class InventoryMovementsService {
       this.prisma.productWarehouseStock.count({ where }),
       this.prisma.productWarehouseStock.findMany({
         where,
-        orderBy: [{ product: { nombre: 'asc' } }, { warehouse: { nombre: 'asc' } }],
+        orderBy: [
+          { product: { nombre: 'asc' } },
+          { warehouse: { nombre: 'asc' } },
+        ],
         skip: (page - 1) * pageSize,
         take: pageSize,
         select: {
@@ -153,7 +175,10 @@ export class InventoryMovementsService {
       if (!actor.establecimientoId) {
         throw new ForbiddenException('Usuario sin establecimiento asignado');
       }
-      await this.scope.assertEstablishmentInTenant(actor, actor.establecimientoId);
+      await this.scope.assertEstablishmentInTenant(
+        actor,
+        actor.establecimientoId,
+      );
       return this.prisma.warehouse.findMany({
         where: {
           deletedAt: null,
@@ -189,7 +214,11 @@ export class InventoryMovementsService {
 
   listTransferReasons() {
     return this.prisma.inventoryTransferReason.findMany({
-      where: { deletedAt: null, activo: true, codigo: { not: { startsWith: 'OUT_' } } },
+      where: {
+        deletedAt: null,
+        activo: true,
+        codigo: { not: { startsWith: 'OUT_' } },
+      },
       orderBy: { nombre: 'asc' },
       select: {
         id: true,
@@ -221,8 +250,12 @@ export class InventoryMovementsService {
         productId: query.productId,
         warehouseId: query.warehouseId,
         deletedAt: null,
-        ...(search ? { codigoLote: { contains: search, mode: 'insensitive' } } : {}),
-        ...(mode === 'OUTBOUND' ? { stock: { gt: new Prisma.Decimal(0) } } : {}),
+        ...(search
+          ? { codigoLote: { contains: search, mode: 'insensitive' } }
+          : {}),
+        ...(mode === 'OUTBOUND'
+          ? { stock: { gt: new Prisma.Decimal(0) } }
+          : {}),
       },
       orderBy: [{ codigoLote: 'asc' }],
       take: 20,
@@ -242,7 +275,10 @@ export class InventoryMovementsService {
   }
 
   async listLots(query: InventoryLotListQueryDto, actor: JwtRequestUser) {
-    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
+    const establishmentId = await this.scope.resolve(
+      actor,
+      query.establishmentId,
+    );
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -255,13 +291,17 @@ export class InventoryMovementsService {
     const or: Prisma.ProductLotStockWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'producto') {
-        or.push({ product: { nombre: { contains: search, mode: 'insensitive' } } });
+        or.push({
+          product: { nombre: { contains: search, mode: 'insensitive' } },
+        });
       }
       if (field === 'all' || field === 'lote') {
         or.push({ codigoLote: { contains: search, mode: 'insensitive' } });
       }
       if (field === 'all' || field === 'almacen') {
-        or.push({ warehouse: { nombre: { contains: search, mode: 'insensitive' } } });
+        or.push({
+          warehouse: { nombre: { contains: search, mode: 'insensitive' } },
+        });
       }
     }
 
@@ -346,7 +386,11 @@ export class InventoryMovementsService {
       page: query.page,
       pageSize: query.pageSize,
     });
-    const dateFilter = await this.kardexDateFilter(establishmentId, query.from, query.to);
+    const dateFilter = await this.kardexDateFilter(
+      establishmentId,
+      query.from,
+      query.to,
+    );
 
     const where: Prisma.InventoryInboundMovementWhereInput = {
       productId: query.productId,
@@ -415,7 +459,11 @@ export class InventoryMovementsService {
       page: query.page,
       pageSize: query.pageSize,
     });
-    const dateFilter = await this.kardexDateFilter(establishmentId, query.from, query.to);
+    const dateFilter = await this.kardexDateFilter(
+      establishmentId,
+      query.from,
+      query.to,
+    );
 
     let warehouseFilter: Prisma.ArchivedInventoryInboundMovementWhereInput;
     if (query.warehouseId) {
@@ -458,9 +506,12 @@ export class InventoryMovementsService {
         motivo: null,
         almacen: null,
         lote: payload.codigoLote ?? null,
-        cantidad: String(payload.cantidad ?? ''),
+        cantidad: scalarText(payload.cantidad ?? ''),
         saldo: null,
-        costoUnitario: payload.costoUnitario != null ? String(payload.costoUnitario) : null,
+        costoUnitario:
+          payload.costoUnitario != null
+            ? scalarText(payload.costoUnitario)
+            : null,
         valorLinea: null,
         referencia: payload.referencia ?? null,
         comentario: payload.comentario ?? null,
@@ -488,53 +539,59 @@ export class InventoryMovementsService {
     in90.setDate(in90.getDate() + 90);
 
     const lotScope = { warehouse: { establishmentId } };
-    const [vencidos, porVencer30, porVencer60, porVencer90, zonasFrioSinLogHoy] = await Promise.all([
-        this.prisma.productLotStock.count({
-          where: {
-            deletedAt: null,
-            stock: { gt: 0 },
-            fechaVencimiento: { lt: now },
-            ...lotScope,
-          },
-        }),
-        this.prisma.productLotStock.count({
-          where: {
-            deletedAt: null,
-            stock: { gt: 0 },
-            fechaVencimiento: { gte: now, lte: in30 },
-            ...lotScope,
-          },
-        }),
-        this.prisma.productLotStock.count({
-          where: {
-            deletedAt: null,
-            stock: { gt: 0 },
-            fechaVencimiento: { gt: in30, lte: in60 },
-            ...lotScope,
-          },
-        }),
-        this.prisma.productLotStock.count({
-          where: {
-            deletedAt: null,
-            stock: { gt: 0 },
-            fechaVencimiento: { gt: in60, lte: in90 },
-            ...lotScope,
-          },
-        }),
-        this.prisma.warehouseZone.count({
-          where: {
-            deletedAt: null,
-            activo: true,
-            tipo: 'REFRIGERADO',
-            warehouse: { establishmentId },
-            temperatureLogs: {
-              none: {
-                fecha: { gte: todayStart },
-              },
+    const [
+      vencidos,
+      porVencer30,
+      porVencer60,
+      porVencer90,
+      zonasFrioSinLogHoy,
+    ] = await Promise.all([
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { lt: now },
+          ...lotScope,
+        },
+      }),
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { gte: now, lte: in30 },
+          ...lotScope,
+        },
+      }),
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { gt: in30, lte: in60 },
+          ...lotScope,
+        },
+      }),
+      this.prisma.productLotStock.count({
+        where: {
+          deletedAt: null,
+          stock: { gt: 0 },
+          fechaVencimiento: { gt: in60, lte: in90 },
+          ...lotScope,
+        },
+      }),
+      this.prisma.warehouseZone.count({
+        where: {
+          deletedAt: null,
+          activo: true,
+          tipo: 'REFRIGERADO',
+          warehouse: { establishmentId },
+          temperatureLogs: {
+            none: {
+              fecha: { gte: todayStart },
             },
           },
-        }),
-      ]);
+        },
+      }),
+    ]);
 
     const stockBajoCount = await this.countLowStock(establishmentId);
 
@@ -619,7 +676,11 @@ export class InventoryMovementsService {
       },
     });
 
-    return { ok: true, applied: true, message: 'Ajuste aplicado correctamente' };
+    return {
+      ok: true,
+      applied: true,
+      message: 'Ajuste aplicado correctamente',
+    };
   }
 
   async listPendingAdjustments(actor: JwtRequestUser) {
@@ -664,7 +725,11 @@ export class InventoryMovementsService {
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.inventoryPendingAdjustment.updateMany({
-        where: { id, estado: InventoryPendingAdjustmentStatus.PENDIENTE, deletedAt: null },
+        where: {
+          id,
+          estado: InventoryPendingAdjustmentStatus.PENDIENTE,
+          deletedAt: null,
+        },
         data: {
           estado: InventoryPendingAdjustmentStatus.APROBADO,
           approvedById: actorId,
@@ -672,7 +737,9 @@ export class InventoryMovementsService {
         },
       });
       if (claimed.count !== 1) {
-        throw new BadRequestException('El ajuste ya fue procesado por otro usuario');
+        throw new BadRequestException(
+          'El ajuste ya fue procesado por otro usuario',
+        );
       }
       await this.executeAdjustmentDelta({
         productId: pending.productId,
@@ -715,7 +782,11 @@ export class InventoryMovementsService {
     }
 
     const rejected = await this.prisma.inventoryPendingAdjustment.updateMany({
-      where: { id, estado: InventoryPendingAdjustmentStatus.PENDIENTE, deletedAt: null },
+      where: {
+        id,
+        estado: InventoryPendingAdjustmentStatus.PENDIENTE,
+        deletedAt: null,
+      },
       data: {
         estado: InventoryPendingAdjustmentStatus.RECHAZADO,
         approvedById: actorId,
@@ -724,14 +795,22 @@ export class InventoryMovementsService {
     });
 
     if (rejected.count !== 1) {
-      throw new BadRequestException('El ajuste ya fue procesado por otro usuario');
+      throw new BadRequestException(
+        'El ajuste ya fue procesado por otro usuario',
+      );
     }
 
     return { ok: true, message: 'Ajuste rechazado' };
   }
 
-  async valuationReport(query: InventoryValuationReportQueryDto, actor: JwtRequestUser) {
-    const establishmentId = await this.scope.resolve(actor, query.establishmentId);
+  async valuationReport(
+    query: InventoryValuationReportQueryDto,
+    actor: JwtRequestUser,
+  ) {
+    const establishmentId = await this.scope.resolve(
+      actor,
+      query.establishmentId,
+    );
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -753,7 +832,10 @@ export class InventoryMovementsService {
         where,
         skip,
         take,
-        orderBy: [{ warehouse: { nombre: 'asc' } }, { product: { nombre: 'asc' } }],
+        orderBy: [
+          { warehouse: { nombre: 'asc' } },
+          { product: { nombre: 'asc' } },
+        ],
         select: {
           cantidad: true,
           product: {
@@ -832,7 +914,9 @@ export class InventoryMovementsService {
       select: { id: true },
     });
     if (!transferReason) {
-      throw new BadRequestException(`Motivo de ajuste no configurado (${reasonCode})`);
+      throw new BadRequestException(
+        `Motivo de ajuste no configurado (${reasonCode})`,
+      );
     }
 
     const amount = input.delta.abs();
@@ -890,7 +974,9 @@ export class InventoryMovementsService {
             data: { stock: { decrement: amount } },
           });
           if (lotUpdated.count !== 1) {
-            throw new BadRequestException('Stock insuficiente en el lote para el ajuste');
+            throw new BadRequestException(
+              'Stock insuficiente en el lote para el ajuste',
+            );
           }
         }
       }
@@ -932,7 +1018,10 @@ export class InventoryMovementsService {
     await this.prisma.$transaction(run);
   }
 
-  async createInboundMovement(dto: CreateInboundMovementDto, actor: JwtRequestUser) {
+  async createInboundMovement(
+    dto: CreateInboundMovementDto,
+    actor: JwtRequestUser,
+  ) {
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     await this.scope.assertProductInTenant(actor, dto.productId);
     const actorId = actor.sub;
@@ -953,12 +1042,21 @@ export class InventoryMovementsService {
     ]);
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
-    if (!transferReason) throw new NotFoundException('Motivo de traslado no encontrado');
-    await assertActiveColdZoneForRefrigeratedProducts(this.prisma, dto.warehouseId, [dto.productId]);
+    if (!transferReason)
+      throw new NotFoundException('Motivo de traslado no encontrado');
+    await assertActiveColdZoneForRefrigeratedProducts(
+      this.prisma,
+      dto.warehouseId,
+      [dto.productId],
+    );
 
     const amount = new Prisma.Decimal(dto.quantity);
-    const fechaVencimiento = dto.expirationDate ? new Date(dto.expirationDate) : null;
-    const fechaRegistro = dto.registeredAt ? new Date(dto.registeredAt) : new Date();
+    const fechaVencimiento = dto.expirationDate
+      ? new Date(dto.expirationDate)
+      : null;
+    const fechaRegistro = dto.registeredAt
+      ? new Date(dto.registeredAt)
+      : new Date();
     if (Number.isNaN(fechaRegistro.getTime())) {
       throw new BadRequestException('Fecha de registro inválida');
     }
@@ -1048,10 +1146,14 @@ export class InventoryMovementsService {
       },
     });
 
-      this.realtime.emitStockUpdated(warehouse.establishmentId, warehouse.id, product.id);
-      return {
-        ok: true,
-        message: 'Ingreso registrado correctamente',
+    this.realtime.emitStockUpdated(
+      warehouse.establishmentId,
+      warehouse.id,
+      product.id,
+    );
+    return {
+      ok: true,
+      message: 'Ingreso registrado correctamente',
     };
   }
 
@@ -1063,7 +1165,11 @@ export class InventoryMovementsService {
     await this.scope.assertWarehouseInTenant(actor, warehouseId);
     await this.scope.assertProductInTenant(actor, productId);
     const policy = await this.lotAllocation.getPolicyFromWarehouse(warehouseId);
-    const lots = await this.lotAllocation.listEligibleLots(productId, warehouseId, policy);
+    const lots = await this.lotAllocation.listEligibleLots(
+      productId,
+      warehouseId,
+      policy,
+    );
     return {
       metodoAsignacion: policy.inventoryLotAllocationMethod,
       blockExpiredProductSales: policy.blockExpiredProductSales,
@@ -1122,15 +1228,21 @@ export class InventoryMovementsService {
           id: dto.saleId,
           deletedAt: null,
           establishmentId: actor.establecimientoId,
-          ...(actor.tenantId ? { establishment: { tenantId: actor.tenantId } } : {}),
+          ...(actor.tenantId
+            ? { establishment: { tenantId: actor.tenantId } }
+            : {}),
         },
         select: { id: true, warehouseId: true },
       });
       if (!sale) {
-        throw new NotFoundException('Venta no encontrada en el establecimiento');
+        throw new NotFoundException(
+          'Venta no encontrada en el establecimiento',
+        );
       }
       if (sale.warehouseId !== dto.warehouseId) {
-        throw new BadRequestException('El almacén no coincide con el de la venta');
+        throw new BadRequestException(
+          'El almacén no coincide con el de la venta',
+        );
       }
       await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
       await this.scope.assertProductInTenant(actor, dto.productId);
@@ -1142,7 +1254,10 @@ export class InventoryMovementsService {
       mode: dto.mode,
       manualLots: dto.manualLots,
     };
-    const { lines, manejaLotes } = await this.resolveSaleLotAllocation(previewDto, tx);
+    const { lines, manejaLotes } = await this.resolveSaleLotAllocation(
+      previewDto,
+      tx,
+    );
 
     const db = tx ?? this.prisma;
     const transferReason = await db.inventoryTransferReason.findFirst({
@@ -1150,12 +1265,16 @@ export class InventoryMovementsService {
       select: { id: true },
     });
     if (!transferReason) {
-      throw new BadRequestException(`Motivo de venta no configurado (${SALE_OUT_CODE})`);
+      throw new BadRequestException(
+        `Motivo de venta no configurado (${SALE_OUT_CODE})`,
+      );
     }
 
     const totalQuantity = new Prisma.Decimal(dto.quantity);
     if (totalQuantity.lessThanOrEqualTo(0)) {
-      throw new BadRequestException('La cantidad a descontar del stock debe ser mayor a cero');
+      throw new BadRequestException(
+        'La cantidad a descontar del stock debe ser mayor a cero',
+      );
     }
     if (manejaLotes && lines.length === 0) {
       throw new BadRequestException(
@@ -1187,50 +1306,59 @@ export class InventoryMovementsService {
     };
   }
 
-  async createOutboundMovement(dto: CreateOutboundMovementDto, actor: JwtRequestUser) {
+  async createOutboundMovement(
+    dto: CreateOutboundMovementDto,
+    actor: JwtRequestUser,
+  ) {
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     await this.scope.assertProductInTenant(actor, dto.productId);
     const actorId = actor.sub;
 
-    const [product, warehouse, transferReason, currentStock, policy] = await Promise.all([
-      this.prisma.product.findFirst({
-        where: { id: dto.productId, deletedAt: null },
-        select: { id: true, nombre: true, manejaLotes: true },
-      }),
-      this.prisma.warehouse.findFirst({
-        where: { id: dto.warehouseId, deletedAt: null },
-        select: { id: true, nombre: true },
-      }),
-      this.prisma.inventoryTransferReason.findFirst({
-        where: {
-          id: dto.transferReasonId,
-          deletedAt: null,
-          activo: true,
-          codigo: { startsWith: 'OUT_' },
-        },
-        select: { id: true, nombre: true },
-      }),
-      this.prisma.productWarehouseStock.findUnique({
-        where: {
-          productId_warehouseId: {
-            productId: dto.productId,
-            warehouseId: dto.warehouseId,
+    const [product, warehouse, transferReason, currentStock, policy] =
+      await Promise.all([
+        this.prisma.product.findFirst({
+          where: { id: dto.productId, deletedAt: null },
+          select: { id: true, nombre: true, manejaLotes: true },
+        }),
+        this.prisma.warehouse.findFirst({
+          where: { id: dto.warehouseId, deletedAt: null },
+          select: { id: true, nombre: true },
+        }),
+        this.prisma.inventoryTransferReason.findFirst({
+          where: {
+            id: dto.transferReasonId,
+            deletedAt: null,
+            activo: true,
+            codigo: { startsWith: 'OUT_' },
           },
-        },
-        select: { cantidad: true },
-      }),
-      this.lotAllocation.getPolicyFromWarehouse(dto.warehouseId),
-    ]);
+          select: { id: true, nombre: true },
+        }),
+        this.prisma.productWarehouseStock.findUnique({
+          where: {
+            productId_warehouseId: {
+              productId: dto.productId,
+              warehouseId: dto.warehouseId,
+            },
+          },
+          select: { cantidad: true },
+        }),
+        this.lotAllocation.getPolicyFromWarehouse(dto.warehouseId),
+      ]);
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
-    if (!transferReason) throw new NotFoundException('Motivo de salida no encontrado');
+    if (!transferReason)
+      throw new NotFoundException('Motivo de salida no encontrado');
 
     const amount = new Prisma.Decimal(dto.quantity);
     const current = currentStock?.cantidad ?? new Prisma.Decimal(0);
     if (current.lessThan(amount)) {
-      throw new BadRequestException('Stock insuficiente para realizar la salida');
+      throw new BadRequestException(
+        'Stock insuficiente para realizar la salida',
+      );
     }
-    const fechaRegistro = dto.registeredAt ? new Date(dto.registeredAt) : new Date();
+    const fechaRegistro = dto.registeredAt
+      ? new Date(dto.registeredAt)
+      : new Date();
     if (Number.isNaN(fechaRegistro.getTime())) {
       throw new BadRequestException('Fecha de registro inválida');
     }
@@ -1246,10 +1374,17 @@ export class InventoryMovementsService {
             codigoLote: dto.lotCode.trim(),
             deletedAt: null,
           },
-          select: { id: true, stock: true, fechaVencimiento: true, codigoLote: true },
+          select: {
+            id: true,
+            stock: true,
+            fechaVencimiento: true,
+            codigoLote: true,
+          },
         });
         if (!lot) {
-          throw new BadRequestException('No existe el lote indicado en el almacén seleccionado');
+          throw new BadRequestException(
+            'No existe el lote indicado en el almacén seleccionado',
+          );
         }
         this.lotAllocation.assertLotSellable(
           lot.fechaVencimiento,
@@ -1257,7 +1392,9 @@ export class InventoryMovementsService {
           lot.codigoLote,
         );
         if (lot.stock.lessThan(amount)) {
-          throw new BadRequestException('Stock insuficiente en el lote indicado');
+          throw new BadRequestException(
+            'Stock insuficiente en el lote indicado',
+          );
         }
         lotLines = [{ codigoLote: lot.codigoLote, cantidad: amount }];
       } else {
@@ -1266,14 +1403,19 @@ export class InventoryMovementsService {
           warehouse.id,
           policy,
         );
-        const planned = this.lotAllocation.planAutoAllocation(eligibleLots, amount);
+        const planned = this.lotAllocation.planAutoAllocation(
+          eligibleLots,
+          amount,
+        );
         lotLines = planned.map((line) => ({
           codigoLote: line.codigoLote,
           cantidad: new Prisma.Decimal(line.cantidad),
         }));
       }
     } else if (dto.lotCode?.trim()) {
-      throw new BadRequestException('Este producto no maneja lotes; no indique código de lote');
+      throw new BadRequestException(
+        'Este producto no maneja lotes; no indique código de lote',
+      );
     }
 
     await this.executeOutboundWithLotLines({
@@ -1311,7 +1453,10 @@ export class InventoryMovementsService {
     };
   }
 
-  private async resolveSaleLotAllocation(dto: SaleLotAllocationPreviewDto, tx?: Prisma.TransactionClient) {
+  private async resolveSaleLotAllocation(
+    dto: SaleLotAllocationPreviewDto,
+    tx?: Prisma.TransactionClient,
+  ) {
     const db = tx ?? this.prisma;
     const product = await db.product.findFirst({
       where: { id: dto.productId, deletedAt: null },
@@ -1319,7 +1464,10 @@ export class InventoryMovementsService {
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    const policy = await this.lotAllocation.getPolicyFromWarehouse(dto.warehouseId, tx);
+    const policy = await this.lotAllocation.getPolicyFromWarehouse(
+      dto.warehouseId,
+      tx,
+    );
     const quantity = new Prisma.Decimal(dto.quantity);
 
     if (!product.manejaLotes) {
@@ -1336,9 +1484,15 @@ export class InventoryMovementsService {
     let lines: LotAllocationLine[];
     if (dto.mode === SaleLotAllocationMode.MANUAL) {
       if (!dto.manualLots?.length) {
-        throw new BadRequestException('Indique los lotes para asignación manual');
+        throw new BadRequestException(
+          'Indique los lotes para asignación manual',
+        );
       }
-      lines = this.lotAllocation.planManualAllocation(eligible, dto.manualLots, policy);
+      lines = this.lotAllocation.planManualAllocation(
+        eligible,
+        dto.manualLots,
+        policy,
+      );
       const manualTotal = lines.reduce(
         (acc, line) => acc.plus(new Prisma.Decimal(line.cantidad)),
         new Prisma.Decimal(0),
@@ -1370,7 +1524,9 @@ export class InventoryMovementsService {
   }) {
     const total = input.totalQuantity;
     if (total.lessThanOrEqualTo(0)) {
-      throw new BadRequestException('La cantidad de salida de inventario debe ser mayor a cero');
+      throw new BadRequestException(
+        'La cantidad de salida de inventario debe ser mayor a cero',
+      );
     }
     if (input.lines.length > 0) {
       const linesSum = input.lines.reduce(
@@ -1427,7 +1583,9 @@ export class InventoryMovementsService {
             data: { stock: { decrement: line.cantidad } },
           });
           if (lotUpdated.count !== 1) {
-            throw new BadRequestException(`Stock insuficiente en el lote ${line.codigoLote}`);
+            throw new BadRequestException(
+              `Stock insuficiente en el lote ${line.codigoLote}`,
+            );
           }
         }
       }
@@ -1441,7 +1599,9 @@ export class InventoryMovementsService {
         data: { cantidad: { decrement: total } },
       });
       if (warehouseUpdated.count !== 1) {
-        throw new BadRequestException('Stock insuficiente para realizar la salida');
+        throw new BadRequestException(
+          'Stock insuficiente para realizar la salida',
+        );
       }
     };
 
@@ -1465,7 +1625,9 @@ export class InventoryMovementsService {
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
     const tenantId = actor.tenantId ?? warehouse.establishment.tenantId;
     if (!tenantId) {
-      throw new BadRequestException('No se pudo resolver el tenant para la importación de lotes');
+      throw new BadRequestException(
+        'No se pudo resolver el tenant para la importación de lotes',
+      );
     }
     const rows = this.readRows(file);
 
@@ -1490,7 +1652,9 @@ export class InventoryMovementsService {
 
       if (!codigoInterno && !codigoLote && stock === null) continue;
       if (!codigoInterno || !codigoLote || stock === null || stock < 0) {
-        errors.push(`Fila ${displayRow}: faltan campos obligatorios o stock inválido.`);
+        errors.push(
+          `Fila ${displayRow}: faltan campos obligatorios o stock inválido.`,
+        );
         continue;
       }
       ops.push({ displayRow, codigoInterno, codigoLote, stock, fechaVenc });
@@ -1512,7 +1676,11 @@ export class InventoryMovementsService {
 
           for (const op of chunk) {
             const product = await tx.product.findFirst({
-              where: { codigoInterno: op.codigoInterno, deletedAt: null, tenantId },
+              where: {
+                codigoInterno: op.codigoInterno,
+                deletedAt: null,
+                tenantId,
+              },
               select: { id: true },
             });
             if (!product) {
@@ -1571,7 +1739,8 @@ export class InventoryMovementsService {
         updated += result.chunkUpdated;
         for (const id of result.chunkTouched) touched.add(id);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Error no identificado';
+        const message =
+          error instanceof Error ? error.message : 'Error no identificado';
         errors.push(
           `Lote filas ${chunk[0].displayRow}–${chunk[chunk.length - 1].displayRow}: ${message}`,
         );
@@ -1598,7 +1767,9 @@ export class InventoryMovementsService {
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
     const tenantId = actor.tenantId ?? warehouse.establishment.tenantId;
     if (!tenantId) {
-      throw new BadRequestException('No se pudo resolver el tenant para la importación de series');
+      throw new BadRequestException(
+        'No se pudo resolver el tenant para la importación de series',
+      );
     }
     const rows = this.readRows(file);
 
@@ -1668,7 +1839,8 @@ export class InventoryMovementsService {
 
         touched.add(product.id);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Error no identificado';
+        const message =
+          error instanceof Error ? error.message : 'Error no identificado';
         errors.push(`Fila ${displayRow}: ${message}`);
       }
     }
@@ -1702,7 +1874,7 @@ export class InventoryMovementsService {
           ];
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
   private readRows(file: Express.Multer.File) {
@@ -1712,7 +1884,9 @@ export class InventoryMovementsService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: '',
+    });
   }
 
   private async recalculateStock(productId: string, warehouseId: string) {
@@ -1722,10 +1896,18 @@ export class InventoryMovementsService {
         select: { stock: true },
       }),
       this.prisma.productSerial.count({
-        where: { productId, warehouseId, deletedAt: null, estado: { in: serialAvailableStates } },
+        where: {
+          productId,
+          warehouseId,
+          deletedAt: null,
+          estado: { in: serialAvailableStates },
+        },
       }),
     ]);
-    const lotTotal = lots.reduce((acc, row) => acc.plus(row.stock), new Prisma.Decimal(0));
+    const lotTotal = lots.reduce(
+      (acc, row) => acc.plus(row.stock),
+      new Prisma.Decimal(0),
+    );
     const total = lotTotal.plus(serialCount);
 
     await this.prisma.productWarehouseStock.upsert({
@@ -1744,26 +1926,33 @@ export class InventoryMovementsService {
     });
   }
 
-  private mapEstado(value: string): { estado: ProductSerialStatus; vendido: boolean } {
+  private mapEstado(value: string): {
+    estado: ProductSerialStatus;
+    vendido: boolean;
+  } {
     const key = value.trim().toUpperCase();
     if (!key) return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
-    if (key.includes('ACT')) return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
-    if (key.includes('INACT')) return { estado: ProductSerialStatus.ANULADO, vendido: false };
-    if (key.includes('VEND')) return { estado: ProductSerialStatus.VENDIDO, vendido: true };
-    if (key.includes('RES')) return { estado: ProductSerialStatus.RESERVADO, vendido: false };
+    if (key.includes('ACT'))
+      return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
+    if (key.includes('INACT'))
+      return { estado: ProductSerialStatus.ANULADO, vendido: false };
+    if (key.includes('VEND'))
+      return { estado: ProductSerialStatus.VENDIDO, vendido: true };
+    if (key.includes('RES'))
+      return { estado: ProductSerialStatus.RESERVADO, vendido: false };
     return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
   }
 
   private cellString(row: Record<string, unknown>, key: string): string {
     const value = row[key];
     if (value === null || value === undefined) return '';
-    return String(value).trim();
+    return scalarText(value).trim();
   }
 
   private toNumber(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-    const normalized = String(value).replace(',', '.').trim();
+    const normalized = scalarText(value).replace(',', '.').trim();
     if (!normalized) return null;
     const parsed = Number.parseFloat(normalized);
     return Number.isFinite(parsed) ? parsed : null;
@@ -1776,7 +1965,12 @@ export class InventoryMovementsService {
   ): Promise<Prisma.Decimal> {
     if (lotCode?.trim()) {
       const lot = await this.prisma.productLotStock.findFirst({
-        where: { productId, warehouseId, codigoLote: lotCode.trim(), deletedAt: null },
+        where: {
+          productId,
+          warehouseId,
+          codigoLote: lotCode.trim(),
+          deletedAt: null,
+        },
         select: { stock: true },
       });
       return lot?.stock ?? new Prisma.Decimal(0);
@@ -1816,7 +2010,9 @@ export class InventoryMovementsService {
         totalQty = totalQty.plus(m.cantidad);
         totalValue = totalValue.plus(m.cantidad.times(m.costoUnitario!));
       }
-      return totalQty.isZero() ? new Prisma.Decimal(0) : totalValue.dividedBy(totalQty);
+      return totalQty.isZero()
+        ? new Prisma.Decimal(0)
+        : totalValue.dividedBy(totalQty);
     }
 
     const lot = await this.prisma.productLotStock.findFirst({
@@ -1844,7 +2040,8 @@ export class InventoryMovementsService {
         product: { select: { stockMinimo: true } },
       },
     });
-    return rows.filter((row) => row.cantidad.lessThan(row.product.stockMinimo)).length;
+    return rows.filter((row) => row.cantidad.lessThan(row.product.stockMinimo))
+      .length;
   }
 
   private buildExpiryWhere(
@@ -1863,15 +2060,16 @@ export class InventoryMovementsService {
 
   private toDate(value: unknown): Date | null {
     if (value === null || value === undefined || value === '') return null;
-    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (value instanceof Date)
+      return Number.isNaN(value.getTime()) ? null : value;
     if (typeof value === 'number') {
-      const parsed = XLSX.SSF.parse_date_code(value);
+      const parsed = parseSpreadsheetDate(value);
       if (!parsed) return null;
       return new Date(parsed.y, parsed.m - 1, parsed.d);
     }
-    const text = String(value).trim();
+    const text = scalarText(value).trim();
     if (!text) return null;
-    const [a, b, c] = text.split(/[\/\-]/).map((x) => Number.parseInt(x, 10));
+    const [a, b, c] = text.split(/[/-]/).map((x) => Number.parseInt(x, 10));
     if (!a || !b || !c) {
       const fallback = new Date(text);
       return Number.isNaN(fallback.getTime()) ? null : fallback;

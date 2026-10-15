@@ -31,7 +31,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
       const raw = exceptionResponse as Record<string, unknown>;
       body = {
         statusCode: status,
-        code: typeof raw.code === 'string' ? raw.code : this.codeFromStatus(status),
+        code:
+          typeof raw.code === 'string' ? raw.code : this.codeFromStatus(status),
         message:
           typeof raw.message === 'string'
             ? raw.message
@@ -56,11 +57,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   private codeFromStatus(status: number): string {
-    if (status === HttpStatus.UNAUTHORIZED) return 'UNAUTHORIZED';
-    if (status === HttpStatus.FORBIDDEN) return 'FORBIDDEN';
-    if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND';
-    if (status === HttpStatus.CONFLICT) return 'CONFLICT';
-    if (status === HttpStatus.BAD_REQUEST) return 'BAD_REQUEST';
+    if (status === Number(HttpStatus.UNAUTHORIZED)) return 'UNAUTHORIZED';
+    if (status === Number(HttpStatus.FORBIDDEN)) return 'FORBIDDEN';
+    if (status === Number(HttpStatus.NOT_FOUND)) return 'NOT_FOUND';
+    if (status === Number(HttpStatus.CONFLICT)) return 'CONFLICT';
+    if (status === Number(HttpStatus.BAD_REQUEST)) return 'BAD_REQUEST';
     return 'HTTP_ERROR';
   }
 }

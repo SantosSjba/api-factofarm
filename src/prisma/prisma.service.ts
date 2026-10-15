@@ -1,11 +1,20 @@
+import { safeError } from '../common/logging/http-logger.config';
 import { Pool } from 'pg';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PrismaService.name);
   private readonly pool: Pool;
   private poolEnded = false;
@@ -20,13 +29,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       keepAlive: true,
     });
     pool.on('error', (err) => {
-      this.logger.warn(`Pool PostgreSQL: ${err.message}`);
+      this.logger.warn({ event: 'database_pool_error', error: safeError(err) });
     });
     const adapter = new PrismaPg(pool);
-    super({ adapter, transactionOptions: {
-      maxWait: config.get<number>('PG_TX_MAX_WAIT_MS', 60_000),
-      timeout: config.get<number>('PG_TX_TIMEOUT_MS', 60_000),
-    } });
+    super({
+      adapter,
+      transactionOptions: {
+        maxWait: config.get<number>('PG_TX_MAX_WAIT_MS', 60_000),
+        timeout: config.get<number>('PG_TX_TIMEOUT_MS', 60_000),
+      },
+    });
     this.pool = pool;
   }
 

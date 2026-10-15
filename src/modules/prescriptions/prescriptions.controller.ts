@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -24,7 +33,10 @@ export class PrescriptionsController {
   @Get()
   @RequirePermissions('prescriptions.read', 'nav.recetas')
   @ApiOperation({ summary: 'Listar recetas médicas' })
-  async findAll(@Query() query: PrescriptionListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async findAll(
+    @Query() query: PrescriptionListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
@@ -35,18 +47,28 @@ export class PrescriptionsController {
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.findByCustomer(customerId, await this.scope.resolve(actor), actor);
+    return this.service.findByCustomer(
+      customerId,
+      await this.scope.resolve(actor),
+      actor,
+    );
   }
 
   @Get(':id')
   @RequirePermissions('prescriptions.read', 'nav.recetas')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('prescriptions.write', 'nav.recetas')
-  async create(@Body() dto: CreatePrescriptionDto, @CurrentUser() actor: JwtRequestUser) {
+  async create(
+    @Body() dto: CreatePrescriptionDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(await this.scope.resolve(actor), dto, actor);
   }
 
@@ -57,7 +79,12 @@ export class PrescriptionsController {
     @Body() dto: DispensePrescriptionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.manualDispense(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.manualDispense(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch(':id/image')
@@ -68,6 +95,11 @@ export class PrescriptionsController {
     @Body() dto: AttachPrescriptionImageDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.attachImage(id, await this.scope.resolve(actor), dto.imagenArchivoId, actor);
+    return this.service.attachImage(
+      id,
+      await this.scope.resolve(actor),
+      dto.imagenArchivoId,
+      actor,
+    );
   }
 }

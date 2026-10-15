@@ -22,7 +22,10 @@ export class PublicDeliveryController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post(':slug/orders')
   @ApiOperation({ summary: 'Crear pedido desde portal web público' })
-  createOrder(@Param('slug') slug: string, @Body() dto: PublicCreateDeliveryOrderDto) {
+  createOrder(
+    @Param('slug') slug: string,
+    @Body() dto: PublicCreateDeliveryOrderDto,
+  ) {
     return this.service.createFromPublicPortal(slug, dto);
   }
 }

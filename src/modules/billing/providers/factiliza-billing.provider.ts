@@ -1,3 +1,4 @@
+import { safeError } from '../../../common/logging/http-logger.config';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SunatDocumentStatus } from '../../../generated/prisma/client';
@@ -51,7 +52,9 @@ export class FactilizaBillingProvider implements IBillingProvider {
     const hasToken = !!this.apiToken?.trim();
     assertOseCredentialsOrThrow(nodeEnv, hasToken, 'Factiliza');
     if (!hasToken) {
-      this.logger.warn('Factiliza sin token Bearer; usando mock (solo desarrollo)');
+      this.logger.warn(
+        'Factiliza sin token Bearer; usando mock (solo desarrollo)',
+      );
       return this.mock.emit(input);
     }
 
@@ -65,8 +68,14 @@ export class FactilizaBillingProvider implements IBillingProvider {
       'COMUNICACION_BAJA',
     ]);
     if (unsupported.has(input.documentType)) {
-      assertEmitDocumentTypeSupportedOrThrow(nodeEnv, 'Factiliza', input.documentType);
-      this.logger.warn(`Factiliza sin endpoint para ${input.documentType}; mock (solo desarrollo)`);
+      assertEmitDocumentTypeSupportedOrThrow(
+        nodeEnv,
+        'Factiliza',
+        input.documentType,
+      );
+      this.logger.warn(
+        `Factiliza sin endpoint para ${input.documentType}; mock (solo desarrollo)`,
+      );
       return this.mock.emit(input);
     }
 
@@ -74,9 +83,13 @@ export class FactilizaBillingProvider implements IBillingProvider {
       return this.emitDespatch(input);
     }
 
-    const isNote = input.documentType === 'NOTA_CREDITO' || input.documentType === 'NOTA_DEBITO';
+    const isNote =
+      input.documentType === 'NOTA_CREDITO' ||
+      input.documentType === 'NOTA_DEBITO';
     const path = isNote ? '/note/send' : '/invoice/send';
-    const body = isNote ? this.buildNoteBody(input) : this.buildInvoiceBody(input);
+    const body = isNote
+      ? this.buildNoteBody(input)
+      : this.buildInvoiceBody(input);
     const response = await this.postJson<FactilizaOkResponse>(path, body);
 
     if (!response.success) {
@@ -86,9 +99,30 @@ export class FactilizaBillingProvider implements IBillingProvider {
     const tipoDoc = mapFactilizaTipoDoc(input.documentType);
     const artifactPrefix = isNote ? 'note' : 'invoice';
     const [pdfContent, xmlContent, cdrContent] = await Promise.all([
-      this.fetchArtifact(artifactPrefix, 'pdf', input.emisor.ruc, tipoDoc, input.serie, input.numero),
-      this.fetchArtifact(artifactPrefix, 'xml', input.emisor.ruc, tipoDoc, input.serie, input.numero),
-      this.resolveCdr(response, artifactPrefix, input.emisor.ruc, tipoDoc, input.serie, input.numero),
+      this.fetchArtifact(
+        artifactPrefix,
+        'pdf',
+        input.emisor.ruc,
+        tipoDoc,
+        input.serie,
+        input.numero,
+      ),
+      this.fetchArtifact(
+        artifactPrefix,
+        'xml',
+        input.emisor.ruc,
+        tipoDoc,
+        input.serie,
+        input.numero,
+      ),
+      this.resolveCdr(
+        response,
+        artifactPrefix,
+        input.emisor.ruc,
+        tipoDoc,
+        input.serie,
+        input.numero,
+      ),
     ]);
 
     const cdr = response.data?.sunatResponse?.cdrResponse;
@@ -97,15 +131,19 @@ export class FactilizaBillingProvider implements IBillingProvider {
       externalId: cdr?.id ?? `${input.serie}-${input.numero}`,
       sunatStatus,
       sunatCodigo: cdr?.code ?? '0',
-      sunatDescripcion: cdr?.description ?? response.message ?? 'Emitido vía Factiliza',
+      sunatDescripcion:
+        cdr?.description ?? response.message ?? 'Emitido vía Factiliza',
       xmlContent: xmlContent.toString('utf8'),
       pdfContent,
       cdrContent,
     };
   }
 
-  private async emitDespatch(input: EmitDocumentInput): Promise<EmitDocumentResult> {
-    if (!input.despatch) throw new Error('Guía de remisión requiere datos de traslado');
+  private async emitDespatch(
+    input: EmitDocumentInput,
+  ): Promise<EmitDocumentResult> {
+    if (!input.despatch)
+      throw new Error('Guía de remisión requiere datos de traslado');
     const modalidad = input.despatch.modalidad;
     const path =
       modalidad === 'PRIVADO'
@@ -122,16 +160,38 @@ export class FactilizaBillingProvider implements IBillingProvider {
 
     const cdr = response.data?.sunatResponse?.cdrResponse;
     const [pdfContent, xmlContent, cdrContent] = await Promise.all([
-      this.fetchArtifact('despatch-remitente', 'pdf', input.emisor.ruc, '09', input.serie, input.numero),
-      this.fetchArtifact('despatch-remitente', 'xml', input.emisor.ruc, '09', input.serie, input.numero),
-      this.resolveCdr(response, 'despatch-remitente', input.emisor.ruc, '09', input.serie, input.numero),
+      this.fetchArtifact(
+        'despatch-remitente',
+        'pdf',
+        input.emisor.ruc,
+        '09',
+        input.serie,
+        input.numero,
+      ),
+      this.fetchArtifact(
+        'despatch-remitente',
+        'xml',
+        input.emisor.ruc,
+        '09',
+        input.serie,
+        input.numero,
+      ),
+      this.resolveCdr(
+        response,
+        'despatch-remitente',
+        input.emisor.ruc,
+        '09',
+        input.serie,
+        input.numero,
+      ),
     ]);
 
     return {
       externalId: cdr?.id ?? `${input.serie}-${input.numero}`,
       sunatStatus: this.mapSunatStatus(response),
       sunatCodigo: cdr?.code ?? '0',
-      sunatDescripcion: cdr?.description ?? response.message ?? 'Guía emitida vía Factiliza',
+      sunatDescripcion:
+        cdr?.description ?? response.message ?? 'Guía emitida vía Factiliza',
       xmlContent: xmlContent.toString('utf8'),
       pdfContent,
       cdrContent,
@@ -157,7 +217,9 @@ export class FactilizaBillingProvider implements IBillingProvider {
     return this.mock.voidDocument(input);
   }
 
-  async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
+  async sendDailySummary(
+    input: DailySummaryInput,
+  ): Promise<DailySummaryResult> {
     const nodeEnv = this.config.get<string>('NODE_ENV');
     assertOseCredentialsOrThrow(nodeEnv, !!this.apiToken?.trim(), 'Factiliza');
     assertOseOperationSupportedOrThrow(
@@ -166,7 +228,9 @@ export class FactilizaBillingProvider implements IBillingProvider {
       'Resumen diario de boletas (RC)',
       'Configure el proveedor Nubefact para el resumen diario o envíe el RC desde su panel OSE.',
     );
-    this.logger.warn('Factiliza: resumen diario RC no disponible; mock (solo desarrollo)');
+    this.logger.warn(
+      'Factiliza: resumen diario RC no disponible; mock (solo desarrollo)',
+    );
     return this.mock.sendDailySummary(input);
   }
 
@@ -233,7 +297,12 @@ export class FactilizaBillingProvider implements IBillingProvider {
       fecha_Emision: fecha,
       empresa_Ruc: input.emisor.ruc,
       motivo_Traslado: d.motivoTraslado,
-      modalidad_Traslado: d.modalidad === 'MISMA_EMPRESA' ? '02' : d.modalidad === 'PRIVADO' ? '01' : '03',
+      modalidad_Traslado:
+        d.modalidad === 'MISMA_EMPRESA'
+          ? '02'
+          : d.modalidad === 'PRIVADO'
+            ? '01'
+            : '03',
       peso_Bruto_Total: d.pesoBrutoTotal,
       numero_Bultos: d.numeroBultos,
       partida_Ubigeo: d.partidaUbigeo,
@@ -296,7 +365,9 @@ export class FactilizaBillingProvider implements IBillingProvider {
       monto_Oper_Exoneradas: 0,
       sub_Total: total,
       monto_Imp_Venta: total,
-      afectado_Tipo_Doc: mapFactilizaAfectadoTipo(input.relatedDocument.documentType),
+      afectado_Tipo_Doc: mapFactilizaAfectadoTipo(
+        input.relatedDocument.documentType,
+      ),
       afectado_Num_Doc: `${input.relatedDocument.serie}-${input.relatedDocument.numero}`,
       motivo_Cod: motivoCod,
       motivo_Des: motivoDes,
@@ -362,21 +433,27 @@ export class FactilizaBillingProvider implements IBillingProvider {
     correlativo: string,
   ): Promise<Buffer> {
     try {
-      const response = await this.postJson<FactilizaOkResponse>(`/${prefix}/${kind}`, {
-        empresa_Ruc: ruc,
-        tipo_Doc: tipoDoc,
-        serie,
-        correlativo: correlativo.replace(/^0+/, '') || correlativo,
-      });
+      const response = await this.postJson<FactilizaOkResponse>(
+        `/${prefix}/${kind}`,
+        {
+          empresa_Ruc: ruc,
+          tipo_Doc: tipoDoc,
+          serie,
+          correlativo: correlativo.replace(/^0+/, '') || correlativo,
+        },
+      );
       const buffer = extractBase64Artifact(response);
       if (buffer) return buffer;
       if (typeof response.data === 'string') {
         return Buffer.from(response.data, 'base64');
       }
     } catch (err) {
-      this.logger.warn(
-        `Factiliza ${prefix}/${kind} no disponible: ${err instanceof Error ? err.message : 'error'}`,
-      );
+      this.logger.warn({
+        event: 'billing_artifact_unavailable',
+        provider: 'factiliza',
+        kind,
+        error: safeError(err),
+      });
     }
     return Buffer.from(`Factiliza ${kind} no disponible`, 'utf8');
   }
@@ -388,14 +465,18 @@ export class FactilizaBillingProvider implements IBillingProvider {
     }
     const code = cdr?.cdrResponse?.code ?? '0';
     if (code === '0') return SunatDocumentStatus.ACEPTADO;
-    if ((cdr?.cdrResponse?.notes?.length ?? 0) > 0) return SunatDocumentStatus.OBSERVADO;
+    if ((cdr?.cdrResponse?.notes?.length ?? 0) > 0)
+      return SunatDocumentStatus.OBSERVADO;
     return SunatDocumentStatus.RECHAZADO;
   }
 
-  private async postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  private async postJson<T>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
     const base = (this.apiUrl ?? DEFAULT_API_URL).replace(/\/$/, '');
     const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-    this.logger.log(`Factiliza POST ${url}`);
+    this.logger.log({ event: 'billing_request', provider: 'factiliza' });
 
     const res = await fetch(url, {
       method: 'POST',
@@ -411,7 +492,9 @@ export class FactilizaBillingProvider implements IBillingProvider {
     try {
       payload = JSON.parse(text) as T & { message?: string; success?: boolean };
     } catch {
-      throw new Error(`Factiliza respuesta inválida (${res.status}): ${text.slice(0, 300)}`);
+      throw new Error(
+        `Factiliza respuesta inválida (${res.status}): ${text.slice(0, 300)}`,
+      );
     }
 
     if (!res.ok) {

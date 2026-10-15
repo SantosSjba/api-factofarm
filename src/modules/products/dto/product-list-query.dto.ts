@@ -1,7 +1,16 @@
 import { BooleanField } from '../../../common/decorators/boolean-field.decorator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class ProductListQueryDto {
   @ApiPropertyOptional()
@@ -9,10 +18,26 @@ export class ProductListQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'all|nombre|codigoInterno|codigoBarra|codigoBusqueda|descripcion' })
+  @ApiPropertyOptional({
+    description:
+      'all|nombre|codigoInterno|codigoBarra|codigoBusqueda|descripcion',
+  })
   @IsOptional()
-  @IsIn(['all', 'nombre', 'codigoInterno', 'codigoBarra', 'codigoBusqueda', 'descripcion'])
-  field?: 'all' | 'nombre' | 'codigoInterno' | 'codigoBarra' | 'codigoBusqueda' | 'descripcion';
+  @IsIn([
+    'all',
+    'nombre',
+    'codigoInterno',
+    'codigoBarra',
+    'codigoBusqueda',
+    'descripcion',
+  ])
+  field?:
+    | 'all'
+    | 'nombre'
+    | 'codigoInterno'
+    | 'codigoBarra'
+    | 'codigoBusqueda'
+    | 'descripcion';
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

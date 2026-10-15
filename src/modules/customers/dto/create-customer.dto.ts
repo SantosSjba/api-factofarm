@@ -29,7 +29,10 @@ export class CreateCustomerDto {
   @MaxLength(200)
   nombreComercial?: string;
 
-  @ApiProperty({ enum: CustomerDocumentType, example: CustomerDocumentType.DNI })
+  @ApiProperty({
+    enum: CustomerDocumentType,
+    example: CustomerDocumentType.DNI,
+  })
   @IsEnum(CustomerDocumentType)
   tipoDocumento!: CustomerDocumentType;
 
@@ -150,7 +153,8 @@ export class CreateCustomerDto {
   vendedorAsignadoId?: string;
 
   @ApiPropertyOptional({
-    description: 'Consentimiento LPDP obligatorio para registro de datos personales',
+    description:
+      'Consentimiento LPDP obligatorio para registro de datos personales',
     default: false,
   })
   @IsOptional()

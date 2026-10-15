@@ -1,5 +1,21 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
@@ -25,7 +41,10 @@ export class LaboratoriesController {
   @RequirePermissions('laboratories.write')
   @ApiOperation({ summary: 'Crear laboratorio' })
   @ApiBody({ type: CreateLaboratoryDto })
-  create(@Body() dto: CreateLaboratoryDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateLaboratoryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.laboratoriesService.create(dto, actor.sub);
   }
 
@@ -45,7 +64,10 @@ export class LaboratoriesController {
   @RequirePermissions('laboratories.write')
   @ApiOperation({ summary: 'Eliminar laboratorio (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.laboratoriesService.remove(id, actor.sub);
   }
 }

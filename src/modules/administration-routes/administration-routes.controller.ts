@@ -1,5 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
@@ -12,7 +22,9 @@ import { AdministrationRoutesService } from './administration-routes.service';
 @ApiBearerAuth()
 @Controller('administration-routes')
 export class AdministrationRoutesController {
-  constructor(private readonly administrationRoutesService: AdministrationRoutesService) {}
+  constructor(
+    private readonly administrationRoutesService: AdministrationRoutesService,
+  ) {}
 
   @Get()
   @RequirePermissions('admin-routes.read', 'nav.vias_administracion')
@@ -23,7 +35,10 @@ export class AdministrationRoutesController {
   @Post()
   @RequirePermissions('admin-routes.write')
   @ApiBody({ type: CreateAdministrationRouteDto })
-  create(@Body() dto: CreateAdministrationRouteDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateAdministrationRouteDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.administrationRoutesService.create(dto, actor.sub);
   }
 
@@ -41,7 +56,10 @@ export class AdministrationRoutesController {
   @Delete(':id')
   @RequirePermissions('admin-routes.write')
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.administrationRoutesService.remove(id, actor.sub);
   }
 }

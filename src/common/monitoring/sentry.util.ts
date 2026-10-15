@@ -11,7 +11,11 @@ export function initSentryIfConfigured(): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Sentry = require('@sentry/node') as {
-      init: (options: { dsn: string; environment?: string; tracesSampleRate?: number }) => void;
+      init: (options: {
+        dsn: string;
+        environment?: string;
+        tracesSampleRate?: number;
+      }) => void;
     };
     Sentry.init({
       dsn,
@@ -29,7 +33,9 @@ export function captureSentryException(error: unknown): void {
   if (!process.env.SENTRY_DSN?.trim()) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Sentry = require('@sentry/node') as { captureException: (err: unknown) => void };
+    const Sentry = require('@sentry/node') as {
+      captureException: (err: unknown) => void;
+    };
     Sentry.captureException(error);
   } catch {
     // noop

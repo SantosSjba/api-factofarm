@@ -21,7 +21,8 @@ export class LegalService {
   private async getProviderInfo() {
     return {
       razonSocial:
-        (await this.settings.get('COMPANY_LEGAL_NAME'))?.trim() || 'FACTOSYS PERU S.A.C.',
+        (await this.settings.get('COMPANY_LEGAL_NAME'))?.trim() ||
+        'FACTOSYS PERU S.A.C.',
       ruc: (await this.settings.get('COMPANY_RUC'))?.trim() || '20614608952',
       domicilio:
         (await this.settings.get('COMPANY_ADDRESS'))?.trim() ||
@@ -49,7 +50,8 @@ export class LegalService {
     return {
       version: '2026-06-11',
       title: 'Libro de reclamaciones virtual',
-      legalFramework: 'Ley N° 29571 — Código de Protección y Defensa del Consumidor',
+      legalFramework:
+        'Ley N° 29571 — Código de Protección y Defensa del Consumidor',
       responseDeadlineDays: 15,
       provider: await this.getProviderInfo(),
       content: this.readDoc('LIBRO-RECLAMACIONES.md'),

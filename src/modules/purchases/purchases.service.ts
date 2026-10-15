@@ -10,7 +10,10 @@ import {
   PurchaseOrderStatus,
   SupplierCreditNoteStatus,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
 import {
@@ -46,7 +49,10 @@ export class PurchasesService {
 
   // —— Órdenes de compra ——
 
-  async listPurchaseOrders(establishmentId: string, query: PurchaseOrderListQueryDto) {
+  async listPurchaseOrders(
+    establishmentId: string,
+    query: PurchaseOrderListQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.PurchaseOrderWhereInput = {
       establishmentId,
@@ -90,13 +96,27 @@ export class PurchasesService {
     const row = await this.prisma.purchaseOrder.findFirst({
       where: { id, establishmentId, deletedAt: null },
       include: {
-        supplier: { select: { id: true, razonSocial: true, numeroDocumento: true, diasCredito: true } },
+        supplier: {
+          select: {
+            id: true,
+            razonSocial: true,
+            numeroDocumento: true,
+            diasCredito: true,
+          },
+        },
         warehouse: { select: { id: true, nombre: true } },
         createdBy: { select: { id: true, nombre: true } },
         approvedBy: { select: { id: true, nombre: true } },
         items: {
           include: {
-            product: { select: { id: true, nombre: true, codigoInterno: true, manejaLotes: true } },
+            product: {
+              select: {
+                id: true,
+                nombre: true,
+                codigoInterno: true,
+                manejaLotes: true,
+              },
+            },
           },
         },
         goodsReceipts: {
@@ -163,20 +183,35 @@ export class PurchasesService {
     return this.getPurchaseOrder(created.id, establishmentId);
   }
 
-  async approvePurchaseOrder(id: string, establishmentId: string, actorId: string) {
+  async approvePurchaseOrder(
+    id: string,
+    establishmentId: string,
+    actorId: string,
+  ) {
     const po = await this.ensurePurchaseOrder(id, establishmentId);
     if (po.estado !== PurchaseOrderStatus.BORRADOR) {
-      throw new BadRequestException('Solo se pueden aprobar órdenes en borrador');
+      throw new BadRequestException(
+        'Solo se pueden aprobar órdenes en borrador',
+      );
     }
     await this.prisma.purchaseOrder.update({
       where: { id },
       data: { estado: PurchaseOrderStatus.APROBADA, approvedById: actorId },
     });
-    await this.audit.log({ userId: actorId, action: 'APPROVE', entity: 'PurchaseOrder', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'APPROVE',
+      entity: 'PurchaseOrder',
+      entityId: id,
+    });
     return this.getPurchaseOrder(id, establishmentId);
   }
 
-  async sendPurchaseOrder(id: string, establishmentId: string, actorId: string) {
+  async sendPurchaseOrder(
+    id: string,
+    establishmentId: string,
+    actorId: string,
+  ) {
     const po = await this.ensurePurchaseOrder(id, establishmentId);
     if (po.estado !== PurchaseOrderStatus.APROBADA) {
       throw new BadRequestException('Solo se pueden enviar órdenes aprobadas');
@@ -185,23 +220,39 @@ export class PurchasesService {
       where: { id },
       data: { estado: PurchaseOrderStatus.ENVIADA },
     });
-    await this.audit.log({ userId: actorId, action: 'SEND', entity: 'PurchaseOrder', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'SEND',
+      entity: 'PurchaseOrder',
+      entityId: id,
+    });
     return this.getPurchaseOrder(id, establishmentId);
   }
 
-  async cancelPurchaseOrder(id: string, establishmentId: string, actorId: string) {
+  async cancelPurchaseOrder(
+    id: string,
+    establishmentId: string,
+    actorId: string,
+  ) {
     const po = await this.ensurePurchaseOrder(id, establishmentId);
     if (
       po.estado !== PurchaseOrderStatus.BORRADOR &&
       po.estado !== PurchaseOrderStatus.APROBADA
     ) {
-      throw new BadRequestException('No se puede anular esta orden en su estado actual');
+      throw new BadRequestException(
+        'No se puede anular esta orden en su estado actual',
+      );
     }
     await this.prisma.purchaseOrder.update({
       where: { id },
       data: { estado: PurchaseOrderStatus.ANULADA },
     });
-    await this.audit.log({ userId: actorId, action: 'CANCEL', entity: 'PurchaseOrder', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'CANCEL',
+      entity: 'PurchaseOrder',
+      entityId: id,
+    });
     return this.getPurchaseOrder(id, establishmentId);
   }
 
@@ -225,7 +276,9 @@ export class PurchasesService {
       po.estado !== PurchaseOrderStatus.ENVIADA &&
       po.estado !== PurchaseOrderStatus.PARCIALMENTE_RECIBIDA
     ) {
-      throw new BadRequestException('La orden debe estar enviada o parcialmente recibida');
+      throw new BadRequestException(
+        'La orden debe estar enviada o parcialmente recibida',
+      );
     }
 
     const transferReason = await this.prisma.inventoryTransferReason.findFirst({
@@ -241,7 +294,10 @@ export class PurchasesService {
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, deletedAt: null },
       select: {
-        id: true, manejaLotes: true, nombre: true, incluyeIgvCompra: true,
+        id: true,
+        manejaLotes: true,
+        nombre: true,
+        incluyeIgvCompra: true,
         purchaseTaxAffectation: { select: { codigo: true } },
         saleTaxAffectation: { select: { codigo: true } },
       },
@@ -262,13 +318,20 @@ export class PurchasesService {
 
     for (const line of dto.items) {
       const poItem = itemMap.get(line.purchaseOrderItemId);
-      if (!poItem) throw new BadRequestException(`Ítem ${line.purchaseOrderItemId} no pertenece a la OC`);
+      if (!poItem)
+        throw new BadRequestException(
+          `Ítem ${line.purchaseOrderItemId} no pertenece a la OC`,
+        );
       const qty = new Prisma.Decimal(line.quantity);
       if (!qty.isFinite() || qty.lte(0)) {
-        throw new BadRequestException('La cantidad recibida debe ser positiva y finita');
+        throw new BadRequestException(
+          'La cantidad recibida debe ser positiva y finita',
+        );
       }
       const pending = poItem.cantidadPedida.minus(poItem.cantidadRecibida);
-      const requested = (receivedInRequest.get(poItem.id) ?? new Prisma.Decimal(0)).plus(qty);
+      const requested = (
+        receivedInRequest.get(poItem.id) ?? new Prisma.Decimal(0)
+      ).plus(qty);
       if (requested.greaterThan(pending)) {
         throw new BadRequestException(
           `Cantidad excede lo pendiente para ${poItem.productId}: pendiente ${pending.toString()}`,
@@ -276,22 +339,27 @@ export class PurchasesService {
       }
       receivedInRequest.set(poItem.id, requested);
       const product = productById.get(poItem.productId);
-      if (!product) throw new BadRequestException('Producto de la orden no disponible');
+      if (!product)
+        throw new BadRequestException('Producto de la orden no disponible');
       const codigoLote = line.lotCode?.trim() || null;
       if (product?.manejaLotes && qty.greaterThan(0) && !codigoLote) {
         throw new BadRequestException(
           `El producto ${product.nombre} maneja lotes: indique código de lote`,
         );
       }
-      const cost = line.unitCost != null
-        ? new Prisma.Decimal(line.unitCost)
-        : poItem.precioUnitario;
-      if (!cost.isFinite() || cost.lt(0)) throw new BadRequestException('Costo unitario inválido');
+      const cost =
+        line.unitCost != null
+          ? new Prisma.Decimal(line.unitCost)
+          : poItem.precioUnitario;
+      if (!cost.isFinite() || cost.lt(0))
+        throw new BadRequestException('Costo unitario inválido');
       const totals = computeSaleLineTotals({
         unitPrice: cost,
         quantity: qty,
         incluyeIgv: product.incluyeIgvCompra,
-        taxCodigo: product.purchaseTaxAffectation?.codigo ?? product.saleTaxAffectation.codigo,
+        taxCodigo:
+          product.purchaseTaxAffectation?.codigo ??
+          product.saleTaxAffectation.codigo,
       });
       receiptTotal = receiptTotal.plus(totals.totalLinea);
       receiptLines.push({
@@ -299,7 +367,9 @@ export class PurchasesService {
         productId: poItem.productId,
         cantidad: qty,
         codigoLote,
-        fechaVencimiento: line.expirationDate ? new Date(line.expirationDate) : null,
+        fechaVencimiento: line.expirationDate
+          ? new Date(line.expirationDate)
+          : null,
         costoUnitario: cost,
         poItem,
       });
@@ -314,7 +384,12 @@ export class PurchasesService {
           id: po.id,
           establishmentId,
           deletedAt: null,
-          estado: { in: [PurchaseOrderStatus.ENVIADA, PurchaseOrderStatus.PARCIALMENTE_RECIBIDA] },
+          estado: {
+            in: [
+              PurchaseOrderStatus.ENVIADA,
+              PurchaseOrderStatus.PARCIALMENTE_RECIBIDA,
+            ],
+          },
         },
         data: { estado: PurchaseOrderStatus.PARCIALMENTE_RECIBIDA },
       });
@@ -348,12 +423,16 @@ export class PurchasesService {
         const received = await tx.purchaseOrderItem.updateMany({
           where: {
             id: line.purchaseOrderItemId,
-            cantidadRecibida: { lte: line.poItem.cantidadPedida.minus(line.cantidad) },
+            cantidadRecibida: {
+              lte: line.poItem.cantidadPedida.minus(line.cantidad),
+            },
           },
           data: { cantidadRecibida: { increment: line.cantidad } },
         });
         if (received.count !== 1) {
-          throw new BadRequestException('La cantidad excede lo pendiente de recepción');
+          throw new BadRequestException(
+            'La cantidad excede lo pendiente de recepción',
+          );
         }
 
         await tx.inventoryInboundMovement.create({
@@ -432,7 +511,9 @@ export class PurchasesService {
       const allReceived = updatedItems.every((i) =>
         i.cantidadRecibida.greaterThanOrEqualTo(i.cantidadPedida),
       );
-      const anyReceived = updatedItems.some((i) => i.cantidadRecibida.greaterThan(0));
+      const anyReceived = updatedItems.some((i) =>
+        i.cantidadRecibida.greaterThan(0),
+      );
       const newStatus = allReceived
         ? PurchaseOrderStatus.RECIBIDA
         : anyReceived
@@ -480,14 +561,19 @@ export class PurchasesService {
 
   // —— Cuentas por pagar ——
 
-  async listAccountsPayable(establishmentId: string, query: AccountPayableListQueryDto) {
+  async listAccountsPayable(
+    establishmentId: string,
+    query: AccountPayableListQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const now = new Date();
     await this.prisma.accountPayable.updateMany({
       where: {
         establishmentId,
         deletedAt: null,
-        estado: { in: [AccountPayableStatus.PENDIENTE, AccountPayableStatus.PARCIAL] },
+        estado: {
+          in: [AccountPayableStatus.PENDIENTE, AccountPayableStatus.PARCIAL],
+        },
         fechaVencimiento: { lt: now },
       },
       data: { estado: AccountPayableStatus.VENCIDA },
@@ -543,7 +629,10 @@ export class PurchasesService {
       where: { id, establishmentId, deletedAt: null },
     });
     if (!ap) throw new NotFoundException('Cuenta por pagar no encontrada');
-    if (ap.estado === AccountPayableStatus.PAGADA || ap.estado === AccountPayableStatus.ANULADA) {
+    if (
+      ap.estado === AccountPayableStatus.PAGADA ||
+      ap.estado === AccountPayableStatus.ANULADA
+    ) {
       throw new BadRequestException('Esta cuenta ya está cerrada');
     }
 
@@ -578,7 +667,9 @@ export class PurchasesService {
         },
       });
       if (updated.count !== 1) {
-        throw new BadRequestException('El pago excede el saldo pendiente o la cuenta ya está cerrada');
+        throw new BadRequestException(
+          'El pago excede el saldo pendiente o la cuenta ya está cerrada',
+        );
       }
 
       const apAfter = await tx.accountPayable.findUniqueOrThrow({
@@ -595,7 +686,12 @@ export class PurchasesService {
       return { saldo: apAfter.saldo, estado: newEstado };
     });
 
-    await this.audit.log({ userId: actorId, action: 'PAY', entity: 'AccountPayable', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'PAY',
+      entity: 'AccountPayable',
+      entityId: id,
+    });
     return { ok: true, saldo: result.saldo.toString(), estado: result.estado };
   }
 
@@ -630,14 +726,21 @@ export class PurchasesService {
           where: { id: dto.accountPayableId, establishmentId, deletedAt: null },
         });
         if (!ap) throw new NotFoundException('Cuenta por pagar no encontrada');
-        const newSaldo = Prisma.Decimal.max(ap.saldo.minus(monto), new Prisma.Decimal(0));
-        const newPagado = ap.montoPagado.plus(Prisma.Decimal.min(monto, ap.saldo));
+        const newSaldo = Prisma.Decimal.max(
+          ap.saldo.minus(monto),
+          new Prisma.Decimal(0),
+        );
+        const newPagado = ap.montoPagado.plus(
+          Prisma.Decimal.min(monto, ap.saldo),
+        );
         await tx.accountPayable.update({
           where: { id: ap.id },
           data: {
             saldo: newSaldo,
             montoPagado: newPagado,
-            estado: newSaldo.isZero() ? AccountPayableStatus.PAGADA : AccountPayableStatus.PARCIAL,
+            estado: newSaldo.isZero()
+              ? AccountPayableStatus.PAGADA
+              : AccountPayableStatus.PARCIAL,
           },
         });
       }
@@ -679,7 +782,10 @@ export class PurchasesService {
 
   // —— Reportes ——
 
-  async replenishmentSuggestions(establishmentId: string, query: ReplenishmentReportQueryDto) {
+  async replenishmentSuggestions(
+    establishmentId: string,
+    query: ReplenishmentReportQueryDto,
+  ) {
     const since = new Date();
     since.setDate(since.getDate() - 90);
 
@@ -730,8 +836,8 @@ export class PurchasesService {
         },
       });
 
-      const lowStock = stocks.filter(
-        (s) => s.cantidad.lessThan(new Prisma.Decimal(s.product.stockMinimo)),
+      const lowStock = stocks.filter((s) =>
+        s.cantidad.lessThan(new Prisma.Decimal(s.product.stockMinimo)),
       );
       if (lowStock.length === 0) continue;
 
@@ -764,7 +870,9 @@ export class PurchasesService {
           stock: s,
           revenue: salesMap.get(s.productId)?.revenue ?? new Prisma.Decimal(0),
         }))
-        .sort((a, b) => (b.revenue.gt(a.revenue) ? 1 : b.revenue.lt(a.revenue) ? -1 : 0));
+        .sort((a, b) =>
+          b.revenue.gt(a.revenue) ? 1 : b.revenue.lt(a.revenue) ? -1 : 0,
+        );
 
       const totalRevenue = ranked.reduce(
         (acc, r) => acc.plus(r.revenue),
@@ -777,7 +885,8 @@ export class PurchasesService {
         const pct = totalRevenue.isZero()
           ? 0
           : cumulative.div(totalRevenue).times(100).toNumber();
-        const claseAbc: 'A' | 'B' | 'C' = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
+        const claseAbc: 'A' | 'B' | 'C' =
+          pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
         const factor = claseAbc === 'A' ? 2 : claseAbc === 'B' ? 1.5 : 1;
         const deficit = Math.max(
           stock.product.stockMinimo * factor - stock.cantidad.toNumber(),
@@ -793,7 +902,9 @@ export class PurchasesService {
           stockActual: stock.cantidad.toString(),
           stockMinimo: stock.product.stockMinimo,
           cantidadSugerida: Math.ceil(Math.max(deficit, 1)),
-          rotacion90d: (salesMap.get(stock.productId)?.qty ?? new Prisma.Decimal(0)).toString(),
+          rotacion90d: (
+            salesMap.get(stock.productId)?.qty ?? new Prisma.Decimal(0)
+          ).toString(),
           claseAbc,
           proveedorSugerido: link?.supplier.razonSocial ?? null,
           precioSugerido: link?.precioCompra?.toString() ?? null,
@@ -804,7 +915,10 @@ export class PurchasesService {
     return { items: suggestions, generatedAt: new Date().toISOString() };
   }
 
-  async priceComparison(establishmentId: string, query: PriceComparisonQueryDto) {
+  async priceComparison(
+    establishmentId: string,
+    query: PriceComparisonQueryDto,
+  ) {
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: establishmentId, deletedAt: null },
       select: { tenantId: true },
@@ -815,13 +929,17 @@ export class PurchasesService {
         product: {
           deletedAt: null,
           habilitado: true,
-          ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
+          ...(establishment?.tenantId
+            ? { tenantId: establishment.tenantId }
+            : {}),
         },
         ...(query.productId ? { productId: query.productId } : {}),
       },
       include: {
         product: { select: { id: true, nombre: true, codigoInterno: true } },
-        supplier: { select: { id: true, razonSocial: true, numeroDocumento: true } },
+        supplier: {
+          select: { id: true, razonSocial: true, numeroDocumento: true },
+        },
       },
       orderBy: [{ productId: 'asc' }, { precioCompra: 'asc' }],
     });
@@ -918,7 +1036,10 @@ export class PurchasesService {
     if (!s) throw new NotFoundException('Proveedor no válido');
   }
 
-  private async validateWarehouse(warehouseId: string, establishmentId: string) {
+  private async validateWarehouse(
+    warehouseId: string,
+    establishmentId: string,
+  ) {
     const w = await this.prisma.warehouse.findFirst({
       where: { id: warehouseId, establishmentId, deletedAt: null },
       select: { id: true },
@@ -934,7 +1055,8 @@ export class PurchasesService {
     let subtotal = new Prisma.Decimal(0);
     let igvTotal = new Prisma.Decimal(0);
     let total = new Prisma.Decimal(0);
-    const itemRows: Prisma.PurchaseOrderItemCreateWithoutPurchaseOrderInput[] = [];
+    const itemRows: Prisma.PurchaseOrderItemCreateWithoutPurchaseOrderInput[] =
+      [];
 
     for (const line of items) {
       await this.scope.assertProductInTenant(actor, line.productId);
@@ -947,19 +1069,22 @@ export class PurchasesService {
           saleTaxAffectation: { select: { codigo: true } },
         },
       });
-      if (!product) throw new NotFoundException(`Producto ${line.productId} no encontrado`);
+      if (!product)
+        throw new NotFoundException(`Producto ${line.productId} no encontrado`);
 
       const supplierLink = await this.prisma.supplierProduct.findUnique({
-        where: { supplierId_productId: { supplierId, productId: line.productId } },
+        where: {
+          supplierId_productId: { supplierId, productId: line.productId },
+        },
         select: { precioCompra: true, codigoProveedor: true },
       });
 
       const unitPrice =
         line.unitPrice != null
           ? new Prisma.Decimal(line.unitPrice)
-          : supplierLink?.precioCompra ??
+          : (supplierLink?.precioCompra ??
             product.precioUnitarioCompra ??
-            new Prisma.Decimal(0);
+            new Prisma.Decimal(0));
 
       const taxCodigo =
         product.purchaseTaxAffectation?.codigo ??
@@ -1024,7 +1149,12 @@ export class PurchasesService {
     fechaEmision: Date;
     fechaEntregaEstimada: Date | null;
     createdAt: Date;
-    supplier: { id: string; razonSocial: string; numeroDocumento: string; diasCredito: number };
+    supplier: {
+      id: string;
+      razonSocial: string;
+      numeroDocumento: string;
+      diasCredito: number;
+    };
     warehouse: { id: string; nombre: string };
     createdBy: { id: string; nombre: string };
     approvedBy: { id: string; nombre: string } | null;
@@ -1038,7 +1168,12 @@ export class PurchasesService {
       igvLinea: Prisma.Decimal;
       totalLinea: Prisma.Decimal;
       codigoProveedor: string | null;
-      product: { id: string; nombre: string; codigoInterno: string | null; manejaLotes: boolean };
+      product: {
+        id: string;
+        nombre: string;
+        codigoInterno: string | null;
+        manejaLotes: boolean;
+      };
     }>;
     goodsReceipts: Array<{
       id: string;
@@ -1072,7 +1207,9 @@ export class PurchasesService {
         manejaLotes: i.product.manejaLotes,
         cantidadPedida: i.cantidadPedida.toString(),
         cantidadRecibida: i.cantidadRecibida.toString(),
-        cantidadPendiente: i.cantidadPedida.minus(i.cantidadRecibida).toString(),
+        cantidadPendiente: i.cantidadPedida
+          .minus(i.cantidadRecibida)
+          .toString(),
         precioUnitario: i.precioUnitario.toString(),
         subtotalLinea: i.subtotalLinea.toString(),
         igvLinea: i.igvLinea.toString(),

@@ -59,7 +59,9 @@ export class FilesController {
     @CurrentUser() user: JwtRequestUser,
   ): Promise<UploadFileResponseDto> {
     if (!file) {
-      throw new BadRequestException('Se requiere un archivo en el campo `file`');
+      throw new BadRequestException(
+        'Se requiere un archivo en el campo `file`',
+      );
     }
     return this.files.saveUploaded(file, user);
   }

@@ -3,11 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AgreementBillingStatus, Prisma } from '../../generated/prisma/client';
 import {
-  AgreementBillingStatus,
-  Prisma,
-} from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -45,8 +45,12 @@ export class AgreementsService {
       ...(query.search?.trim()
         ? {
             OR: [
-              { codigo: { contains: query.search.trim(), mode: 'insensitive' } },
-              { nombre: { contains: query.search.trim(), mode: 'insensitive' } },
+              {
+                codigo: { contains: query.search.trim(), mode: 'insensitive' },
+              },
+              {
+                nombre: { contains: query.search.trim(), mode: 'insensitive' },
+              },
             ],
           }
         : {}),
@@ -89,7 +93,9 @@ export class AgreementsService {
       include: {
         productPrices: {
           include: {
-            product: { select: { id: true, nombre: true, codigoInterno: true } },
+            product: {
+              select: { id: true, nombre: true, codigoInterno: true },
+            },
           },
         },
       },
@@ -109,13 +115,18 @@ export class AgreementsService {
     };
   }
 
-  async create(establishmentId: string, dto: CreateAgreementDto, userId: string) {
+  async create(
+    establishmentId: string,
+    dto: CreateAgreementDto,
+    userId: string,
+  ) {
     const codigo = dto.codigo.trim().toUpperCase();
     const exists = await this.prisma.agreement.findFirst({
       where: { establishmentId, codigo, deletedAt: null },
       select: { id: true },
     });
-    if (exists) throw new BadRequestException('Ya existe un convenio con ese código');
+    if (exists)
+      throw new BadRequestException('Ya existe un convenio con ese código');
 
     const row = await this.prisma.agreement.create({
       data: {
@@ -136,7 +147,12 @@ export class AgreementsService {
       },
     });
 
-    await this.audit.log({ userId, action: 'CREATE', entity: 'Agreement', entityId: row.id });
+    await this.audit.log({
+      userId,
+      action: 'CREATE',
+      entity: 'Agreement',
+      entityId: row.id,
+    });
     return this.findOne(row.id, establishmentId);
   }
 
@@ -152,11 +168,15 @@ export class AgreementsService {
       data: {
         ...(dto.nombre !== undefined ? { nombre: dto.nombre.trim() } : {}),
         ...(dto.tipo !== undefined ? { tipo: dto.tipo } : {}),
-        ...(dto.institucionTipo !== undefined ? { institucionTipo: dto.institucionTipo } : {}),
+        ...(dto.institucionTipo !== undefined
+          ? { institucionTipo: dto.institucionTipo }
+          : {}),
         ...(dto.coberturaPorcentaje !== undefined
           ? { coberturaPorcentaje: new Prisma.Decimal(dto.coberturaPorcentaje) }
           : {}),
-        ...(dto.diasCredito !== undefined ? { diasCredito: dto.diasCredito } : {}),
+        ...(dto.diasCredito !== undefined
+          ? { diasCredito: dto.diasCredito }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
         ...(dto.contactoNombre !== undefined
           ? { contactoNombre: dto.contactoNombre?.trim() || null }
@@ -167,10 +187,17 @@ export class AgreementsService {
         ...(dto.contactoTelefono !== undefined
           ? { contactoTelefono: dto.contactoTelefono?.trim() || null }
           : {}),
-        ...(dto.notas !== undefined ? { notas: dto.notas?.trim() || null } : {}),
+        ...(dto.notas !== undefined
+          ? { notas: dto.notas?.trim() || null }
+          : {}),
       },
     });
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'Agreement', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'Agreement',
+      entityId: id,
+    });
     return this.findOne(id, establishmentId);
   }
 
@@ -181,7 +208,12 @@ export class AgreementsService {
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
-    await this.audit.log({ userId, action: 'DELETE', entity: 'Agreement', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'DELETE',
+      entity: 'Agreement',
+      entityId: id,
+    });
     return { ok: true };
   }
 
@@ -195,7 +227,9 @@ export class AgreementsService {
     for (const item of dto.items) {
       await this.scope.assertProductInTenant(actor, item.productId);
       await this.prisma.agreementProductPrice.upsert({
-        where: { agreementId_productId: { agreementId: id, productId: item.productId } },
+        where: {
+          agreementId_productId: { agreementId: id, productId: item.productId },
+        },
         create: {
           agreementId: id,
           productId: item.productId,
@@ -213,7 +247,11 @@ export class AgreementsService {
     return this.findOne(id, establishmentId);
   }
 
-  async getSettlement(id: string, establishmentId: string, query: AgreementSettlementQueryDto) {
+  async getSettlement(
+    id: string,
+    establishmentId: string,
+    query: AgreementSettlementQueryDto,
+  ) {
     await this.ensureExists(id, establishmentId);
     const fromYmd = query.from?.trim();
     const toYmd = query.to?.trim();
@@ -226,7 +264,11 @@ export class AgreementsService {
       throw new BadRequestException('Rango de fechas inválido');
     }
     const tz = await this.resolveTimeZone(establishmentId);
-    const { start: from, end: to } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+    const { start: from, end: to } = dateRangeBoundsInTimeZone(
+      fromYmd,
+      toYmd,
+      tz,
+    );
 
     const sales = await this.prisma.sale.findMany({
       where: {
@@ -296,7 +338,9 @@ export class AgreementsService {
       where: { agreementId_periodo: { agreementId: id, periodo } },
     });
     if (existing && existing.estado !== AgreementBillingStatus.BORRADOR) {
-      throw new BadRequestException('Ya existe liquidación emitida para ese periodo');
+      throw new BadRequestException(
+        'Ya existe liquidación emitida para ese periodo',
+      );
     }
 
     const sales = await this.prisma.sale.findMany({

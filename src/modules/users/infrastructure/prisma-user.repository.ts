@@ -165,7 +165,10 @@ export class PrismaUserRepository implements IUserRepository {
       }
 
       if (userPatch.passwordHash !== undefined) {
-        await tx.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+        await tx.refreshToken.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
       }
       if (profile !== undefined) {
         await tx.userProfile.upsert({
@@ -209,7 +212,10 @@ export class PrismaUserRepository implements IUserRepository {
     return !!row;
   }
 
-  async syncPermissions(userId: string, permissionCodes: string[]): Promise<UserSnapshot> {
+  async syncPermissions(
+    userId: string,
+    permissionCodes: string[],
+  ): Promise<UserSnapshot> {
     const updated = await this.prisma.$transaction(async (tx) => {
       await this.replacePermissions(tx, userId, permissionCodes);
       return tx.user.findUniqueOrThrow({
@@ -287,18 +293,23 @@ export class PrismaUserRepository implements IUserRepository {
   ): Prisma.UserProfileUpdateInput {
     const out: Prisma.UserProfileUpdateInput = {};
     if (p.tipoDocumento !== undefined) out.tipoDocumento = p.tipoDocumento;
-    if (p.numeroDocumento !== undefined) out.numeroDocumento = p.numeroDocumento;
+    if (p.numeroDocumento !== undefined)
+      out.numeroDocumento = p.numeroDocumento;
     if (p.nombres !== undefined) out.nombres = p.nombres;
     if (p.apellidos !== undefined) out.apellidos = p.apellidos;
-    if (p.fechaNacimiento !== undefined) out.fechaNacimiento = p.fechaNacimiento;
+    if (p.fechaNacimiento !== undefined)
+      out.fechaNacimiento = p.fechaNacimiento;
     if (p.emailPersonal !== undefined) out.emailPersonal = p.emailPersonal;
     if (p.direccion !== undefined) out.direccion = p.direccion;
-    if (p.celularPersonal !== undefined) out.celularPersonal = p.celularPersonal;
-    if (p.emailCorporativo !== undefined) out.emailCorporativo = p.emailCorporativo;
+    if (p.celularPersonal !== undefined)
+      out.celularPersonal = p.celularPersonal;
+    if (p.emailCorporativo !== undefined)
+      out.emailCorporativo = p.emailCorporativo;
     if (p.celularCorporativo !== undefined) {
       out.celularCorporativo = p.celularCorporativo;
     }
-    if (p.fechaContratacion !== undefined) out.fechaContratacion = p.fechaContratacion;
+    if (p.fechaContratacion !== undefined)
+      out.fechaContratacion = p.fechaContratacion;
     if (p.cargo !== undefined) out.cargo = p.cargo;
     if (p.fotoUrl !== undefined) out.fotoUrl = p.fotoUrl;
     if (p.fotoArchivoId !== undefined) {

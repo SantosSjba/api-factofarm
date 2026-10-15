@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -21,7 +29,10 @@ export class AccountsReceivableController {
 
   @Get()
   @RequirePermissions('finance.read', 'nav.cuentas_cobrar')
-  async list(@Query() query: AccountReceivableListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async list(
+    @Query() query: AccountReceivableListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.list(await this.scope.resolve(actor), query);
   }
 
@@ -32,6 +43,11 @@ export class AccountsReceivableController {
     @Body() dto: RegisterAccountReceivablePaymentDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.registerPayment(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.registerPayment(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 }

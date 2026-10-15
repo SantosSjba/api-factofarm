@@ -1,6 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { BankMovementType, Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -29,7 +36,7 @@ export class FinanceService {
   ) {}
 
   async getCashFlow(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
+    const { from, to } = await this.parseRange(establishmentId, query);
 
     const salesAgg = await this.prisma.sale.aggregate({
       where: {
@@ -80,7 +87,8 @@ export class FinanceService {
     });
 
     const ingresosVentas = salesAgg._sum.total ?? new Prisma.Decimal(0);
-    const egresosCompras = purchasesAgg._sum.montoTotal ?? new Prisma.Decimal(0);
+    const egresosCompras =
+      purchasesAgg._sum.montoTotal ?? new Prisma.Decimal(0);
     const egresosAp = apPayments._sum?.monto ?? new Prisma.Decimal(0);
     const ingresosAr = arPayments._sum.monto ?? new Prisma.Decimal(0);
     const flujoNeto = ingresosVentas
@@ -104,7 +112,9 @@ export class FinanceService {
         pagosProveedoresCount: apPayments._count,
       },
       caja: {
-        movimientosTotal: (cashMovements._sum.monto ?? new Prisma.Decimal(0)).toString(),
+        movimientosTotal: (
+          cashMovements._sum.monto ?? new Prisma.Decimal(0)
+        ).toString(),
         movimientosCount: cashMovements._count,
       },
       flujoNeto: flujoNeto.toString(),
@@ -112,7 +122,7 @@ export class FinanceService {
   }
 
   async getMarginReport(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
+    const { from, to } = await this.parseRange(establishmentId, query);
 
     const saleItems = await this.prisma.saleItem.findMany({
       where: {
@@ -134,7 +144,12 @@ export class FinanceService {
     let costoTotal = new Prisma.Decimal(0);
     const byProduct = new Map<
       string,
-      { productId: string; nombre: string; venta: Prisma.Decimal; costo: Prisma.Decimal }
+      {
+        productId: string;
+        nombre: string;
+        venta: Prisma.Decimal;
+        costo: Prisma.Decimal;
+      }
     >();
 
     for (const item of saleItems) {
@@ -174,13 +189,21 @@ export class FinanceService {
           costo: p.costo.toString(),
           margen: p.venta.minus(p.costo).toString(),
         }))
-        .sort((a, b) => Number.parseFloat(b.margen) - Number.parseFloat(a.margen))
+        .sort(
+          (a, b) => Number.parseFloat(b.margen) - Number.parseFloat(a.margen),
+        )
         .slice(0, 20),
     };
   }
 
-  async exportAccounting(establishmentId: string, query: AccountingExportQueryDto) {
-    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
+  async exportAccounting(
+    establishmentId: string,
+    query: AccountingExportQueryDto,
+  ) {
+    const { from, to, timeZone } = await this.parseRange(
+      establishmentId,
+      query,
+    );
 
     const sales = await this.prisma.sale.findMany({
       where: {
@@ -329,7 +352,11 @@ export class FinanceService {
     }));
   }
 
-  async createBankAccount(establishmentId: string, dto: CreateBankAccountDto, userId: string) {
+  async createBankAccount(
+    establishmentId: string,
+    dto: CreateBankAccountDto,
+    userId: string,
+  ) {
     const row = await this.prisma.bankAccount.create({
       data: {
         establishmentId,
@@ -339,16 +366,26 @@ export class FinanceService {
         numeroCuenta: dto.numeroCuenta?.trim() || null,
       },
     });
-    await this.audit.log({ userId, action: 'CREATE', entity: 'BankAccount', entityId: row.id });
+    await this.audit.log({
+      userId,
+      action: 'CREATE',
+      entity: 'BankAccount',
+      entityId: row.id,
+    });
     return { ...row, saldoLibro: row.saldoLibro.toString() };
   }
 
-  async listBankMovements(establishmentId: string, query: BankMovementListQueryDto) {
+  async listBankMovements(
+    establishmentId: string,
+    query: BankMovementListQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.BankMovementWhereInput = {
       bankAccount: { establishmentId, deletedAt: null },
       ...(query.bankAccountId ? { bankAccountId: query.bankAccountId } : {}),
-      ...(query.conciliado !== undefined ? { conciliado: query.conciliado } : {}),
+      ...(query.conciliado !== undefined
+        ? { conciliado: query.conciliado }
+        : {}),
     };
     const [total, rows] = await Promise.all([
       this.prisma.bankMovement.count({ where }),
@@ -381,7 +418,11 @@ export class FinanceService {
     );
   }
 
-  async createBankMovement(establishmentId: string, dto: CreateBankMovementDto, userId: string) {
+  async createBankMovement(
+    establishmentId: string,
+    dto: CreateBankMovementDto,
+    userId: string,
+  ) {
     const account = await this.prisma.bankAccount.findFirst({
       where: { id: dto.bankAccountId, establishmentId, deletedAt: null },
     });
@@ -409,11 +450,20 @@ export class FinanceService {
       return mov;
     });
 
-    await this.audit.log({ userId, action: 'CREATE', entity: 'BankMovement', entityId: movement.id });
+    await this.audit.log({
+      userId,
+      action: 'CREATE',
+      entity: 'BankMovement',
+      entityId: movement.id,
+    });
     return { id: movement.id, monto: movement.monto.toString() };
   }
 
-  async reconcileMovements(establishmentId: string, movementIds: string[], userId: string) {
+  async reconcileMovements(
+    establishmentId: string,
+    movementIds: string[],
+    userId: string,
+  ) {
     const movements = await this.prisma.bankMovement.findMany({
       where: {
         id: { in: movementIds },
@@ -422,7 +472,8 @@ export class FinanceService {
       },
       select: { id: true },
     });
-    if (movements.length === 0) throw new BadRequestException('Sin movimientos para conciliar');
+    if (movements.length === 0)
+      throw new BadRequestException('Sin movimientos para conciliar');
 
     await this.prisma.bankMovement.updateMany({
       where: { id: { in: movements.map((m) => m.id) } },
@@ -439,7 +490,11 @@ export class FinanceService {
     return { ok: true, reconciled: movements.length };
   }
 
-  async upsertPurchaseBudget(establishmentId: string, dto: UpsertPurchaseBudgetDto, userId: string) {
+  async upsertPurchaseBudget(
+    establishmentId: string,
+    dto: UpsertPurchaseBudgetDto,
+    userId: string,
+  ) {
     const row = await this.prisma.purchaseBudget.upsert({
       where: {
         establishmentId_anio_mes: {
@@ -460,7 +515,12 @@ export class FinanceService {
         notas: dto.notas?.trim() || null,
       },
     });
-    await this.audit.log({ userId, action: 'UPSERT', entity: 'PurchaseBudget', entityId: row.id });
+    await this.audit.log({
+      userId,
+      action: 'UPSERT',
+      entity: 'PurchaseBudget',
+      entityId: row.id,
+    });
     return {
       id: row.id,
       anio: row.anio,
@@ -469,7 +529,10 @@ export class FinanceService {
     };
   }
 
-  async getPurchaseBudgetVsActual(establishmentId: string, query: PurchaseBudgetReportQueryDto) {
+  async getPurchaseBudgetVsActual(
+    establishmentId: string,
+    query: PurchaseBudgetReportQueryDto,
+  ) {
     const budgets = await this.prisma.purchaseBudget.findMany({
       where: { establishmentId, anio: query.anio },
       orderBy: { mes: 'asc' },
@@ -506,8 +569,11 @@ export class FinanceService {
     return { anio: query.anio, months: rows };
   }
 
-  async getPaymentsByMethod(establishmentId: string, query: FinancePeriodQueryDto) {
-    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
+  async getPaymentsByMethod(
+    establishmentId: string,
+    query: FinancePeriodQueryDto,
+  ) {
+    const { from, to } = await this.parseRange(establishmentId, query);
 
     const salePayments = await this.prisma.payment.findMany({
       where: {
@@ -545,10 +611,18 @@ export class FinanceService {
       select: { tipo: true, metodoPago: true, monto: true },
     });
 
-    type Bucket = { ingresos: Prisma.Decimal; egresos: Prisma.Decimal; count: number };
+    type Bucket = {
+      ingresos: Prisma.Decimal;
+      egresos: Prisma.Decimal;
+      count: number;
+    };
     const byMethod = new Map<string, Bucket>();
 
-    const add = (metodo: string | null | undefined, ingreso: Prisma.Decimal, egreso: Prisma.Decimal) => {
+    const add = (
+      metodo: string | null | undefined,
+      ingreso: Prisma.Decimal,
+      egreso: Prisma.Decimal,
+    ) => {
       const key = metodo?.trim() || 'SIN_ESPECIFICAR';
       const prev = byMethod.get(key) ?? {
         ingresos: new Prisma.Decimal(0),
@@ -562,11 +636,13 @@ export class FinanceService {
     };
 
     for (const p of salePayments) add(p.metodo, p.monto, new Prisma.Decimal(0));
-    for (const p of arPayments) add(p.metodoPago, p.monto, new Prisma.Decimal(0));
+    for (const p of arPayments)
+      add(p.metodoPago, p.monto, new Prisma.Decimal(0));
     for (const p of apPayments) add(p.metodo, new Prisma.Decimal(0), p.monto);
     for (const m of cashMovements) {
       const metodo = m.metodoPago ?? 'EFECTIVO';
-      if (m.monto.greaterThanOrEqualTo(0)) add(metodo, m.monto, new Prisma.Decimal(0));
+      if (m.monto.greaterThanOrEqualTo(0))
+        add(metodo, m.monto, new Prisma.Decimal(0));
       else add(metodo, new Prisma.Decimal(0), m.monto.abs());
     }
 
@@ -599,7 +675,10 @@ export class FinanceService {
     };
   }
 
-  async getRecentPayments(establishmentId: string, query: RecentPaymentsQueryDto) {
+  async getRecentPayments(
+    establishmentId: string,
+    query: RecentPaymentsQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     let dateFilter: { gte?: Date; lt?: Date } | undefined;
     if (query.from || query.to) {
@@ -665,7 +744,8 @@ export class FinanceService {
         monto: p.monto,
         metodo: p.metodo,
         referencia: p.referencia,
-        descripcion: `${p.sale.documentType} ${p.sale.serie ?? ''}-${p.sale.numero ?? ''}`.trim(),
+        descripcion:
+          `${p.sale.documentType} ${p.sale.serie ?? ''}-${p.sale.numero ?? ''}`.trim(),
       });
     }
 
@@ -742,8 +822,11 @@ export class FinanceService {
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
-  async getGeneralLedger(establishmentId: string, query: GeneralLedgerQueryDto) {
-    const { from, to, timeZone } = await this.parseRange(establishmentId, query);
+  async getGeneralLedger(
+    establishmentId: string,
+    query: GeneralLedgerQueryDto,
+  ) {
+    const { from, to } = await this.parseRange(establishmentId, query);
     const { page, pageSize, skip, take } = paginationArgs(query);
 
     type LedgerRow = {
@@ -780,7 +863,8 @@ export class FinanceService {
         id: `sale-${s.id}`,
         fecha: s.createdAt,
         cuenta: '70111',
-        descripcion: `Venta ${s.documentType} ${s.serie ?? ''}-${s.numero ?? ''}`.trim(),
+        descripcion:
+          `Venta ${s.documentType} ${s.serie ?? ''}-${s.numero ?? ''}`.trim(),
         debe: new Prisma.Decimal(0),
         haber: s.total,
         origen: 'VENTA',
@@ -807,7 +891,8 @@ export class FinanceService {
         id: `ap-${p.id}`,
         fecha: p.fechaEmision,
         cuenta: '60111',
-        descripcion: `Compra ${p.numeroDocumento ?? ''} · ${p.supplier?.razonSocial ?? ''}`.trim(),
+        descripcion:
+          `Compra ${p.numeroDocumento ?? ''} · ${p.supplier?.razonSocial ?? ''}`.trim(),
         debe: p.montoTotal,
         haber: new Prisma.Decimal(0),
         origen: 'COMPRA',
@@ -836,7 +921,8 @@ export class FinanceService {
         id: `bank-${m.id}`,
         fecha: m.movimientoAt,
         cuenta: '10411',
-        descripcion: `${m.bankAccount.nombre} · ${m.descripcion ?? m.referencia ?? m.tipo}`.trim(),
+        descripcion:
+          `${m.bankAccount.nombre} · ${m.descripcion ?? m.referencia ?? m.tipo}`.trim(),
         debe: isIngreso ? m.monto : new Prisma.Decimal(0),
         haber: isIngreso ? new Prisma.Decimal(0) : m.monto,
         origen: 'BANCO',
@@ -855,8 +941,14 @@ export class FinanceService {
       origen: r.origen,
     }));
 
-    const totalDebe = rows.reduce((acc, r) => acc.plus(r.debe), new Prisma.Decimal(0));
-    const totalHaber = rows.reduce((acc, r) => acc.plus(r.haber), new Prisma.Decimal(0));
+    const totalDebe = rows.reduce(
+      (acc, r) => acc.plus(r.debe),
+      new Prisma.Decimal(0),
+    );
+    const totalHaber = rows.reduce(
+      (acc, r) => acc.plus(r.haber),
+      new Prisma.Decimal(0),
+    );
 
     return {
       from: from.toISOString(),
@@ -875,10 +967,18 @@ export class FinanceService {
     return normalizeTimeZone(row?.timeZone);
   }
 
-  private async parseRange(establishmentId: string, query: FinancePeriodQueryDto) {
+  private async parseRange(
+    establishmentId: string,
+    query: FinancePeriodQueryDto,
+  ) {
     const fromYmd = query.from?.trim();
     const toYmd = query.to?.trim();
-    if (!fromYmd || !toYmd || !/^\d{4}-\d{2}-\d{2}$/.test(fromYmd) || !/^\d{4}-\d{2}-\d{2}$/.test(toYmd)) {
+    if (
+      !fromYmd ||
+      !toYmd ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(fromYmd) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(toYmd)
+    ) {
       throw new BadRequestException('Rango de fechas inválido');
     }
     const tz = await this.resolveTimeZone(establishmentId);

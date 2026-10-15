@@ -80,7 +80,9 @@ export class ApisperuBillingProvider implements IBillingProvider {
     const hasToken = !!this.apiToken?.trim();
     assertOseCredentialsOrThrow(nodeEnv, hasToken, 'APIsPERU');
     if (!hasToken) {
-      this.logger.warn('APIsPERU sin token Bearer; usando mock (solo desarrollo)');
+      this.logger.warn(
+        'APIsPERU sin token Bearer; usando mock (solo desarrollo)',
+      );
       return this.mock.emit(input);
     }
 
@@ -95,19 +97,31 @@ export class ApisperuBillingProvider implements IBillingProvider {
       'COMUNICACION_BAJA',
     ]);
     if (unsupported.has(input.documentType)) {
-      assertEmitDocumentTypeSupportedOrThrow(nodeEnv, 'APIsPERU', input.documentType);
-      this.logger.warn(`APIsPERU conector: ${input.documentType} no cableado; mock (solo desarrollo)`);
+      assertEmitDocumentTypeSupportedOrThrow(
+        nodeEnv,
+        'APIsPERU',
+        input.documentType,
+      );
+      this.logger.warn(
+        `APIsPERU conector: ${input.documentType} no cableado; mock (solo desarrollo)`,
+      );
       return this.mock.emit(input);
     }
 
-    const isNote = input.documentType === 'NOTA_CREDITO' || input.documentType === 'NOTA_DEBITO';
+    const isNote =
+      input.documentType === 'NOTA_CREDITO' ||
+      input.documentType === 'NOTA_DEBITO';
     const path = isNote ? '/note/send' : '/invoice/send';
-    const body = isNote ? this.buildNoteBody(input) : this.buildInvoiceBody(input);
+    const body = isNote
+      ? this.buildNoteBody(input)
+      : this.buildInvoiceBody(input);
     const response = await this.postJson<ApisperuSendResponse>(path, body);
     const sunat = response.sunatResponse;
     if (sunat?.success === false) {
       throw new Error(
-        sunat.error?.message ?? sunat.cdrResponse?.description ?? 'APIsPERU rechazó el comprobante',
+        sunat.error?.message ??
+          sunat.cdrResponse?.description ??
+          'APIsPERU rechazó el comprobante',
       );
     }
 
@@ -141,7 +155,9 @@ export class ApisperuBillingProvider implements IBillingProvider {
       return this.mock.voidDocument(input);
     }
     if (!this.emisor?.ruc) {
-      throw new Error('APIsPERU: configure RUC emisor en Mi farmacia para comunicación de baja.');
+      throw new Error(
+        'APIsPERU: configure RUC emisor en Mi farmacia para comunicación de baja.',
+      );
     }
 
     const now = peruEmissionDate(new Date().toISOString());
@@ -160,17 +176,23 @@ export class ApisperuBillingProvider implements IBillingProvider {
         },
       ],
     };
-    const response = await this.postJson<ApisperuSendResponse>('/voided/send', body);
+    const response = await this.postJson<ApisperuSendResponse>(
+      '/voided/send',
+      body,
+    );
     const sunat = response.sunatResponse;
     const cdr = sunat?.cdrResponse;
     return {
       sunatStatus: this.mapSunatStatus(sunat),
       sunatCodigo: cdr?.code ?? '0',
-      sunatDescripcion: cdr?.description ?? 'Comunicación de baja enviada vía APIsPERU',
+      sunatDescripcion:
+        cdr?.description ?? 'Comunicación de baja enviada vía APIsPERU',
     };
   }
 
-  async sendDailySummary(input: DailySummaryInput): Promise<DailySummaryResult> {
+  async sendDailySummary(
+    input: DailySummaryInput,
+  ): Promise<DailySummaryResult> {
     const nodeEnv = this.config.get<string>('NODE_ENV');
     assertOseCredentialsOrThrow(nodeEnv, !!this.apiToken?.trim(), 'APIsPERU');
     assertOseOperationSupportedOrThrow(
@@ -179,7 +201,9 @@ export class ApisperuBillingProvider implements IBillingProvider {
       'Resumen diario de boletas (RC)',
       'Envíe el RC desde el panel APIsPERU o use Nubefact (integración RC nativa).',
     );
-    this.logger.warn(`APIsPERU: RC no cableado en conector; mock para ${input.fecha}`);
+    this.logger.warn(
+      `APIsPERU: RC no cableado en conector; mock para ${input.fecha}`,
+    );
     return this.mock.sendDailySummary(input);
   }
 
@@ -236,7 +260,9 @@ export class ApisperuBillingProvider implements IBillingProvider {
         : (input.creditNoteReasonCode ?? '01');
     const motivoDes =
       input.voidReasonText ??
-      (input.documentType === 'NOTA_DEBITO' ? 'AUMENTO EN EL VALOR' : 'ANULACION DE LA OPERACION');
+      (input.documentType === 'NOTA_DEBITO'
+        ? 'AUMENTO EN EL VALOR'
+        : 'ANULACION DE LA OPERACION');
 
     return {
       ublVersion: '2.1',
@@ -244,7 +270,9 @@ export class ApisperuBillingProvider implements IBillingProvider {
       serie: input.serie,
       correlativo: input.numero.replace(/^0+/, '') || input.numero,
       fechaEmision: fecha,
-      tipDocAfectado: mapFactilizaAfectadoTipo(input.relatedDocument.documentType),
+      tipDocAfectado: mapFactilizaAfectadoTipo(
+        input.relatedDocument.documentType,
+      ),
       numDocfectado: `${input.relatedDocument.serie}-${input.relatedDocument.numero}`,
       codMotivo: motivoCod,
       desMotivo: motivoDes,
@@ -261,7 +289,10 @@ export class ApisperuBillingProvider implements IBillingProvider {
   }
 
   private clientBlock(input: EmitDocumentInput) {
-    const numDoc = Number.parseInt(input.receptor.numeroDoc.replace(/\D/g, ''), 10);
+    const numDoc = Number.parseInt(
+      input.receptor.numeroDoc.replace(/\D/g, ''),
+      10,
+    );
     return {
       tipoDoc: input.receptor.tipoDoc,
       numDoc: Number.isFinite(numDoc) ? numDoc : input.receptor.numeroDoc,
@@ -321,14 +352,21 @@ export class ApisperuBillingProvider implements IBillingProvider {
       return SunatDocumentStatus.RECHAZADO;
     }
     const code = sunat.cdrResponse?.code ?? '';
-    if (code === '0' || sunat.success === true || sunat.cdrResponse?.accepted === true) {
+    if (
+      code === '0' ||
+      sunat.success === true ||
+      sunat.cdrResponse?.accepted === true
+    ) {
       return SunatDocumentStatus.ACEPTADO;
     }
     if (code.startsWith('2')) return SunatDocumentStatus.RECHAZADO;
     return SunatDocumentStatus.OBSERVADO;
   }
 
-  private async fetchPdf(kind: 'invoice' | 'note', body: Record<string, unknown>): Promise<Buffer> {
+  private async fetchPdf(
+    kind: 'invoice' | 'note',
+    body: Record<string, unknown>,
+  ): Promise<Buffer> {
     try {
       const res = await fetch(`${this.baseUrl()}/${kind}/pdf`, {
         method: 'POST',
@@ -351,9 +389,12 @@ export class ApisperuBillingProvider implements IBillingProvider {
     }
   }
 
-  private async postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  private async postJson<T>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
     const url = `${this.baseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
-    this.logger.log(`APIsPERU POST ${url}`);
+    this.logger.log({ event: 'billing_request', provider: 'apisperu' });
     const res = await fetch(url, {
       method: 'POST',
       headers: this.headers(),

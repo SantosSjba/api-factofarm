@@ -53,7 +53,9 @@ function isNotaOrTicket(t: SaleDocumentType): boolean {
  * - Devolver: B/F, no anulada, con saldo; si hay CPE en vuelo → bloquear.
  * - ND: CPE aceptado (u observado/contingencia), no anulada.
  */
-export function resolveSaleActionFlags(sale: SaleActionSnapshot): SaleActionFlags {
+export function resolveSaleActionFlags(
+  sale: SaleActionSnapshot,
+): SaleActionFlags {
   const archived = !!sale.archivedAt;
   const anulada = sale.estado === SaleStatus.ANULADA;
   const completada = sale.estado === SaleStatus.COMPLETADA;
@@ -62,34 +64,44 @@ export function resolveSaleActionFlags(sale: SaleActionSnapshot): SaleActionFlag
   let emitBlockedReason: string | null = null;
   if (archived) emitBlockedReason = 'Venta archivada';
   else if (!isBoletaOrFactura(sale.documentType)) {
-    emitBlockedReason = 'Solo boletas/facturas se emiten. Migre la nota de venta primero.';
+    emitBlockedReason =
+      'Solo boletas/facturas se emiten. Migre la nota de venta primero.';
   } else if (anulada) emitBlockedReason = 'Venta anulada o totalmente devuelta';
   else if (sale.hasReturns || parcial) {
     emitBlockedReason =
       'No se puede emitir a SUNAT: la venta tiene devoluciones. Use nota de crédito si el CPE ya estaba aceptado.';
   } else if (!completada) {
     emitBlockedReason = 'Solo ventas completadas se emiten a SUNAT';
-  } else if (sale.hasActiveCpe) emitBlockedReason = 'La venta ya tiene comprobante electrónico';
+  } else if (sale.hasActiveCpe)
+    emitBlockedReason = 'La venta ya tiene comprobante electrónico';
 
   let convertBlockedReason: string | null = null;
   if (archived) convertBlockedReason = 'Venta archivada';
   else if (!isNotaOrTicket(sale.documentType)) {
-    convertBlockedReason = 'Solo notas de venta/tickets se migran a boleta/factura';
-  } else if (anulada) convertBlockedReason = 'Venta anulada o totalmente devuelta';
+    convertBlockedReason =
+      'Solo notas de venta/tickets se migran a boleta/factura';
+  } else if (anulada)
+    convertBlockedReason = 'Venta anulada o totalmente devuelta';
   else if (sale.hasReturns || parcial) {
     convertBlockedReason = 'No se puede migrar: la venta tiene devoluciones';
   } else if (!completada) {
-    convertBlockedReason = 'Solo ventas completadas sin devoluciones se pueden migrar';
-  } else if (sale.hasActiveCpe) convertBlockedReason = 'Ya tiene comprobante electrónico';
+    convertBlockedReason =
+      'Solo ventas completadas sin devoluciones se pueden migrar';
+  } else if (sale.hasActiveCpe)
+    convertBlockedReason = 'Ya tiene comprobante electrónico';
 
   let returnBlockedReason: string | null = null;
   if (archived) returnBlockedReason = 'Venta archivada';
   else if (!isBoletaOrFactura(sale.documentType)) {
     returnBlockedReason = 'Las devoluciones con NC aplican a boletas/facturas';
-  } else if (anulada) returnBlockedReason = 'Venta anulada o totalmente devuelta';
+  } else if (anulada)
+    returnBlockedReason = 'Venta anulada o totalmente devuelta';
   else if (sale.hasRemainingQty === false) {
     returnBlockedReason = 'No queda cantidad por devolver';
-  } else if (sale.sunatStatus && SUNAT_STATUSES_IN_FLIGHT.has(sale.sunatStatus)) {
+  } else if (
+    sale.sunatStatus &&
+    SUNAT_STATUSES_IN_FLIGHT.has(sale.sunatStatus)
+  ) {
     returnBlockedReason =
       'Espere a que SUNAT acepte o rechace el comprobante antes de devolver';
   } else if (
@@ -105,7 +117,8 @@ export function resolveSaleActionFlags(sale: SaleActionSnapshot): SaleActionFlag
   if (archived) debitBlockedReason = 'Venta archivada';
   else if (!isBoletaOrFactura(sale.documentType)) {
     debitBlockedReason = 'ND solo aplica a boletas/facturas';
-  } else if (anulada) debitBlockedReason = 'Venta anulada o totalmente devuelta';
+  } else if (anulada)
+    debitBlockedReason = 'Venta anulada o totalmente devuelta';
   else if (!sale.hasActiveCpe || !sale.sunatStatus) {
     debitBlockedReason = 'Requiere CPE emitido y aceptado por SUNAT';
   } else if (!SUNAT_STATUSES_FOR_NOTE.has(sale.sunatStatus)) {
@@ -118,7 +131,9 @@ export function resolveSaleActionFlags(sale: SaleActionSnapshot): SaleActionFlag
     canEmitCpe: !emitBlockedReason,
     canConvertToCpe: !convertBlockedReason,
     canReturn:
-      !returnBlockedReason && (completada || parcial) && sale.hasRemainingQty !== false,
+      !returnBlockedReason &&
+      (completada || parcial) &&
+      sale.hasRemainingQty !== false,
     canDebit: !debitBlockedReason,
     canVoid,
     emitBlockedReason,

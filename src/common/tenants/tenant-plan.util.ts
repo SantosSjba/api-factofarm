@@ -13,7 +13,9 @@ const PLATFORM_NAV = new Set([
   'nav.platform_reclamaciones',
 ]);
 
-const TENANT_NAV_CODES = MENU_NAV_LEAF_CODES.filter((code) => !PLATFORM_NAV.has(code));
+const TENANT_NAV_CODES = MENU_NAV_LEAF_CODES.filter(
+  (code) => !PLATFORM_NAV.has(code),
+);
 
 const BOTICA_MODULES: readonly string[] = [
   'nav.dashboard_admin',
@@ -107,7 +109,9 @@ export function parseTenantEnabledModules(raw: unknown): string[] | null {
   const codes = raw
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
-    .filter((item) => item.startsWith('nav.') && TENANT_NAV_CODES.includes(item));
+    .filter(
+      (item) => item.startsWith('nav.') && TENANT_NAV_CODES.includes(item),
+    );
   return [...new Set(codes)];
 }
 

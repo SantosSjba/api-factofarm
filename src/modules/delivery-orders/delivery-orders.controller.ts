@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -24,21 +33,36 @@ export class DeliveryOrdersController {
 
   @Get()
   @RequirePermissions('delivery.read', 'nav.ordenes_pedido')
-  async findAll(@Query() query: DeliveryOrderListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async findAll(
+    @Query() query: DeliveryOrderListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
   @Get(':id')
   @RequirePermissions('delivery.read', 'nav.ordenes_pedido')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('delivery.write', 'nav.ordenes_pedido')
   @ApiOperation({ summary: 'Crear pedido delivery' })
-  async create(@Body() dto: CreateDeliveryOrderDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.create(await this.scope.resolve(actor), actor.sub, dto, undefined, actor);
+  async create(
+    @Body() dto: CreateDeliveryOrderDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.create(
+      await this.scope.resolve(actor),
+      actor.sub,
+      dto,
+      undefined,
+      actor,
+    );
   }
 
   @Patch(':id/status')
@@ -48,7 +72,12 @@ export class DeliveryOrdersController {
     @Body() dto: UpdateDeliveryOrderStatusDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateStatus(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.updateStatus(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch(':id/assign')
@@ -58,7 +87,12 @@ export class DeliveryOrdersController {
     @Body() dto: AssignDeliveryOrderDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.assign(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.assign(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Post(':id/complete-sale')

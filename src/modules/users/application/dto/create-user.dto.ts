@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../../../generated/prisma/client';
 import { UserProfileDto } from './user-profile.dto';
@@ -19,7 +30,8 @@ export class CreateUserDto {
   @ApiProperty({
     minLength: 8,
     maxLength: 100,
-    description: 'Contraseña en claro; el API guarda hash (no se devuelve en listados).',
+    description:
+      'Contraseña en claro; el API guarda hash (no se devuelve en listados).',
   })
   @IsString()
   @MinLength(8)
@@ -39,7 +51,8 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Cliente SaaS (obligatorio para usuarios de plataforma al crear operadores).',
+    description:
+      'Cliente SaaS (obligatorio para usuarios de plataforma al crear operadores).',
   })
   @IsOptional()
   @IsUUID()

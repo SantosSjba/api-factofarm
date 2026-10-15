@@ -10,7 +10,13 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
@@ -40,12 +46,16 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión (access + refresh token)' })
-  @ApiBody({ type: LoginDto, examples: { demo: { value: OPENAPI_EXAMPLES.loginRequest } } })
+  @ApiBody({
+    type: LoginDto,
+    examples: { demo: { value: OPENAPI_EXAMPLES.loginRequest } },
+  })
   @ApiOkResponse({ schema: { example: OPENAPI_EXAMPLES.loginResponse } })
   login(@Body() dto: LoginDto, @Req() req: Request) {
     const ip =
-      (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
-      req.ip;
+      (req.headers['x-forwarded-for'] as string | undefined)
+        ?.split(',')[0]
+        ?.trim() ?? req.ip;
     return this.authService.login(dto.email, dto.password, ip);
   }
 
@@ -94,7 +104,8 @@ export class AuthController {
   @Post('exchange-panel-handoff')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Canjear código de acceso al panel de un cliente SaaS (sesión de soporte)',
+    summary:
+      'Canjear código de acceso al panel de un cliente SaaS (sesión de soporte)',
   })
   exchangePanelHandoff(@Body() body: ExchangePanelHandoffDto) {
     return this.authService.exchangePanelHandoff(body.code ?? '');
@@ -111,7 +122,10 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar perfil propio' })
   updateMe(@CurrentUser() user: JwtRequestUser, @Body() dto: UpdateMeDto) {
-    if (user.supportSession) throw new ForbiddenException('La sesión de soporte no permite modificar el perfil del operador');
+    if (user.supportSession)
+      throw new ForbiddenException(
+        'La sesión de soporte no permite modificar el perfil del operador',
+      );
     return this.authService.updateMe(user.sub, dto);
   }
 
@@ -123,7 +137,10 @@ export class AuthController {
     @CurrentUser() user: JwtRequestUser,
     @Body() dto: ChangePasswordDto,
   ) {
-    if (user.supportSession) throw new ForbiddenException('La sesión de soporte no permite cambiar la contraseña del operador');
+    if (user.supportSession)
+      throw new ForbiddenException(
+        'La sesión de soporte no permite cambiar la contraseña del operador',
+      );
     return this.authService.changePassword(
       user.sub,
       dto.currentPassword,

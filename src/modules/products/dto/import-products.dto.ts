@@ -1,7 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn } from 'class-validator';
 
-export const productImportModes = ['PRODUCTOS', 'L_PRECIOS', 'ACTUALIZAR_PRECIOS'] as const;
+export const productImportModes = [
+  'PRODUCTOS',
+  'L_PRECIOS',
+  'ACTUALIZAR_PRECIOS',
+] as const;
 
 export type ProductImportMode = (typeof productImportModes)[number];
 

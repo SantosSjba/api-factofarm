@@ -6,14 +6,24 @@ describe('Configuración de plataforma', () => {
   function setup() {
     const rows = new Map<string, { key: string; value: string }>();
     const table = {
-      findMany: jest.fn(async () => [...rows.values()]),
-      findUnique: jest.fn(async ({ where }) => rows.get(where.key) ?? null),
-      upsert: jest.fn(async ({ create }) => {
-        rows.set(create.key, create);
-      }),
+      findMany: jest.fn(() => Promise.resolve([...rows.values()])),
+      findUnique: jest.fn(({ where }: { where: { key: string } }) =>
+        Promise.resolve(rows.get(where.key) ?? null),
+      ),
+      upsert: jest.fn(
+        ({ create }: { create: { key: string; value: string } }) => {
+          rows.set(create.key, create);
+          return Promise.resolve(create);
+        },
+      ),
     };
     const tx = { platformSetting: table, auditLog: { create: jest.fn() } };
-    const prisma = { ...tx, $transaction: jest.fn(async (fn) => fn(tx)) };
+    const prisma = {
+      ...tx,
+      $transaction: jest.fn(
+        (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
+      ),
+    };
     const config = new ConfigService({
       BILLING_ENCRYPTION_KEY: 'test-key-with-at-least-thirty-two-characters',
       SMTP_HOST: 'smtp.example.com',

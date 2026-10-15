@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
 import { RegulatedPriceService } from './regulated-price.service';
 
@@ -17,7 +17,11 @@ describe('RegulatedPriceService', () => {
   const integrity = {
     assertCanDeleteRegulatedPrice: jest.fn().mockResolvedValue(undefined),
   };
-  const service = new RegulatedPriceService(prisma as never, audit as never, integrity as never);
+  const service = new RegulatedPriceService(
+    prisma as never,
+    audit as never,
+    integrity as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -28,26 +32,39 @@ describe('RegulatedPriceService', () => {
     expect(prisma.regulatedDrugPrice.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: expect.any(Array),
-        }),
-      }),
+          OR: expect.any(Array) as unknown,
+        }) as unknown,
+      }) as unknown,
     );
   });
 
   it('crea precio regulado nuevo', async () => {
     prisma.regulatedDrugPrice.findFirst.mockResolvedValue(null);
     prisma.regulatedDrugPrice.create.mockResolvedValue({ id: 'rp-1' });
-    const row = await service.upsert({ nombre: 'Med A', precioMaximo: 12.5, codigoDigemid: 'DIG-1' });
+    const row = await service.upsert({
+      nombre: 'Med A',
+      precioMaximo: 12.5,
+      codigoDigemid: 'DIG-1',
+    });
     expect(row.id).toBe('rp-1');
     expect(audit.log).toHaveBeenCalled();
   });
 
   it('detecta violación de precio máximo', async () => {
-    prisma.establishment.findFirst.mockResolvedValue({ blockSalesAboveRegulatedPrice: false });
+    prisma.establishment.findFirst.mockResolvedValue({
+      blockSalesAboveRegulatedPrice: false,
+    });
     prisma.product.findMany.mockResolvedValue([
-      { id: 'p1', nombre: 'Med A', codigoMedicamentoDigemid: 'DIG-1', precioUnitarioVenta: '10' },
+      {
+        id: 'p1',
+        nombre: 'Med A',
+        codigoMedicamentoDigemid: 'DIG-1',
+        precioUnitarioVenta: '10',
+      },
     ]);
-    prisma.regulatedDrugPrice.findFirst.mockResolvedValue({ precioMaximo: new Prisma.Decimal(8) });
+    prisma.regulatedDrugPrice.findFirst.mockResolvedValue({
+      precioMaximo: new Prisma.Decimal(8),
+    });
     const result = await service.checkSalePrices('est-1', [
       { productId: 'p1', precioUnitario: new Prisma.Decimal(10) },
     ]);
@@ -56,13 +73,24 @@ describe('RegulatedPriceService', () => {
   });
 
   it('bloquea venta si excede precio regulado y está habilitado', async () => {
-    prisma.establishment.findFirst.mockResolvedValue({ blockSalesAboveRegulatedPrice: true });
+    prisma.establishment.findFirst.mockResolvedValue({
+      blockSalesAboveRegulatedPrice: true,
+    });
     prisma.product.findMany.mockResolvedValue([
-      { id: 'p1', nombre: 'Med A', codigoMedicamentoDigemid: 'DIG-1', precioUnitarioVenta: '10' },
+      {
+        id: 'p1',
+        nombre: 'Med A',
+        codigoMedicamentoDigemid: 'DIG-1',
+        precioUnitarioVenta: '10',
+      },
     ]);
-    prisma.regulatedDrugPrice.findFirst.mockResolvedValue({ precioMaximo: new Prisma.Decimal(8) });
+    prisma.regulatedDrugPrice.findFirst.mockResolvedValue({
+      precioMaximo: new Prisma.Decimal(8),
+    });
     await expect(
-      service.checkSalePrices('est-1', [{ productId: 'p1', precioUnitario: new Prisma.Decimal(10) }]),
+      service.checkSalePrices('est-1', [
+        { productId: 'p1', precioUnitario: new Prisma.Decimal(10) },
+      ]),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 

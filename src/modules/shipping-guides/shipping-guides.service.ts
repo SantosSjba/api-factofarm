@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -38,12 +41,19 @@ export class ShippingGuidesService {
           take,
           orderBy: { razonSocial: 'asc' },
         }),
-      (where) => this.prisma.shippingCarrier.count({ where: { ...where, establishmentId } }),
+      (where) =>
+        this.prisma.shippingCarrier.count({
+          where: { ...where, establishmentId },
+        }),
       query?.search,
     );
   }
 
-  async createCarrier(establishmentId: string, dto: CreateShippingCarrierDto, userId: string) {
+  async createCarrier(
+    establishmentId: string,
+    dto: CreateShippingCarrierDto,
+    userId: string,
+  ) {
     try {
       const row = await this.prisma.shippingCarrier.create({
         data: {
@@ -55,7 +65,12 @@ export class ShippingGuidesService {
           correo: dto.correo?.trim() || null,
         },
       });
-      await this.audit.log({ userId, action: 'CREATE', entity: 'ShippingCarrier', entityId: row.id });
+      await this.audit.log({
+        userId,
+        action: 'CREATE',
+        entity: 'ShippingCarrier',
+        entityId: row.id,
+      });
       return row;
     } catch (err) {
       this.handleUnique(err, 'Ya existe un transportista con ese RUC.');
@@ -72,16 +87,28 @@ export class ShippingGuidesService {
     const row = await this.prisma.shippingCarrier.update({
       where: { id },
       data: {
-        ...(dto.razonSocial !== undefined ? { razonSocial: dto.razonSocial.trim() } : {}),
+        ...(dto.razonSocial !== undefined
+          ? { razonSocial: dto.razonSocial.trim() }
+          : {}),
         ...(dto.nombreComercial !== undefined
           ? { nombreComercial: dto.nombreComercial?.trim() || null }
           : {}),
-        ...(dto.telefono !== undefined ? { telefono: dto.telefono?.trim() || null } : {}),
-        ...(dto.correo !== undefined ? { correo: dto.correo?.trim() || null } : {}),
+        ...(dto.telefono !== undefined
+          ? { telefono: dto.telefono?.trim() || null }
+          : {}),
+        ...(dto.correo !== undefined
+          ? { correo: dto.correo?.trim() || null }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       },
     });
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'ShippingCarrier', entityId: id, diff: dto });
+    await this.audit.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'ShippingCarrier',
+      entityId: id,
+      diff: dto,
+    });
     return row;
   }
 
@@ -92,7 +119,12 @@ export class ShippingGuidesService {
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
-    await this.audit.log({ userId, action: 'DELETE', entity: 'ShippingCarrier', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'DELETE',
+      entity: 'ShippingCarrier',
+      entityId: id,
+    });
   }
 
   listDrivers(establishmentId: string, query?: ShippingListQueryDto) {
@@ -113,14 +145,22 @@ export class ShippingGuidesService {
         }),
       (where) =>
         this.prisma.shippingDriver.count({
-          where: { ...where, establishmentId, ...(carrierId ? { carrierId } : {}) },
+          where: {
+            ...where,
+            establishmentId,
+            ...(carrierId ? { carrierId } : {}),
+          },
         }),
       query?.search,
       ['nombres', 'apellidos', 'numeroDocumento', 'licencia'],
     );
   }
 
-  async createDriver(establishmentId: string, dto: CreateShippingDriverDto, userId: string) {
+  async createDriver(
+    establishmentId: string,
+    dto: CreateShippingDriverDto,
+    userId: string,
+  ) {
     if (dto.carrierId) await this.ensureCarrier(establishmentId, dto.carrierId);
     try {
       const row = await this.prisma.shippingDriver.create({
@@ -136,7 +176,12 @@ export class ShippingGuidesService {
         },
         include: { carrier: { select: { id: true, razonSocial: true } } },
       });
-      await this.audit.log({ userId, action: 'CREATE', entity: 'ShippingDriver', entityId: row.id });
+      await this.audit.log({
+        userId,
+        action: 'CREATE',
+        entity: 'ShippingDriver',
+        entityId: row.id,
+      });
       return row;
     } catch (err) {
       this.handleUnique(err, 'Ya existe un conductor con ese documento.');
@@ -154,16 +199,30 @@ export class ShippingGuidesService {
     const row = await this.prisma.shippingDriver.update({
       where: { id },
       data: {
-        ...(dto.carrierId !== undefined ? { carrierId: dto.carrierId || null } : {}),
+        ...(dto.carrierId !== undefined
+          ? { carrierId: dto.carrierId || null }
+          : {}),
         ...(dto.nombres !== undefined ? { nombres: dto.nombres.trim() } : {}),
-        ...(dto.apellidos !== undefined ? { apellidos: dto.apellidos.trim() } : {}),
-        ...(dto.licencia !== undefined ? { licencia: dto.licencia?.trim() || null } : {}),
-        ...(dto.telefono !== undefined ? { telefono: dto.telefono?.trim() || null } : {}),
+        ...(dto.apellidos !== undefined
+          ? { apellidos: dto.apellidos.trim() }
+          : {}),
+        ...(dto.licencia !== undefined
+          ? { licencia: dto.licencia?.trim() || null }
+          : {}),
+        ...(dto.telefono !== undefined
+          ? { telefono: dto.telefono?.trim() || null }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       },
       include: { carrier: { select: { id: true, razonSocial: true } } },
     });
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'ShippingDriver', entityId: id, diff: dto });
+    await this.audit.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'ShippingDriver',
+      entityId: id,
+      diff: dto,
+    });
     return row;
   }
 
@@ -173,7 +232,12 @@ export class ShippingGuidesService {
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
-    await this.audit.log({ userId, action: 'DELETE', entity: 'ShippingDriver', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'DELETE',
+      entity: 'ShippingDriver',
+      entityId: id,
+    });
   }
 
   listVehicles(establishmentId: string, query?: ShippingListQueryDto) {
@@ -194,14 +258,22 @@ export class ShippingGuidesService {
         }),
       (where) =>
         this.prisma.shippingVehicle.count({
-          where: { ...where, establishmentId, ...(carrierId ? { carrierId } : {}) },
+          where: {
+            ...where,
+            establishmentId,
+            ...(carrierId ? { carrierId } : {}),
+          },
         }),
       query?.search,
       ['placa', 'marca', 'modelo'],
     );
   }
 
-  async createVehicle(establishmentId: string, dto: CreateShippingVehicleDto, userId: string) {
+  async createVehicle(
+    establishmentId: string,
+    dto: CreateShippingVehicleDto,
+    userId: string,
+  ) {
     if (dto.carrierId) await this.ensureCarrier(establishmentId, dto.carrierId);
     try {
       const row = await this.prisma.shippingVehicle.create({
@@ -212,11 +284,18 @@ export class ShippingGuidesService {
           marca: dto.marca?.trim() || null,
           modelo: dto.modelo?.trim() || null,
           capacidadKg:
-            dto.capacidadKg != null ? new Prisma.Decimal(dto.capacidadKg) : null,
+            dto.capacidadKg != null
+              ? new Prisma.Decimal(dto.capacidadKg)
+              : null,
         },
         include: { carrier: { select: { id: true, razonSocial: true } } },
       });
-      await this.audit.log({ userId, action: 'CREATE', entity: 'ShippingVehicle', entityId: row.id });
+      await this.audit.log({
+        userId,
+        action: 'CREATE',
+        entity: 'ShippingVehicle',
+        entityId: row.id,
+      });
       return row;
     } catch (err) {
       this.handleUnique(err, 'Ya existe un vehículo con esa placa.');
@@ -234,17 +313,34 @@ export class ShippingGuidesService {
     const row = await this.prisma.shippingVehicle.update({
       where: { id },
       data: {
-        ...(dto.carrierId !== undefined ? { carrierId: dto.carrierId || null } : {}),
-        ...(dto.marca !== undefined ? { marca: dto.marca?.trim() || null } : {}),
-        ...(dto.modelo !== undefined ? { modelo: dto.modelo?.trim() || null } : {}),
+        ...(dto.carrierId !== undefined
+          ? { carrierId: dto.carrierId || null }
+          : {}),
+        ...(dto.marca !== undefined
+          ? { marca: dto.marca?.trim() || null }
+          : {}),
+        ...(dto.modelo !== undefined
+          ? { modelo: dto.modelo?.trim() || null }
+          : {}),
         ...(dto.capacidadKg !== undefined
-          ? { capacidadKg: dto.capacidadKg != null ? new Prisma.Decimal(dto.capacidadKg) : null }
+          ? {
+              capacidadKg:
+                dto.capacidadKg != null
+                  ? new Prisma.Decimal(dto.capacidadKg)
+                  : null,
+            }
           : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       },
       include: { carrier: { select: { id: true, razonSocial: true } } },
     });
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'ShippingVehicle', entityId: id, diff: dto });
+    await this.audit.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'ShippingVehicle',
+      entityId: id,
+      diff: dto,
+    });
     return row;
   }
 
@@ -254,10 +350,18 @@ export class ShippingGuidesService {
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
-    await this.audit.log({ userId, action: 'DELETE', entity: 'ShippingVehicle', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'DELETE',
+      entity: 'ShippingVehicle',
+      entityId: id,
+    });
   }
 
-  listDepartureAddresses(establishmentId: string, query?: ShippingListQueryDto) {
+  listDepartureAddresses(
+    establishmentId: string,
+    query?: ShippingListQueryDto,
+  ) {
     return this.listPaginated(
       query,
       (where, skip, take) =>
@@ -272,7 +376,10 @@ export class ShippingGuidesService {
             district: { select: { id: true, name: true } },
           },
         }),
-      (where) => this.prisma.departureAddress.count({ where: { ...where, establishmentId } }),
+      (where) =>
+        this.prisma.departureAddress.count({
+          where: { ...where, establishmentId },
+        }),
       query?.search,
       ['codigo', 'nombre', 'direccion'],
     );
@@ -300,7 +407,12 @@ export class ShippingGuidesService {
           district: { select: { id: true, name: true } },
         },
       });
-      await this.audit.log({ userId, action: 'CREATE', entity: 'DepartureAddress', entityId: row.id });
+      await this.audit.log({
+        userId,
+        action: 'CREATE',
+        entity: 'DepartureAddress',
+        entityId: row.id,
+      });
       return row;
     } catch (err) {
       this.handleUnique(err, 'Ya existe una dirección con ese código.');
@@ -318,10 +430,18 @@ export class ShippingGuidesService {
       where: { id },
       data: {
         ...(dto.nombre !== undefined ? { nombre: dto.nombre.trim() } : {}),
-        ...(dto.direccion !== undefined ? { direccion: dto.direccion.trim() } : {}),
-        ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId || null } : {}),
-        ...(dto.provinceId !== undefined ? { provinceId: dto.provinceId || null } : {}),
-        ...(dto.districtId !== undefined ? { districtId: dto.districtId || null } : {}),
+        ...(dto.direccion !== undefined
+          ? { direccion: dto.direccion.trim() }
+          : {}),
+        ...(dto.departmentId !== undefined
+          ? { departmentId: dto.departmentId || null }
+          : {}),
+        ...(dto.provinceId !== undefined
+          ? { provinceId: dto.provinceId || null }
+          : {}),
+        ...(dto.districtId !== undefined
+          ? { districtId: dto.districtId || null }
+          : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       },
       include: {
@@ -330,17 +450,32 @@ export class ShippingGuidesService {
         district: { select: { id: true, name: true } },
       },
     });
-    await this.audit.log({ userId, action: 'UPDATE', entity: 'DepartureAddress', entityId: id, diff: dto });
+    await this.audit.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'DepartureAddress',
+      entityId: id,
+      diff: dto,
+    });
     return row;
   }
 
-  async removeDepartureAddress(establishmentId: string, id: string, userId: string) {
+  async removeDepartureAddress(
+    establishmentId: string,
+    id: string,
+    userId: string,
+  ) {
     await this.ensureDepartureAddress(establishmentId, id);
     await this.prisma.departureAddress.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     });
-    await this.audit.log({ userId, action: 'DELETE', entity: 'DepartureAddress', entityId: id });
+    await this.audit.log({
+      userId,
+      action: 'DELETE',
+      entity: 'DepartureAddress',
+      entityId: id,
+    });
   }
 
   private buildSearchWhere(search?: string, fields: string[] = []) {
@@ -356,8 +491,18 @@ export class ShippingGuidesService {
 
   private async listPaginated<T>(
     query: ShippingListQueryDto | undefined,
-    findMany: (where: { deletedAt: null; OR?: Array<Record<string, { contains: string; mode: 'insensitive' }>> }, skip: number, take: number) => Promise<T[]>,
-    count: (where: { deletedAt: null; OR?: Array<Record<string, { contains: string; mode: 'insensitive' }>> }) => Promise<number>,
+    findMany: (
+      where: {
+        deletedAt: null;
+        OR?: Array<Record<string, { contains: string; mode: 'insensitive' }>>;
+      },
+      skip: number,
+      take: number,
+    ) => Promise<T[]>,
+    count: (where: {
+      deletedAt: null;
+      OR?: Array<Record<string, { contains: string; mode: 'insensitive' }>>;
+    }) => Promise<number>,
     search?: string,
     searchFields: string[] = ['razonSocial', 'ruc', 'nombreComercial'],
   ) {
@@ -366,7 +511,10 @@ export class ShippingGuidesService {
       return findMany(where, 0, 500);
     }
     const { page, pageSize, skip, take } = paginationArgs(query);
-    const [items, total] = await Promise.all([findMany(where, skip, take), count(where)]);
+    const [items, total] = await Promise.all([
+      findMany(where, skip, take),
+      count(where),
+    ]);
     return buildPaginatedResult(items, total, page, pageSize);
   }
 
@@ -403,7 +551,10 @@ export class ShippingGuidesService {
   }
 
   private handleUnique(err: unknown, message: string): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException(message);
     }
     throw err;

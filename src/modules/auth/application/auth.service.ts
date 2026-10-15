@@ -22,7 +22,11 @@ import {
   normalizeTimeZone,
 } from '../../../common/utils/timezone.util';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { UserRole, TenantStatus, TenantPlan } from '../../../generated/prisma/client';
+import {
+  UserRole,
+  TenantStatus,
+  TenantPlan,
+} from '../../../generated/prisma/client';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import { LoginAttemptService } from './login-attempt.service';
 import type {
@@ -75,7 +79,10 @@ export class AuthService {
     await this.loginAttempts.assertNotLocked(normalized, ipAddress);
 
     const user = await this.prisma.user.findFirst({
-      where: { email: { equals: normalized, mode: 'insensitive' }, deletedAt: null },
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        deletedAt: null,
+      },
       include: {
         permissions: { include: { permission: true } },
         tenant: { select: authTenantSelect },
@@ -208,7 +215,12 @@ export class AuthService {
       where: { id: tenantId, deletedAt: null },
       select: authTenantSelect,
     });
-    if (!tenant || ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
+    if (
+      !tenant ||
+      ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(
+        tenant.status as never,
+      )
+    ) {
       throw new UnauthorizedException({
         code: 'TENANT_SUSPENDED',
         message: 'La cuenta de la farmacia no está disponible',
@@ -257,10 +269,15 @@ export class AuthService {
         message: 'Cliente no encontrado o inactivo',
       });
     }
-    if (![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
+    if (
+      ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(
+        tenant.status as never,
+      )
+    ) {
       throw new UnauthorizedException({
         code: 'TENANT_SUSPENDED',
-        message: 'La cuenta de su farmacia está suspendida. Contacte a FactoFarm.',
+        message:
+          'La cuenta de su farmacia está suspendida. Contacte a FactoFarm.',
       });
     }
   }
@@ -304,7 +321,10 @@ export class AuthService {
       },
     });
     if (!user) {
-      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Usuario no encontrado',
+      });
     }
     const __estId = user.establecimientoId;
     return this.toAuthUserView(
@@ -322,7 +342,9 @@ export class AuthService {
     tenantId: string,
   ): Promise<PanelHandoffCreateView> {
     if (!isPlatformAdmin(actor.role) || actor.supportSession) {
-      throw new ForbiddenException('Solo operadores de plataforma FactoSys pueden entrar al panel de un cliente');
+      throw new ForbiddenException(
+        'Solo operadores de plataforma FactoSys pueden entrar al panel de un cliente',
+      );
     }
 
     const tenant = await this.prisma.tenant.findFirst({
@@ -336,11 +358,19 @@ export class AuthService {
       },
     });
     if (!tenant) throw new NotFoundException('Cliente SaaS no encontrado');
-    if (![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
-      throw new BadRequestException('No se puede ingresar a un cliente suspendido');
+    if (
+      ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(
+        tenant.status as never,
+      )
+    ) {
+      throw new BadRequestException(
+        'No se puede ingresar a un cliente suspendido',
+      );
     }
     if (tenant.status === TenantStatus.PENDING) {
-      throw new BadRequestException('El cliente aún no está activo; aprovisione y active primero');
+      throw new BadRequestException(
+        'El cliente aún no está activo; aprovisione y active primero',
+      );
     }
 
     const establishment = await this.prisma.establishment.findFirst({
@@ -349,7 +379,9 @@ export class AuthService {
       select: { id: true },
     });
     if (!establishment) {
-      throw new BadRequestException('El cliente no tiene establecimientos activos. Aprovisione primero.');
+      throw new BadRequestException(
+        'El cliente no tiene establecimientos activos. Aprovisione primero.',
+      );
     }
 
     const plainCode = randomBytes(32).toString('hex');
@@ -395,7 +427,8 @@ export class AuthService {
     if (!handoff || handoff.usedAt || handoff.expiresAt < new Date()) {
       throw new UnauthorizedException({
         code: 'INVALID_HANDOFF',
-        message: 'El enlace de acceso expiró o ya fue usado. Genere uno nuevo desde plataforma.',
+        message:
+          'El enlace de acceso expiró o ya fue usado. Genere uno nuevo desde plataforma.',
       });
     }
 
@@ -403,7 +436,8 @@ export class AuthService {
       where: { id: handoff.id, usedAt: null, expiresAt: { gt: new Date() } },
       data: { usedAt: new Date() },
     });
-    if (consumed.count !== 1) throw new UnauthorizedException('Enlace de soporte ya utilizado');
+    if (consumed.count !== 1)
+      throw new UnauthorizedException('Enlace de soporte ya utilizado');
 
     const [actor, tenant] = await Promise.all([
       this.prisma.user.findFirst({
@@ -419,12 +453,19 @@ export class AuthService {
     if (!actor || !isPlatformAdmin(actor.role)) {
       throw new UnauthorizedException('Operador de plataforma no válido');
     }
-    if (!tenant || ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(tenant.status as never)) {
+    if (
+      !tenant ||
+      ![TenantStatus.ACTIVE, TenantStatus.TRIAL].includes(
+        tenant.status as never,
+      )
+    ) {
       throw new UnauthorizedException('Cliente no disponible');
     }
 
     const supportRole =
-      tenant.plan === TenantPlan.CADENA ? UserRole.ADMIN_CADENA : UserRole.ADMINISTRADOR;
+      tenant.plan === TenantPlan.CADENA
+        ? UserRole.ADMIN_CADENA
+        : UserRole.ADMINISTRADOR;
     const permissionCodes = resolveUserPermissionCodes({
       role: supportRole,
       permissionCodes: expandUserPermissionCodes(
@@ -463,7 +504,10 @@ export class AuthService {
       where: { id: userId, deletedAt: null },
     });
     if (!user) {
-      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Usuario no encontrado',
+      });
     }
 
     if (dto.email && dto.email.toLowerCase().trim() !== user.email) {
@@ -486,7 +530,9 @@ export class AuthService {
       where: { id: userId },
       data: {
         ...(dto.nombre !== undefined ? { nombre: dto.nombre.trim() } : {}),
-        ...(dto.email !== undefined ? { email: dto.email.toLowerCase().trim() } : {}),
+        ...(dto.email !== undefined
+          ? { email: dto.email.toLowerCase().trim() }
+          : {}),
       },
     });
 
@@ -498,7 +544,10 @@ export class AuthService {
       },
     });
     if (!refreshed) {
-      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Usuario no encontrado',
+      });
     }
     return this.toAuthUserView(
       refreshed,
@@ -525,7 +574,10 @@ export class AuthService {
       where: { id: userId, deletedAt: null },
     });
     if (!user) {
-      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Usuario no encontrado' });
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Usuario no encontrado',
+      });
     }
 
     const ok = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -538,8 +590,14 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: userId }, data: { passwordHash, authVersion: { increment: 1 } } });
-      await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, authVersion: { increment: 1 } },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
     });
 
     return { ok: true };
@@ -548,7 +606,10 @@ export class AuthService {
   async forgotPassword(email: string): Promise<{ ok: true }> {
     const normalized = email.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
-      where: { email: { equals: normalized, mode: 'insensitive' }, deletedAt: null },
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        deletedAt: null,
+      },
     });
     if (!user) {
       return { ok: true };
@@ -561,20 +622,29 @@ export class AuthService {
 
     const plain = randomBytes(32).toString('hex');
     const tokenHash = this.hashToken(plain);
-    const minutes = Number(this.settings ? await this.settings.get('PASSWORD_RESET_EXPIRES_MINUTES') : this.config.get<string>('PASSWORD_RESET_EXPIRES_MINUTES', '60'));
+    const minutes = Number(
+      this.settings
+        ? await this.settings.get('PASSWORD_RESET_EXPIRES_MINUTES')
+        : this.config.get<string>('PASSWORD_RESET_EXPIRES_MINUTES', '60'),
+    );
     const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
 
     await this.prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    const frontendUrl = this.settings ? await this.settings.get('PASSWORD_RESET_BASE_URL') : this.config.get<string>('FRONTEND_URL', 'http://localhost:4200');
+    const frontendUrl = this.settings
+      ? await this.settings.get('PASSWORD_RESET_BASE_URL')
+      : this.config.get<string>('FRONTEND_URL', 'http://localhost:4200');
     const resetUrl = `${frontendUrl.replace(/\/$/, '')}/auth/reset-password?token=${plain}`;
     await this.email.sendPasswordReset(user.email, resetUrl);
     return { ok: true };
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<{ ok: true }> {
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ ok: true }> {
     const policy = validatePasswordPolicy(newPassword);
     if (!policy.valid) {
       throw new BadRequestException({
@@ -612,7 +682,8 @@ export class AuthService {
         where: { id: stored.id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() },
       });
-      if (consumed.count !== 1) throw new BadRequestException('Enlace inválido o expirado');
+      if (consumed.count !== 1)
+        throw new BadRequestException('Enlace inválido o expirado');
       await tx.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -648,7 +719,9 @@ export class AuthService {
     };
 
     const accessExpiresIn =
-      (this.settings ? await this.settings.get('JWT_ACCESS_EXPIRES_IN') : this.config.get<string>('JWT_ACCESS_EXPIRES_IN')) ??
+      (this.settings
+        ? await this.settings.get('JWT_ACCESS_EXPIRES_IN')
+        : this.config.get<string>('JWT_ACCESS_EXPIRES_IN')) ??
       this.config.get<string>('JWT_EXPIRES_IN') ??
       '15m';
     const accessToken = await this.jwtService.signAsync(
@@ -658,16 +731,25 @@ export class AuthService {
 
     const refreshPlain = randomBytes(48).toString('hex');
     const tokenHash = this.hashToken(refreshPlain);
-    const refreshDays = Number(this.settings ? await this.settings.get('JWT_REFRESH_EXPIRES_DAYS') : this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '7'));
+    const refreshDays = Number(
+      this.settings
+        ? await this.settings.get('JWT_REFRESH_EXPIRES_DAYS')
+        : this.config.get<string>('JWT_REFRESH_EXPIRES_DAYS', '7'),
+    );
     const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
 
     await this.prisma.$transaction(async (tx) => {
       if (opts?.revokeTokenId) {
         const revoked = await tx.refreshToken.updateMany({
-          where: { id: opts.revokeTokenId, revokedAt: null, expiresAt: { gt: new Date() } },
+          where: {
+            id: opts.revokeTokenId,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
           data: { revokedAt: new Date() },
         });
-        if (revoked.count !== 1) throw new UnauthorizedException('Sesión de renovación ya utilizada');
+        if (revoked.count !== 1)
+          throw new UnauthorizedException('Sesión de renovación ya utilizada');
       }
       await tx.refreshToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
@@ -699,7 +781,10 @@ export class AuthService {
     },
     opts?: { revokeTokenId?: string },
   ): Promise<AuthTokensView> {
-    const operator = await this.prisma.user.findUniqueOrThrow({ where: { id: input.actorId }, select: { authVersion: true } });
+    const operator = await this.prisma.user.findUniqueOrThrow({
+      where: { id: input.actorId },
+      select: { authVersion: true },
+    });
     const payload: AuthJwtPayload = {
       sub: input.actorId,
       authVersion: operator.authVersion,
@@ -723,10 +808,15 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       if (opts?.revokeTokenId) {
         const revoked = await tx.refreshToken.updateMany({
-          where: { id: opts.revokeTokenId, revokedAt: null, expiresAt: { gt: new Date() } },
+          where: {
+            id: opts.revokeTokenId,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
           data: { revokedAt: new Date() },
         });
-        if (revoked.count !== 1) throw new UnauthorizedException('Sesión de renovación ya utilizada');
+        if (revoked.count !== 1)
+          throw new UnauthorizedException('Sesión de renovación ya utilizada');
       }
       await tx.refreshToken.create({
         data: {

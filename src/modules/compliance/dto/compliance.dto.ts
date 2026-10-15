@@ -13,7 +13,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ArcoRequestStatus, ArcoRequestType, TaxPartyType } from '../../../generated/prisma/client';
+import {
+  ArcoRequestStatus,
+  ArcoRequestType,
+  TaxPartyType,
+} from '../../../generated/prisma/client';
 
 export class CreateArcoRequestDto {
   @ApiProperty({ format: 'uuid' })

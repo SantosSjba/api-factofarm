@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -7,7 +12,9 @@ export class SensitiveHealthCryptoService {
   private readonly key: Buffer | null;
 
   constructor(private readonly config: ConfigService) {
-    const raw = this.config.get<string>('LPDP_SENSITIVE_ENCRYPTION_KEY')?.trim();
+    const raw = this.config
+      .get<string>('LPDP_SENSITIVE_ENCRYPTION_KEY')
+      ?.trim();
     if (!raw) {
       this.key = null;
       return;
@@ -23,7 +30,10 @@ export class SensitiveHealthCryptoService {
     if (!plain?.trim() || !this.key) return null;
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
-    const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([
+      cipher.update(plain, 'utf8'),
+      cipher.final(),
+    ]);
     const tag = cipher.getAuthTag();
     return Buffer.concat([iv, tag, encrypted]).toString('base64');
   }
@@ -36,7 +46,9 @@ export class SensitiveHealthCryptoService {
     const data = buf.subarray(28);
     const decipher = createDecipheriv('aes-256-gcm', this.key, iv);
     decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString(
+      'utf8',
+    );
   }
 
   hashSignature(payload: string): string {

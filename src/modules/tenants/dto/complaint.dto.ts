@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ComplaintStatus } from '../../../generated/prisma/client';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 

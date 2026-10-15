@@ -18,7 +18,11 @@ describe('TaxWithholdingService', () => {
   };
   const audit = { log: jest.fn() };
   const billing = { emitSpecialDocument: jest.fn() };
-  const service = new TaxWithholdingService(prisma as never, audit as never, billing as never);
+  const service = new TaxWithholdingService(
+    prisma as never,
+    audit as never,
+    billing as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -37,7 +41,9 @@ describe('TaxWithholdingService', () => {
   });
 
   it('lista tasas por tipo', async () => {
-    prisma.sunatWithholdingRate.findMany.mockResolvedValue([{ codigo: 'RET-03' }]);
+    prisma.sunatWithholdingRate.findMany.mockResolvedValue([
+      { codigo: 'RET-03' },
+    ]);
     const rows = await service.listRates(TaxWithholdingKind.RETENCION);
     expect(rows).toHaveLength(1);
   });
@@ -49,7 +55,9 @@ describe('TaxWithholdingService', () => {
   });
 
   it('omite sync detracciones si no está habilitada', async () => {
-    prisma.establishmentBillingConfig.findUnique.mockResolvedValue({ applyDetraccion: false });
+    prisma.establishmentBillingConfig.findUnique.mockResolvedValue({
+      applyDetraccion: false,
+    });
     const result = await service.syncDetracciones('est-1');
     expect(result.synced).toBe(0);
     expect(result.message).toContain('no habilitada');
@@ -63,7 +71,12 @@ describe('TaxWithholdingService', () => {
     billing.emitSpecialDocument.mockResolvedValue({ id: 'doc-1' });
     prisma.taxWithholdingRecord.create.mockResolvedValue({
       id: 'rec-1',
-      electronicDocument: { id: 'doc-1', serie: 'R001', numero: '1', sunatStatus: 'PENDIENTE' },
+      electronicDocument: {
+        id: 'doc-1',
+        serie: 'R001',
+        numero: '1',
+        sunatStatus: 'PENDIENTE',
+      },
     });
     const record = await service.createRetention(
       'est-1',

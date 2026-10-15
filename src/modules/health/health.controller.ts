@@ -1,6 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { HealthCheck, HealthCheckService, PrismaHealthIndicator } from '@nestjs/terminus';
+import {
+  HealthCheck,
+  HealthCheckService,
+  PrismaHealthIndicator,
+} from '@nestjs/terminus';
 import { Public } from '../../common/decorators/public.decorator';
 import { OPENAPI_EXAMPLES } from '../../common/openapi/openapi-examples';
 import { PrismaService } from '../../prisma/prisma.service';

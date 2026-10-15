@@ -2,10 +2,11 @@ import { LegalService } from './legal.service';
 
 describe('LegalService', () => {
   const service = new LegalService({
-    get: async (key: string) => {
-      if (key === 'COMPANY_LEGAL_NAME') return 'Botica Demo SAC';
-      if (key === 'COMPANY_RUC') return '20123456789';
-      if (key === 'COMPANY_ADDRESS') return 'Lima';
+    get: (key: string) => {
+      if (key === 'COMPANY_LEGAL_NAME')
+        return Promise.resolve('Botica Demo SAC');
+      if (key === 'COMPANY_RUC') return Promise.resolve('20123456789');
+      if (key === 'COMPANY_ADDRESS') return Promise.resolve('Lima');
       return undefined;
     },
   } as never);

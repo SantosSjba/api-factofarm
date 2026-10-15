@@ -78,7 +78,10 @@ export class ProductPresentationInputDto {
   @Min(0)
   precio3?: number;
 
-  @ApiPropertyOptional({ enum: PresentationDefaultPrice, default: PresentationDefaultPrice.PRECIO_1 })
+  @ApiPropertyOptional({
+    enum: PresentationDefaultPrice,
+    default: PresentationDefaultPrice.PRECIO_1,
+  })
   @IsOptional()
   @IsEnum(PresentationDefaultPrice)
   precioDefecto?: PresentationDefaultPrice;
@@ -290,7 +293,9 @@ export class CreateProductDto {
   @MaxLength(60)
   codigoLote?: string;
 
-  @ApiPropertyOptional({ description: 'Fecha de vencimiento del lote en formato ISO' })
+  @ApiPropertyOptional({
+    description: 'Fecha de vencimiento del lote en formato ISO',
+  })
   @IsOptional()
   @IsString()
   fechaVencimientoLote?: string;

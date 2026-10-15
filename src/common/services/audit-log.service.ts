@@ -37,7 +37,7 @@ export class AuditLogService {
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? null,
-        diff: input.diff != null ? (input.diff as object) : undefined,
+        diff: input.diff != null ? input.diff : undefined,
         ipAddress: input.ipAddress ?? ctx.ipAddress ?? null,
         userAgent: input.userAgent ?? ctx.userAgent ?? null,
       },

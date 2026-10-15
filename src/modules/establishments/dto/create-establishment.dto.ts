@@ -25,7 +25,10 @@ export class CreateEstablishmentDto {
   @MaxLength(200)
   nombre!: string;
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Cliente SaaS (obligatorio para plataforma)' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Cliente SaaS (obligatorio para plataforma)',
+  })
   @IsOptional()
   @IsUUID()
   tenantId?: string;
@@ -47,19 +50,31 @@ export class CreateEstablishmentDto {
   @MaxLength(80)
   pais?: string;
 
-  @ApiPropertyOptional({ example: '15', description: 'Código ubigeo departamento', maxLength: 10 })
+  @ApiPropertyOptional({
+    example: '15',
+    description: 'Código ubigeo departamento',
+    maxLength: 10,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(10)
   departmentId?: string;
 
-  @ApiPropertyOptional({ example: '1501', description: 'Código ubigeo provincia', maxLength: 10 })
+  @ApiPropertyOptional({
+    example: '1501',
+    description: 'Código ubigeo provincia',
+    maxLength: 10,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(10)
   provinceId?: string;
 
-  @ApiPropertyOptional({ example: '150101', description: 'Código ubigeo distrito', maxLength: 10 })
+  @ApiPropertyOptional({
+    example: '150101',
+    description: 'Código ubigeo distrito',
+    maxLength: 10,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(10)
@@ -118,7 +133,9 @@ export class CreateEstablishmentDto {
   @MaxLength(200)
   clienteDefault?: string;
 
-  @ApiPropertyOptional({ description: 'Id del archivo/logo subido (módulo files)' })
+  @ApiPropertyOptional({
+    description: 'Id del archivo/logo subido (módulo files)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -129,35 +146,55 @@ export class CreateEstablishmentDto {
   @IsBoolean()
   sujetoIgv31556?: boolean;
 
-  @ApiPropertyOptional({ default: false, description: 'Modo hospital/microred' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Modo hospital/microred',
+  })
   @IsOptional()
   @IsBoolean()
   esHospital?: boolean;
 
-  @ApiPropertyOptional({ enum: InventoryValuationMethod, default: InventoryValuationMethod.PEPS })
+  @ApiPropertyOptional({
+    enum: InventoryValuationMethod,
+    default: InventoryValuationMethod.PEPS,
+  })
   @IsOptional()
   @IsEnum(InventoryValuationMethod)
   inventoryValuationMethod?: InventoryValuationMethod;
 
-  @ApiPropertyOptional({ enum: InventoryLotAllocationMethod, default: InventoryLotAllocationMethod.FEFO })
+  @ApiPropertyOptional({
+    enum: InventoryLotAllocationMethod,
+    default: InventoryLotAllocationMethod.FEFO,
+  })
   @IsOptional()
   @IsEnum(InventoryLotAllocationMethod)
   inventoryLotAllocationMethod?: InventoryLotAllocationMethod;
 
-  @ApiPropertyOptional({ default: true, description: 'Bloqueo obligatorio de venta de lotes vencidos' })
-  @Equals(true, { message: 'No se permite desactivar el bloqueo de venta de lotes vencidos' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Bloqueo obligatorio de venta de lotes vencidos',
+  })
+  @Equals(true, {
+    message: 'No se permite desactivar el bloqueo de venta de lotes vencidos',
+  })
   @IsOptional()
   @IsBoolean()
   blockExpiredProductSales?: boolean;
 
-  @ApiPropertyOptional({ default: 50, description: 'Umbral de ajuste que requiere segunda autorización' })
+  @ApiPropertyOptional({
+    default: 50,
+    description: 'Umbral de ajuste que requiere segunda autorización',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   adjustmentQtyThreshold?: number;
 
-  @ApiPropertyOptional({ maxLength: 40, description: 'Número registro DIGEMID del local' })
+  @ApiPropertyOptional({
+    maxLength: 40,
+    description: 'Número registro DIGEMID del local',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(40)
@@ -168,7 +205,10 @@ export class CreateEstablishmentDto {
   @IsUUID()
   titularPharmacistLicenseId?: string;
 
-  @ApiPropertyOptional({ default: false, description: 'Bloquear ventas sobre precio regulado DIGEMED' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Bloquear ventas sobre precio regulado DIGEMED',
+  })
   @IsOptional()
   @IsBoolean()
   blockSalesAboveRegulatedPrice?: boolean;
@@ -179,10 +219,14 @@ export class CreateEstablishmentDto {
     example: '987654321',
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && !value.trim() ? undefined : value,
+  )
   @IsString()
   @MaxLength(20)
-  @Matches(/^[0-9]{9,15}$/, { message: 'Número Yape inválido (use solo dígitos, 9 a 15)' })
+  @Matches(/^[0-9]{9,15}$/, {
+    message: 'Número Yape inválido (use solo dígitos, 9 a 15)',
+  })
   posYapeNumero?: string;
 
   @ApiPropertyOptional({
@@ -191,9 +235,13 @@ export class CreateEstablishmentDto {
     example: '912345678',
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && !value.trim() ? undefined : value,
+  )
   @IsString()
   @MaxLength(20)
-  @Matches(/^[0-9]{9,15}$/, { message: 'Número Plin inválido (use solo dígitos, 9 a 15)' })
+  @Matches(/^[0-9]{9,15}$/, {
+    message: 'Número Plin inválido (use solo dígitos, 9 a 15)',
+  })
   posPlinNumero?: string;
 }

@@ -1,5 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
@@ -12,7 +22,9 @@ import { ActivePrinciplesService } from './active-principles.service';
 @ApiBearerAuth()
 @Controller('active-principles')
 export class ActivePrinciplesController {
-  constructor(private readonly activePrinciplesService: ActivePrinciplesService) {}
+  constructor(
+    private readonly activePrinciplesService: ActivePrinciplesService,
+  ) {}
 
   @Get()
   @RequirePermissions('active-principles.read', 'nav.principios_activos')
@@ -23,7 +35,10 @@ export class ActivePrinciplesController {
   @Post()
   @RequirePermissions('active-principles.write')
   @ApiBody({ type: CreateActivePrincipleDto })
-  create(@Body() dto: CreateActivePrincipleDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateActivePrincipleDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.activePrinciplesService.create(dto, actor.sub);
   }
 
@@ -41,7 +56,10 @@ export class ActivePrinciplesController {
   @Delete(':id')
   @RequirePermissions('active-principles.write')
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.activePrinciplesService.remove(id, actor.sub);
   }
 }

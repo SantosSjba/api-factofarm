@@ -27,7 +27,10 @@ export class ColdChainController {
   @RequirePermissions('inventory.write')
   @ApiOperation({ summary: 'Registrar temperatura de cadena de frío' })
   @ApiBody({ type: CreateTemperatureLogDto })
-  create(@Body() dto: CreateTemperatureLogDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateTemperatureLogDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(dto, actor);
   }
 }

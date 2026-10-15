@@ -27,7 +27,9 @@ function buildService() {
       findMany: jest.fn(),
     },
     product: { findMany: jest.fn() },
-    establishment: { findFirst: jest.fn().mockResolvedValue({ tenantId: "tenant-1" }) },
+    establishment: {
+      findFirst: jest.fn().mockResolvedValue({ tenantId: 'tenant-1' }),
+    },
     compoundProduct: { findMany: jest.fn().mockResolvedValue([]) },
     warehouse: { findFirst: jest.fn() },
     drugInteraction: { findMany: jest.fn() },
@@ -42,12 +44,21 @@ function buildService() {
     saleReturn: { create: jest.fn() },
     cashMovement: { create: jest.fn() },
     cashSession: { findFirst: jest.fn() },
-    accountReceivable: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findFirst: jest.fn() },
-    $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+    accountReceivable: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findFirst: jest.fn(),
+    },
+    $transaction: jest.fn<
+      Promise<unknown>,
+      [(tx: unknown) => Promise<unknown>]
+    >(),
   };
+  prisma.$transaction.mockImplementation((fn) => fn(prisma));
   const audit = { log: jest.fn() };
   const inventory = { executeAdjustmentDelta: jest.fn() };
-  const lotAllocation = { batchSumEligibleStock: jest.fn().mockResolvedValue(new Map()) };
+  const lotAllocation = {
+    batchSumEligibleStock: jest.fn().mockResolvedValue(new Map()),
+  };
   const billing = {
     voidFromSale: jest.fn().mockResolvedValue(undefined),
     scheduleEmitFromReturn: jest.fn().mockResolvedValue('doc-nc'),
@@ -55,7 +66,10 @@ function buildService() {
     establishmentCanEmitCpe: jest.fn().mockResolvedValue(false),
     establishmentHasRealOse: jest.fn().mockResolvedValue(false),
   };
-  const realtime = { emitStockUpdated: jest.fn(), emitSaleCompleted: jest.fn() };
+  const realtime = {
+    emitStockUpdated: jest.fn(),
+    emitSaleCompleted: jest.fn(),
+  };
   const service = new SalesService(
     prisma as never,
     audit as never,
@@ -76,7 +90,15 @@ function buildService() {
       assertProductInTenant: jest.fn().mockResolvedValue(undefined),
     } as never,
   );
-  return { service, prisma, audit, inventory, billing, lotAllocation, realtime };
+  return {
+    service,
+    prisma,
+    audit,
+    inventory,
+    billing,
+    lotAllocation,
+    realtime,
+  };
 }
 
 describe('SalesService', () => {
@@ -98,7 +120,9 @@ describe('SalesService', () => {
         createdAt: new Date('2026-07-09'),
         customer: { nombre: 'Cliente' },
         seller: { nombre: 'Cajero' },
-        payments: [{ metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) }],
+        payments: [
+          { metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) },
+        ],
         electronicDocument: null,
         _count: { returns: 0 },
       },
@@ -138,7 +162,13 @@ describe('SalesService', () => {
           lotLines: [],
         },
       ],
-      payments: [{ metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10), referencia: null }],
+      payments: [
+        {
+          metodo: PaymentMethod.EFECTIVO,
+          monto: new Prisma.Decimal(10),
+          referencia: null,
+        },
+      ],
     });
     const detail = await service.findOne('s1', 'est-1');
     expect(detail.id).toBe('s1');
@@ -150,7 +180,9 @@ describe('SalesService', () => {
   it('lanza not found si venta no existe', async () => {
     const { service, prisma } = buildService();
     prisma.sale.findFirst.mockResolvedValue(null);
-    await expect(service.findOne('missing', 'est-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.findOne('missing', 'est-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('detecta interacciones medicamentosas en carrito', async () => {
@@ -270,7 +302,9 @@ describe('SalesService', () => {
           lotLines: [{ codigoLote: 'L1', cantidad: new Prisma.Decimal(2) }],
         },
       ],
-      payments: [{ metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) }],
+      payments: [
+        { metodo: PaymentMethod.EFECTIVO, monto: new Prisma.Decimal(10) },
+      ],
       serie: 'B001',
       numero: '1',
       warehouseId: 'w1',
@@ -300,7 +334,10 @@ describe('SalesService', () => {
     const result = await service.syncOfflineBatch(
       {
         sales: [
-          { offlineLocalId: 'off-1', sale: { warehouseId: 'w1', items: [], payments: [] } as never },
+          {
+            offlineLocalId: 'off-1',
+            sale: { warehouseId: 'w1', items: [], payments: [] } as never,
+          },
         ],
       },
       { sub: 'u1', establecimientoId: 'est-1' },
@@ -311,7 +348,10 @@ describe('SalesService', () => {
 
   it('crea solicitud de anulación para cajero', async () => {
     const { service, prisma } = buildService();
-    prisma.sale.findFirst.mockResolvedValue({ id: 's1', estado: SaleStatus.COMPLETADA });
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 's1',
+      estado: SaleStatus.COMPLETADA,
+    });
     prisma.saleVoidRequest.findUnique.mockResolvedValue(null);
     prisma.saleVoidRequest.upsert.mockResolvedValue({
       id: 'req-1',
@@ -329,8 +369,13 @@ describe('SalesService', () => {
 
   it('rechaza solicitud de anulación duplicada', async () => {
     const { service, prisma } = buildService();
-    prisma.sale.findFirst.mockResolvedValue({ id: 's1', estado: SaleStatus.COMPLETADA });
-    prisma.saleVoidRequest.findUnique.mockResolvedValue({ status: SaleVoidRequestStatus.PENDIENTE });
+    prisma.sale.findFirst.mockResolvedValue({
+      id: 's1',
+      estado: SaleStatus.COMPLETADA,
+    });
+    prisma.saleVoidRequest.findUnique.mockResolvedValue({
+      status: SaleVoidRequestStatus.PENDIENTE,
+    });
     await expect(
       service.requestVoidSale(
         's1',
@@ -347,11 +392,11 @@ describe('SalesService', () => {
       status: SaleVoidRequestStatus.PENDIENTE,
     });
     prisma.saleVoidRequest.update.mockResolvedValue({});
-    const result = await service.rejectVoidRequest(
-      'req-1',
-      'Sin sustento',
-      { sub: 'admin', establecimientoId: 'est-1', role: UserRole.ADMINISTRADOR },
-    );
+    const result = await service.rejectVoidRequest('req-1', 'Sin sustento', {
+      sub: 'admin',
+      establecimientoId: 'est-1',
+      role: UserRole.ADMINISTRADOR,
+    });
     expect(result.ok).toBe(true);
   });
 
@@ -382,7 +427,10 @@ describe('SalesService', () => {
     prisma.sale.update.mockResolvedValue({});
     const result = await service.createReturn(
       's1',
-      { motivo: 'Cliente devolvió 1 unidad', items: [{ saleItemId: 'si1', quantity: 1 }] },
+      {
+        motivo: 'Cliente devolvió 1 unidad',
+        items: [{ saleItemId: 'si1', quantity: 1 }],
+      },
       { sub: 'u1', establecimientoId: 'est-1' },
     );
     expect(result.saleReturnId).toBe('ret-1');
@@ -391,7 +439,7 @@ describe('SalesService', () => {
   });
 
   it('expone catálogo POS con stock vendible', async () => {
-    const { service, prisma, lotAllocation } = buildService();
+    const { service, prisma } = buildService();
     prisma.product.findMany.mockResolvedValue([
       {
         id: 'p1',

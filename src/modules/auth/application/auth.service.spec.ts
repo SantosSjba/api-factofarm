@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
@@ -7,7 +8,10 @@ describe('AuthService (integration-ish)', () => {
     refreshToken: { findUnique: jest.fn() },
   };
   const jwtService = { sign: jest.fn().mockReturnValue('token') };
-  const config = { get: jest.fn(), getOrThrow: jest.fn().mockReturnValue('secret') };
+  const config = {
+    get: jest.fn(),
+    getOrThrow: jest.fn().mockReturnValue('secret'),
+  };
   const loginAttempts = {
     assertNotLocked: jest.fn(),
     recordAttempt: jest.fn(),
@@ -32,12 +36,15 @@ describe('AuthService (integration-ish)', () => {
   it('login rechaza credenciales inválidas y audita LOGIN_FAILED', async () => {
     prisma.user.findFirst.mockResolvedValue(null);
 
-    await expect(service.login('admin@test.com', 'wrong')).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      service.login('admin@test.com', 'wrong'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     expect(audit.log).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'LOGIN_FAILED', entity: 'Auth' }),
+      expect.objectContaining({
+        action: 'LOGIN_FAILED',
+        entity: 'Auth',
+      }) as unknown,
     );
   });
 
@@ -52,17 +59,32 @@ describe('AuthService (integration-ish)', () => {
       permissions: [{ permission: { code: 'users.read' } }],
     });
 
-    jest.spyOn(require('bcrypt'), 'compare').mockResolvedValue(true);
-    jest.spyOn(service as unknown as { issueTokens: (...args: unknown[]) => Promise<unknown> }, 'issueTokens').mockResolvedValue({
-      accessToken: 'a',
-      refreshToken: 'r',
-      user: {} as never,
-    });
+    jest
+      .spyOn(
+        bcrypt as { compare: (data: string, hash: string) => Promise<boolean> },
+        'compare',
+      )
+      .mockResolvedValue(true);
+    jest
+      .spyOn(
+        service as unknown as {
+          issueTokens: (...args: unknown[]) => Promise<unknown>;
+        },
+        'issueTokens',
+      )
+      .mockResolvedValue({
+        accessToken: 'a',
+        refreshToken: 'r',
+        user: {} as never,
+      });
 
     await service.login('admin@test.com', 'Admin123!');
 
     expect(audit.log).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'LOGIN_SUCCESS', userId: 'u1' }),
+      expect.objectContaining({
+        action: 'LOGIN_SUCCESS',
+        userId: 'u1',
+      }) as unknown,
     );
   });
 });

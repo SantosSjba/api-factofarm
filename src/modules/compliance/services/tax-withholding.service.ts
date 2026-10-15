@@ -21,13 +21,48 @@ const DEFAULT_RATES: Array<{
   kind: TaxWithholdingKind;
   tasa: number;
 }> = [
-  { codigo: 'RET-03', nombre: 'Retención 3% — servicios', kind: TaxWithholdingKind.RETENCION, tasa: 3 },
-  { codigo: 'RET-065', nombre: 'Retención 6.5% — servicios', kind: TaxWithholdingKind.RETENCION, tasa: 6.5 },
-  { codigo: 'RET-10', nombre: 'Retención 10% — dividendos', kind: TaxWithholdingKind.RETENCION, tasa: 10 },
-  { codigo: 'PER-02', nombre: 'Percepción 2% — venta interna', kind: TaxWithholdingKind.PERCEPCION, tasa: 2 },
-  { codigo: 'PER-05', nombre: 'Percepción 0.5% — venta interna', kind: TaxWithholdingKind.PERCEPCION, tasa: 0.5 },
-  { codigo: 'DET-037', nombre: 'Detracción 12% — código bien 037', kind: TaxWithholdingKind.DETRACCION, tasa: 12 },
-  { codigo: 'DET-004', nombre: 'Detracción 4% — código bien 004', kind: TaxWithholdingKind.DETRACCION, tasa: 4 },
+  {
+    codigo: 'RET-03',
+    nombre: 'Retención 3% — servicios',
+    kind: TaxWithholdingKind.RETENCION,
+    tasa: 3,
+  },
+  {
+    codigo: 'RET-065',
+    nombre: 'Retención 6.5% — servicios',
+    kind: TaxWithholdingKind.RETENCION,
+    tasa: 6.5,
+  },
+  {
+    codigo: 'RET-10',
+    nombre: 'Retención 10% — dividendos',
+    kind: TaxWithholdingKind.RETENCION,
+    tasa: 10,
+  },
+  {
+    codigo: 'PER-02',
+    nombre: 'Percepción 2% — venta interna',
+    kind: TaxWithholdingKind.PERCEPCION,
+    tasa: 2,
+  },
+  {
+    codigo: 'PER-05',
+    nombre: 'Percepción 0.5% — venta interna',
+    kind: TaxWithholdingKind.PERCEPCION,
+    tasa: 0.5,
+  },
+  {
+    codigo: 'DET-037',
+    nombre: 'Detracción 12% — código bien 037',
+    kind: TaxWithholdingKind.DETRACCION,
+    tasa: 12,
+  },
+  {
+    codigo: 'DET-004',
+    nombre: 'Detracción 4% — código bien 004',
+    kind: TaxWithholdingKind.DETRACCION,
+    tasa: 4,
+  },
 ];
 
 const DETRACCION_MIN_TOTAL = 700;
@@ -49,7 +84,12 @@ export class TaxWithholdingService implements OnModuleInit {
     for (const row of DEFAULT_RATES) {
       await this.prisma.sunatWithholdingRate.upsert({
         where: { codigo: row.codigo },
-        update: { nombre: row.nombre, kind: row.kind, tasa: new Prisma.Decimal(row.tasa), activo: true },
+        update: {
+          nombre: row.nombre,
+          kind: row.kind,
+          tasa: new Prisma.Decimal(row.tasa),
+          activo: true,
+        },
         create: {
           codigo: row.codigo,
           nombre: row.nombre,
@@ -126,13 +166,20 @@ export class TaxWithholdingService implements OnModuleInit {
     );
   }
 
-  async syncDetracciones(establishmentId: string, period?: string, actorId?: string) {
+  async syncDetracciones(
+    establishmentId: string,
+    period?: string,
+    actorId?: string,
+  ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
       select: { applyDetraccion: true },
     });
     if (!config?.applyDetraccion) {
-      return { synced: 0, message: 'Detracción no habilitada en configuración de facturación' };
+      return {
+        synced: 0,
+        message: 'Detracción no habilitada en configuración de facturación',
+      };
     }
 
     const dateFilter = await this.periodFilter(establishmentId, period);
@@ -216,10 +263,12 @@ export class TaxWithholdingService implements OnModuleInit {
     defaultPartyType: TaxPartyType,
     dto: CreateTaxWithholdingDto,
     label: string,
-    actorId?: string | undefined,
+    actorId?: string,
   ) {
     const rate = dto.regimenCodigo
-      ? await this.prisma.sunatWithholdingRate.findUnique({ where: { codigo: dto.regimenCodigo } })
+      ? await this.prisma.sunatWithholdingRate.findUnique({
+          where: { codigo: dto.regimenCodigo },
+        })
       : null;
     const tasa = rate
       ? new Prisma.Decimal(rate.tasa.toString())
@@ -235,7 +284,9 @@ export class TaxWithholdingService implements OnModuleInit {
     }
 
     const partyType = dto.partyType ?? defaultPartyType;
-    const fecha = dto.fechaOperacion ? new Date(dto.fechaOperacion) : new Date();
+    const fecha = dto.fechaOperacion
+      ? new Date(dto.fechaOperacion)
+      : new Date();
     const ref =
       dto.comprobanteModificadoSerie && dto.comprobanteModificadoNumero
         ? `${dto.comprobanteModificadoSerie}-${dto.comprobanteModificadoNumero}`
@@ -244,7 +295,8 @@ export class TaxWithholdingService implements OnModuleInit {
     const electronicDoc = await this.billing.emitSpecialDocument(
       establishmentId,
       {
-        documentType: kind === TaxWithholdingKind.RETENCION ? 'RETENCION' : 'PERCEPCION',
+        documentType:
+          kind === TaxWithholdingKind.RETENCION ? 'RETENCION' : 'PERCEPCION',
         customerNombre: dto.partyNombre.trim(),
         customerDocType: dto.partyDocType.trim(),
         customerDocNumber: dto.partyDocNumber.trim(),
@@ -297,7 +349,10 @@ export class TaxWithholdingService implements OnModuleInit {
 
     await this.audit.log({
       userId: actorId,
-      action: kind === TaxWithholdingKind.RETENCION ? 'CREATE_RETENCION' : 'CREATE_PERCEPCION',
+      action:
+        kind === TaxWithholdingKind.RETENCION
+          ? 'CREATE_RETENCION'
+          : 'CREATE_PERCEPCION',
       entity: 'TaxWithholdingRecord',
       entityId: record.id,
     });

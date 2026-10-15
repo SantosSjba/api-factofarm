@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -32,33 +40,58 @@ export class CashRegistersController {
   @Post()
   @RequirePermissions('cash.open')
   @ApiOperation({ summary: 'Crear caja POS' })
-  async create(@Body() dto: CreateCashRegisterDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.createRegister(await this.scope.resolve(actor), dto, actor.sub);
+  async create(
+    @Body() dto: CreateCashRegisterDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createRegister(
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Patch(':id/hardware')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
-  @ApiOperation({ summary: 'Configurar hardware POS de la caja (impresora, escáner, pantalla)' })
+  @ApiOperation({
+    summary:
+      'Configurar hardware POS de la caja (impresora, escáner, pantalla)',
+  })
   async updateHardware(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCashRegisterHardwareDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.updateHardware(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.updateHardware(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Get('sessions/active')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos', 'nav.punto_venta')
   @ApiOperation({ summary: 'Sesión de caja activa del usuario' })
   async activeSession(@CurrentUser() actor: JwtRequestUser) {
-    return this.service.getActiveSession(await this.scope.resolve(actor), actor.sub);
+    return this.service.getActiveSession(
+      await this.scope.resolve(actor),
+      actor.sub,
+    );
   }
 
   @Post('sessions/open')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Apertura de caja' })
-  async open(@Body() dto: OpenCashSessionDto, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.openSession(await this.scope.resolve(actor), actor.sub, dto);
+  async open(
+    @Body() dto: OpenCashSessionDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.openSession(
+      await this.scope.resolve(actor),
+      actor.sub,
+      dto,
+    );
   }
 
   @Post('sessions/:id/close')
@@ -69,14 +102,26 @@ export class CashRegistersController {
     @Body() dto: CloseCashSessionDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.closeSession(id, await this.scope.resolve(actor), actor.sub, dto);
+    return this.service.closeSession(
+      id,
+      await this.scope.resolve(actor),
+      actor.sub,
+      dto,
+    );
   }
 
   @Get('sessions/:id/summary')
   @RequirePermissions('cash.open', 'nav.caja_chica_pos')
   @ApiOperation({ summary: 'Resumen de sesión (movimientos y ventas)' })
-  async summary(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
-    return this.service.sessionSummary(id, await this.scope.resolve(actor), actor.sub);
+  async summary(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.sessionSummary(
+      id,
+      await this.scope.resolve(actor),
+      actor.sub,
+    );
   }
 
   @Post('sessions/:id/movements')
@@ -87,6 +132,11 @@ export class CashRegistersController {
     @Body() dto: CreateCashMovementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.addMovement(id, await this.scope.resolve(actor), actor.sub, dto);
+    return this.service.addMovement(
+      id,
+      await this.scope.resolve(actor),
+      actor.sub,
+      dto,
+    );
   }
 }

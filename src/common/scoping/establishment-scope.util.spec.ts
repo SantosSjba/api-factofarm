@@ -17,12 +17,17 @@ describe('establishment-scope', () => {
   });
 
   it('bloquea acceso cross-sucursal para no admin', () => {
-    expect(() => resolveEstablishmentScope(actor, 'est-2')).toThrow(ForbiddenException);
+    expect(() => resolveEstablishmentScope(actor, 'est-2')).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('permite admin consultar otra sucursal', () => {
     expect(
-      resolveEstablishmentScope({ ...actor, role: UserRole.ADMINISTRADOR }, 'est-2'),
+      resolveEstablishmentScope(
+        { ...actor, role: UserRole.ADMINISTRADOR },
+        'est-2',
+      ),
     ).toBe('est-2');
   });
 
@@ -31,12 +36,17 @@ describe('establishment-scope', () => {
   });
 
   it('assertEstablishmentAccess bloquea recurso de otra sucursal', () => {
-    expect(() => assertEstablishmentAccess(actor, 'est-2')).toThrow(ForbiddenException);
+    expect(() => assertEstablishmentAccess(actor, 'est-2')).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('assertEstablishmentAccess permite admin en cualquier sucursal', () => {
     expect(() =>
-      assertEstablishmentAccess({ ...actor, role: UserRole.ADMINISTRADOR }, 'est-2'),
+      assertEstablishmentAccess(
+        { ...actor, role: UserRole.ADMINISTRADOR },
+        'est-2',
+      ),
     ).not.toThrow();
   });
 });

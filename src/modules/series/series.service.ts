@@ -1,6 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ProductSerialStatus } from '../../generated/prisma/client';
-import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import {
   DEFAULT_TIME_ZONE,
   formatDateYmdInTimeZone,
@@ -47,7 +55,9 @@ export class SeriesService {
         or.push({ serie: { contains: search, mode: 'insensitive' } });
       }
       if (field === 'all' || field === 'producto') {
-        or.push({ product: { nombre: { contains: search, mode: 'insensitive' } } });
+        or.push({
+          product: { nombre: { contains: search, mode: 'insensitive' } },
+        });
       }
       if (field === 'all' || field === 'estado') {
         const status = this.toStatus(search);
@@ -83,7 +93,11 @@ export class SeriesService {
     };
   }
 
-  async updateStatus(id: string, dto: UpdateSeriesStatusDto, actor: JwtRequestUser) {
+  async updateStatus(
+    id: string,
+    dto: UpdateSeriesStatusDto,
+    actor: JwtRequestUser,
+  ) {
     const row = await this.prisma.productSerial.findFirst({
       where: { id, deletedAt: null, product: tenantWhere(actorFromJwt(actor)) },
       select: { id: true, estado: true, vendido: true },
@@ -117,7 +131,10 @@ export class SeriesService {
   }
 
   async buildExportBuffer(query: SeriesListQueryDto, actor: JwtRequestUser) {
-    const data = await this.list({ ...query, page: 1, pageSize: 100000 }, actor);
+    const data = await this.list(
+      { ...query, page: 1, pageSize: 100000 },
+      actor,
+    );
     const tz = actor.establecimientoId
       ? await this.resolveTimeZone(actor.establecimientoId)
       : DEFAULT_TIME_ZONE;
@@ -131,7 +148,7 @@ export class SeriesService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, 'Series');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return writeWorkbookBuffer(workbook);
   }
 
   private toStatus(search: string): ProductSerialStatus | null {

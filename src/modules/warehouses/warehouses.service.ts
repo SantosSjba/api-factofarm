@@ -1,6 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
@@ -29,7 +36,10 @@ export class WarehousesService {
   ) {}
 
   async findAll(query: WarehouseListQueryDto, actor: JwtRequestUser) {
-    const scopedEstablishmentId = await this.scope.resolve(actor, query.establishmentId);
+    const scopedEstablishmentId = await this.scope.resolve(
+      actor,
+      query.establishmentId,
+    );
     const { page, pageSize, skip, take } = paginationArgs({
       page: query.page,
       pageSize: query.pageSize,
@@ -42,7 +52,11 @@ export class WarehousesService {
         ? {
             OR: [
               { nombre: { contains: search, mode: 'insensitive' } },
-              { establishment: { nombre: { contains: search, mode: 'insensitive' } } },
+              {
+                establishment: {
+                  nombre: { contains: search, mode: 'insensitive' },
+                },
+              },
             ],
           }
         : {}),
@@ -69,7 +83,8 @@ export class WarehousesService {
       where: { id: dto.establishmentId, deletedAt: null },
       select: { id: true },
     });
-    if (!establishment) throw new NotFoundException('Establecimiento no encontrado');
+    if (!establishment)
+      throw new NotFoundException('Establecimiento no encontrado');
 
     const nombre = dto.nombre.trim();
     try {
@@ -125,7 +140,10 @@ export class WarehousesService {
     await this.scope.assertAccess(actor, current.establishmentId);
     await this.integrity.assertCanDeleteWarehouse(id);
 
-    await this.prisma.warehouse.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.warehouse.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     await this.audit.log({
       userId: actor.sub,
       action: 'DELETE',
@@ -136,8 +154,13 @@ export class WarehousesService {
   }
 
   private handleKnownError(err: unknown): void {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new ConflictException('Ya existe un almacén con ese nombre en el establecimiento');
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'Ya existe un almacén con ese nombre en el establecimiento',
+      );
     }
     throw err;
   }

@@ -13,7 +13,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -42,7 +48,9 @@ export class CompoundProductsController {
   }
 
   @Get('catalogs/tax-affectation-types')
-  @ApiOperation({ summary: 'Listar tipos de afectación para productos compuestos' })
+  @ApiOperation({
+    summary: 'Listar tipos de afectación para productos compuestos',
+  })
   listTaxAffectationTypes() {
     return this.service.listTaxAffectationTypes();
   }
@@ -55,7 +63,10 @@ export class CompoundProductsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar productos compuestos con paginación' })
-  list(@Query() query: CompoundProductListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: CompoundProductListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.list(query, actor);
   }
 
@@ -67,13 +78,20 @@ export class CompoundProductsController {
 
   @Post()
   @ApiOperation({ summary: 'Crear producto compuesto' })
-  create(@Body() dto: CreateCompoundProductDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateCompoundProductDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(dto, actor);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Editar producto compuesto' })
-  update(@Param('id') id: string, @Body() dto: CreateCompoundProductDto, @CurrentUser() actor: JwtRequestUser) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: CreateCompoundProductDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.update(id, dto, actor);
   }
 
@@ -84,13 +102,18 @@ export class CompoundProductsController {
   }
 
   @Post('import')
-  @ApiOperation({ summary: 'Importar productos compuestos y detalle de productos compuestos' })
+  @ApiOperation({
+    summary: 'Importar productos compuestos y detalle de productos compuestos',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        mode: { type: 'string', enum: ['PRODUCTOS_COMPUESTOS', 'DETALLE_PRODUCTOS_COMPUESTOS'] },
+        mode: {
+          type: 'string',
+          enum: ['PRODUCTOS_COMPUESTOS', 'DETALLE_PRODUCTOS_COMPUESTOS'],
+        },
         file: { type: 'string', format: 'binary' },
       },
       required: ['mode', 'file'],
@@ -112,16 +135,24 @@ export class CompoundProductsController {
 
   @Get('import/template')
   @ApiOperation({ summary: 'Descargar plantilla de importación de conjuntos' })
-  async downloadImportTemplate(
+  downloadImportTemplate(
     @Query('mode') mode: ImportCompoundProductsDto['mode'],
     @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
+  ): StreamableFile {
     const selectedMode = mode ?? 'PRODUCTOS_COMPUESTOS';
     const buffer = this.service.buildImportTemplateBuffer(selectedMode);
     const filename =
-      selectedMode === 'DETALLE_PRODUCTOS_COMPUESTOS' ? 'item_sets_individual.xlsx' : 'item_sets.xlsx';
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      selectedMode === 'DETALLE_PRODUCTOS_COMPUESTOS'
+        ? 'item_sets_individual.xlsx'
+        : 'item_sets.xlsx';
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 }

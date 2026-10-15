@@ -1,3 +1,7 @@
+type LoginBody = {
+  accessToken: string;
+  user: { id: string; establecimientoId: string };
+};
 import { randomUUID } from 'crypto';
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
@@ -46,22 +50,28 @@ export async function loginAs(
     .expect(200);
 
   return {
-    token: res.body.accessToken,
-    userId: res.body.user.id,
-    establishmentId: res.body.user.establecimientoId,
+    token: (res.body as LoginBody).accessToken,
+    userId: (res.body as LoginBody).user.id,
+    establishmentId: (res.body as LoginBody).user.establecimientoId,
   };
 }
 
-export async function loginAsAdmin(app: INestApplication<App>): Promise<AuthContext> {
+export async function loginAsAdmin(
+  app: INestApplication<App>,
+): Promise<AuthContext> {
   return loginAs(app, DEMO_ADMIN.email, DEMO_ADMIN.password);
 }
 
 /** Mismo establecimiento 0000 que admin — sirve para vender y que admin anule. */
-export async function loginAsAdminCadena(app: INestApplication<App>): Promise<AuthContext> {
+export async function loginAsAdminCadena(
+  app: INestApplication<App>,
+): Promise<AuthContext> {
   return loginAs(app, 'admin.cadena@factosysperu.com', 'Cadena123!');
 }
 
-export async function loginAsCajero(app: INestApplication<App>): Promise<AuthContext> {
+export async function loginAsCajero(
+  app: INestApplication<App>,
+): Promise<AuthContext> {
   return loginAs(app, 'cajero@factosysperu.com', 'Cajero123!');
 }
 
@@ -70,7 +80,11 @@ async function findWarehouseWithStock(
   bearer: Record<string, string>,
   warehouses: WarehouseRow[],
   search: string,
-): Promise<{ warehouse: WarehouseRow; catalogItem: PosCatalogItem | null; productRow: ProductRow | null }> {
+): Promise<{
+  warehouse: WarehouseRow;
+  catalogItem: PosCatalogItem | null;
+  productRow: ProductRow | null;
+}> {
   const productsRes = await request(app.getHttpServer())
     .get('/api/v1/products')
     .query({ search, field: 'codigoInterno', pageSize: 5 })
@@ -78,8 +92,10 @@ async function findWarehouseWithStock(
     .expect(200);
 
   const productRow =
-    productsRes.body.items?.find((p: ProductRow) => p.codigoInterno === search) ??
-    productsRes.body.items?.[0] ??
+    (productsRes.body as { items: ProductRow[] }).items?.find(
+      (p: ProductRow) => p.codigoInterno === search,
+    ) ??
+    (productsRes.body as { items: ProductRow[] }).items?.[0] ??
     null;
 
   for (const warehouse of warehouses) {
@@ -89,10 +105,11 @@ async function findWarehouseWithStock(
       .set(bearer)
       .expect(200);
 
-    if (Array.isArray(catalogRes.body) && catalogRes.body.length > 0) {
+    if ((catalogRes.body as PosCatalogItem[]).length > 0) {
       const catalogItem =
-        catalogRes.body.find((p: PosCatalogItem) => p.codigoInterno === search) ??
-        catalogRes.body[0];
+        (catalogRes.body as PosCatalogItem[]).find(
+          (p: PosCatalogItem) => p.codigoInterno === search,
+        ) ?? (catalogRes.body as PosCatalogItem[])[0];
       return { warehouse, catalogItem, productRow };
     }
   }
@@ -101,7 +118,9 @@ async function findWarehouseWithStock(
     return { warehouse: warehouses[0], catalogItem: null, productRow };
   }
 
-  throw new Error(`Seed incompleto para E2E POS (producto ${search} o almacén con stock)`);
+  throw new Error(
+    `Seed incompleto para E2E POS (producto ${search} o almacén con stock)`,
+  );
 }
 
 export async function resolvePosContext(
@@ -111,14 +130,23 @@ export async function resolvePosContext(
   const bearer = { Authorization: `Bearer ${auth.token}` };
 
   const [warehousesRes, registersRes] = await Promise.all([
-    request(app.getHttpServer()).get('/api/v1/products/catalogs/warehouses').set(bearer).expect(200),
-    request(app.getHttpServer()).get('/api/v1/cash-registers').set(bearer).expect(200),
+    request(app.getHttpServer())
+      .get('/api/v1/products/catalogs/warehouses')
+      .set(bearer)
+      .expect(200),
+    request(app.getHttpServer())
+      .get('/api/v1/cash-registers')
+      .set(bearer)
+      .expect(200),
   ]);
 
-  const scopedWarehouses = warehousesRes.body.filter(
+  const scopedWarehouses = (warehousesRes.body as WarehouseRow[]).filter(
     (w: WarehouseRow) => w.establishment?.id === auth.establishmentId,
   );
-  const warehouses = scopedWarehouses.length > 0 ? scopedWarehouses : warehousesRes.body;
+  const warehouses =
+    scopedWarehouses.length > 0
+      ? scopedWarehouses
+      : (warehousesRes.body as WarehouseRow[]);
 
   const { warehouse, catalogItem, productRow } = await findWarehouseWithStock(
     app,
@@ -127,13 +155,18 @@ export async function resolvePosContext(
     '0001',
   );
 
-  const register = registersRes.body[0];
+  const register = (registersRes.body as { id: string }[])[0];
   if (!warehouse?.id || !productRow?.id || !register?.id) {
-    throw new Error('Seed incompleto para E2E POS (almacén, producto 0001 o caja)');
+    throw new Error(
+      'Seed incompleto para E2E POS (almacén, producto 0001 o caja)',
+    );
   }
 
   const productPrice = Number(
-    catalogItem?.precio ?? productRow.precioUnitarioVenta ?? productRow.precio ?? 3,
+    catalogItem?.precio ??
+      productRow.precioUnitarioVenta ??
+      productRow.precio ??
+      3,
   );
 
   return {
@@ -156,17 +189,21 @@ export async function ensureOpenCashSession(
     .set(bearer)
     .expect(200);
 
-  if (activeRes.body?.id) {
+  const activeSession = activeRes.body as { id: string } | null;
+  if (activeSession?.id) {
     const summaryRes = await request(app.getHttpServer())
-      .get(`/api/v1/cash-registers/sessions/${activeRes.body.id}/summary`)
+      .get(`/api/v1/cash-registers/sessions/${activeSession.id}/summary`)
       .set(bearer)
       .expect(200);
 
     await request(app.getHttpServer())
-      .post(`/api/v1/cash-registers/sessions/${activeRes.body.id}/close`)
+      .post(`/api/v1/cash-registers/sessions/${activeSession.id}/close`)
       .set(bearer)
       .send({
-        montoCierreFisico: Number(summaryRes.body.saldoActual ?? 0),
+        montoCierreFisico: Number(
+          (summaryRes.body as { saldoActual: string | number }).saldoActual ??
+            0,
+        ),
         notasCierre: 'E2E cleanup',
       })
       .expect(201);
@@ -178,7 +215,7 @@ export async function ensureOpenCashSession(
     .send({ cashRegisterId: ctx.cashRegisterId, montoApertura: 0 })
     .expect(201);
 
-  return session.body;
+  return session.body as { id: string };
 }
 
 export async function waitForSaleBillingAccepted(
@@ -196,18 +233,24 @@ export async function waitForSaleBillingAccepted(
       .set(bearer)
       .expect(200);
 
-    if (res.body?.sunatStatus === 'ACEPTADO') return res.body;
+    if ((res.body as { sunatStatus: string })?.sunatStatus === 'ACEPTADO')
+      return res.body as { sunatStatus: string };
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
-  throw new Error(`Timeout esperando sunatStatus ACEPTADO para venta ${saleId}`);
+  throw new Error(
+    `Timeout esperando sunatStatus ACEPTADO para venta ${saleId}`,
+  );
 }
 
 /**
  * Flujo POS con nota de venta (válido sin OSE real).
  * Para boleta/CPE se requiere proveedor OSE distinto de MOCK.
  */
-export async function runPosSaleFlow(app: INestApplication<App>, ctx: PosContext) {
+export async function runPosSaleFlow(
+  app: INestApplication<App>,
+  ctx: PosContext,
+) {
   const bearer = { Authorization: `Bearer ${ctx.token}` };
 
   const session = await ensureOpenCashSession(app, ctx);

@@ -29,7 +29,10 @@ describe('Security smoke (e2e)', () => {
   });
 
   it('rechaza payload inválido en login', () => {
-    return request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: 'bad' }).expect(400);
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: 'bad' })
+      .expect(400);
   });
 
   it('no expone stack trace en error controlado', async () => {
@@ -38,7 +41,9 @@ describe('Security smoke (e2e)', () => {
       .send({ email: 'x@y.com', password: 'short' });
 
     expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(res.body)).not.toMatch(/node_modules/);
+    expect(JSON.stringify(res.body as { status: string })).not.toMatch(
+      /node_modules/,
+    );
   });
 
   it('usuario autenticado accede a dashboard stats', async () => {
@@ -50,8 +55,10 @@ describe('Security smoke (e2e)', () => {
   });
 
   it('health ready responde 200 con BD conectada', async () => {
-    const res = await request(app.getHttpServer()).get('/api/v1/health/ready').expect(200);
-    expect(res.body.status).toBe('ok');
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/health/ready')
+      .expect(200);
+    expect((res.body as { status: string }).status).toBe('ok');
   });
 
   it('rechaza establishmentId de otra sucursal para rol no admin', async () => {
@@ -61,9 +68,12 @@ describe('Security smoke (e2e)', () => {
       .set('Authorization', `Bearer ${admin.token}`)
       .expect(200);
 
-    const establishments = Array.isArray(establishmentsRes.body)
-      ? establishmentsRes.body
-      : establishmentsRes.body.items ?? [];
+    const establishmentBody = establishmentsRes.body as
+      | { id: string }[]
+      | { items: { id: string }[] };
+    const establishments = Array.isArray(establishmentBody)
+      ? establishmentBody
+      : (establishmentBody.items ?? []);
     const other = establishments.find(
       (e: { id: string }) => e.id !== admin.establishmentId,
     );
@@ -81,7 +91,10 @@ describe('Security smoke (e2e)', () => {
     await request(app.getHttpServer())
       .get('/api/v1/warehouses')
       .query({ establishmentId: other.id })
-      .set('Authorization', `Bearer ${cajeroLogin.body.accessToken}`)
+      .set(
+        'Authorization',
+        `Bearer ${(cajeroLogin.body as { accessToken: string }).accessToken}`,
+      )
       .expect(403);
   });
 });

@@ -43,7 +43,10 @@ export class DispatchSaleStockDto {
   @Min(0.0001)
   quantity!: number;
 
-  @ApiProperty({ enum: SaleLotAllocationMode, default: SaleLotAllocationMode.AUTO })
+  @ApiProperty({
+    enum: SaleLotAllocationMode,
+    default: SaleLotAllocationMode.AUTO,
+  })
   @IsEnum(SaleLotAllocationMode)
   mode: SaleLotAllocationMode = SaleLotAllocationMode.AUTO;
 
@@ -57,13 +60,16 @@ export class DispatchSaleStockDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Venta del establecimiento (obligatorio en POST /sales/dispatch)',
+    description:
+      'Venta del establecimiento (obligatorio en POST /sales/dispatch)',
   })
   @IsOptional()
   @IsUUID()
   saleId?: string;
 
-  @ApiPropertyOptional({ description: 'Referencia de venta (ej. número de comprobante)' })
+  @ApiPropertyOptional({
+    description: 'Referencia de venta (ej. número de comprobante)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)

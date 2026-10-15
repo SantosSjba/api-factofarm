@@ -78,11 +78,15 @@ export class TenantsService {
     const statusRaw = filters?.status?.trim().toUpperCase();
     const planRaw = filters?.plan?.trim().toUpperCase();
     const status =
-      statusRaw && statusRaw !== 'ALL' && Object.values(TenantStatus).includes(statusRaw as TenantStatus)
+      statusRaw &&
+      statusRaw !== 'ALL' &&
+      Object.values(TenantStatus).includes(statusRaw as TenantStatus)
         ? (statusRaw as TenantStatus)
         : undefined;
     const plan =
-      planRaw && planRaw !== 'ALL' && Object.values(TenantPlan).includes(planRaw as TenantPlan)
+      planRaw &&
+      planRaw !== 'ALL' &&
+      Object.values(TenantPlan).includes(planRaw as TenantPlan)
         ? (planRaw as TenantPlan)
         : undefined;
 
@@ -134,7 +138,9 @@ export class TenantsService {
   async create(dto: CreateTenantDto, actorId?: string) {
     const plan = dto.plan ?? TenantPlan.BOTICA;
     const preset = limitsForPlan(plan);
-    const slug = await this.uniqueSlug(dto.slug?.trim() || slugifyTenantName(dto.nombre));
+    const slug = await this.uniqueSlug(
+      dto.slug?.trim() || slugifyTenantName(dto.nombre),
+    );
 
     try {
       const created = await this.prisma.tenant.create({
@@ -172,11 +178,15 @@ export class TenantsService {
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim();
     if (dto.ruc !== undefined) data.ruc = dto.ruc.trim() || null;
     if (dto.plan !== undefined) data.plan = dto.plan;
-    if (dto.maxEstablishments !== undefined) data.maxEstablishments = dto.maxEstablishments;
+    if (dto.maxEstablishments !== undefined)
+      data.maxEstablishments = dto.maxEstablishments;
     if (dto.maxUsers !== undefined) data.maxUsers = dto.maxUsers;
-    if (dto.contactName !== undefined) data.contactName = dto.contactName.trim() || null;
-    if (dto.contactEmail !== undefined) data.contactEmail = dto.contactEmail.trim().toLowerCase() || null;
-    if (dto.contactPhone !== undefined) data.contactPhone = dto.contactPhone.trim() || null;
+    if (dto.contactName !== undefined)
+      data.contactName = dto.contactName.trim() || null;
+    if (dto.contactEmail !== undefined)
+      data.contactEmail = dto.contactEmail.trim().toLowerCase() || null;
+    if (dto.contactPhone !== undefined)
+      data.contactPhone = dto.contactPhone.trim() || null;
     if (dto.notes !== undefined) data.notes = dto.notes.trim() || null;
 
     const nextPlan = dto.plan ?? current.plan;
@@ -219,7 +229,12 @@ export class TenantsService {
       },
       select: tenantSelect,
     });
-    await this.audit.log({ userId: actorId, action: 'ACTIVATE', entity: 'Tenant', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'ACTIVATE',
+      entity: 'Tenant',
+      entityId: id,
+    });
     return this.withUsage(updated);
   }
 
@@ -230,7 +245,12 @@ export class TenantsService {
       data: { status: TenantStatus.SUSPENDED, suspendedAt: new Date() },
       select: tenantSelect,
     });
-    await this.audit.log({ userId: actorId, action: 'SUSPEND', entity: 'Tenant', entityId: id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'SUSPEND',
+      entity: 'Tenant',
+      entityId: id,
+    });
     return this.withUsage(updated);
   }
 
@@ -241,7 +261,10 @@ export class TenantsService {
 
     const email = dto.adminEmail.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) throw new ConflictException('El correo del administrador ya está registrado');
+    if (existing)
+      throw new ConflictException(
+        'El correo del administrador ya está registrado',
+      );
 
     const policy = validatePasswordPolicy(dto.adminPassword);
     if (!policy.valid) {
@@ -289,7 +312,10 @@ export class TenantsService {
           select: { id: true },
         });
         await tx.userPermission.createMany({
-          data: permissions.map((p) => ({ userId: admin.id, permissionId: p.id })),
+          data: permissions.map((p) => ({
+            userId: admin.id,
+            permissionId: p.id,
+          })),
           skipDuplicates: true,
         });
       }
@@ -315,10 +341,16 @@ export class TenantsService {
     return { tenantId: id, ...result };
   }
 
-  async listLeads(filters?: { status?: string; page?: number; pageSize?: number }) {
+  async listLeads(filters?: {
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
     const statusRaw = filters?.status?.trim().toUpperCase();
     const status =
-      statusRaw && statusRaw !== 'ALL' && Object.values(TenantLeadStatus).includes(statusRaw as TenantLeadStatus)
+      statusRaw &&
+      statusRaw !== 'ALL' &&
+      Object.values(TenantLeadStatus).includes(statusRaw as TenantLeadStatus)
         ? (statusRaw as TenantLeadStatus)
         : undefined;
 
@@ -350,7 +382,8 @@ export class TenantsService {
 
     const statusRaw = dto.status?.trim().toUpperCase();
     const status =
-      statusRaw && Object.values(TenantLeadStatus).includes(statusRaw as TenantLeadStatus)
+      statusRaw &&
+      Object.values(TenantLeadStatus).includes(statusRaw as TenantLeadStatus)
         ? (statusRaw as TenantLeadStatus)
         : undefined;
 
@@ -358,7 +391,9 @@ export class TenantsService {
       where: { id },
       data: {
         ...(status ? { status } : {}),
-        ...(dto.planInterest !== undefined ? { planInterest: dto.planInterest } : {}),
+        ...(dto.planInterest !== undefined
+          ? { planInterest: dto.planInterest }
+          : {}),
       },
     });
 
@@ -417,7 +452,11 @@ export class TenantsService {
       },
     });
 
-    return { tenant, provision, temporaryPassword: dto.adminPassword ? undefined : password };
+    return {
+      tenant,
+      provision,
+      temporaryPassword: dto.adminPassword ? undefined : password,
+    };
   }
 
   async createLeadFromPublic(input: {
@@ -463,14 +502,26 @@ export class TenantsService {
     }
   }
 
-  private async withUsage<T extends { id: string; maxUsers: number; maxEstablishments: number; plan: TenantPlan; enabledModules: unknown }>(
-    row: T,
-  ) {
+  private async withUsage<
+    T extends {
+      id: string;
+      maxUsers: number;
+      maxEstablishments: number;
+      plan: TenantPlan;
+      enabledModules: unknown;
+    },
+  >(row: T) {
     const [usersCount, establishmentsCount] = await Promise.all([
       this.prisma.user.count({
-        where: { tenantId: row.id, deletedAt: null, role: { not: UserRole.SUPER_ADMIN } },
+        where: {
+          tenantId: row.id,
+          deletedAt: null,
+          role: { not: UserRole.SUPER_ADMIN },
+        },
       }),
-      this.prisma.establishment.count({ where: { tenantId: row.id, deletedAt: null } }),
+      this.prisma.establishment.count({
+        where: { tenantId: row.id, deletedAt: null },
+      }),
     ]);
     const enabledModules = resolveTenantEnabledModules({
       plan: row.plan,
@@ -483,7 +534,10 @@ export class TenantsService {
         users: usersCount,
         establishments: establishmentsCount,
         usersRemaining: Math.max(0, row.maxUsers - usersCount),
-        establishmentsRemaining: Math.max(0, row.maxEstablishments - establishmentsCount),
+        establishmentsRemaining: Math.max(
+          0,
+          row.maxEstablishments - establishmentsCount,
+        ),
       },
     };
   }
@@ -500,7 +554,9 @@ export class TenantsService {
   private async uniqueSlug(base: string): Promise<string> {
     let slug = base;
     let suffix = 0;
-    while (await this.prisma.tenant.findFirst({ where: { slug, deletedAt: null } })) {
+    while (
+      await this.prisma.tenant.findFirst({ where: { slug, deletedAt: null } })
+    ) {
       suffix += 1;
       slug = `${base}-${suffix}`;
     }
@@ -512,7 +568,10 @@ export class TenantsService {
   }
 
   private handleUniqueError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe un cliente con ese RUC o slug.');
     }
     throw err;

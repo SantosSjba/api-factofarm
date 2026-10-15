@@ -35,19 +35,28 @@ export class AgreementsController {
 
   @Get()
   @RequirePermissions('agreements.read', 'nav.convenios')
-  async findAll(@Query() query: AgreementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async findAll(
+    @Query() query: AgreementListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(await this.scope.resolve(actor), query);
   }
 
   @Get(':id')
   @RequirePermissions('agreements.read', 'nav.convenios')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findOne(id, await this.scope.resolve(actor));
   }
 
   @Post()
   @RequirePermissions('agreements.write', 'nav.convenios')
-  async create(@Body() dto: CreateAgreementDto, @CurrentUser() actor: JwtRequestUser) {
+  async create(
+    @Body() dto: CreateAgreementDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(await this.scope.resolve(actor), dto, actor.sub);
   }
 
@@ -58,12 +67,20 @@ export class AgreementsController {
     @Body() dto: UpdateAgreementDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.update(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.update(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Delete(':id')
   @RequirePermissions('agreements.write', 'nav.convenios')
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.remove(id, await this.scope.resolve(actor), actor.sub);
   }
 
@@ -74,7 +91,12 @@ export class AgreementsController {
     @Body() dto: UpsertAgreementPricesDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.upsertPrices(id, await this.scope.resolve(actor), dto, actor);
+    return this.service.upsertPrices(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor,
+    );
   }
 
   @Get(':id/settlement')
@@ -85,7 +107,11 @@ export class AgreementsController {
     @Query() query: AgreementSettlementQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.getSettlement(id, await this.scope.resolve(actor), query);
+    return this.service.getSettlement(
+      id,
+      await this.scope.resolve(actor),
+      query,
+    );
   }
 
   @Post(':id/monthly-billing')
@@ -96,7 +122,12 @@ export class AgreementsController {
     @Body() dto: GenerateMonthlyBillingDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.generateMonthlyBilling(id, await this.scope.resolve(actor), dto, actor.sub);
+    return this.service.generateMonthlyBilling(
+      id,
+      await this.scope.resolve(actor),
+      dto,
+      actor.sub,
+    );
   }
 
   @Get(':id/export-institutional')
@@ -107,6 +138,10 @@ export class AgreementsController {
     @Query() query: AgreementSettlementQueryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.exportInstitutionalCsv(id, await this.scope.resolve(actor), query);
+    return this.service.exportInstitutionalCsv(
+      id,
+      await this.scope.resolve(actor),
+      query,
+    );
   }
 }

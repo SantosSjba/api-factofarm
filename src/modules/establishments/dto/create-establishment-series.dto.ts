@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentSeriesType } from '../../../generated/prisma/client';
-import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateEstablishmentSeriesDto {
   @ApiProperty({ enum: DocumentSeriesType })
@@ -14,7 +21,8 @@ export class CreateEstablishmentSeriesDto {
   @IsString()
   @MaxLength(20)
   @Matches(/^[A-Z0-9-]+$/, {
-    message: 'El número de serie solo acepta letras mayúsculas, números y guion.',
+    message:
+      'El número de serie solo acepta letras mayúsculas, números y guion.',
   })
   numero!: string;
 

@@ -28,7 +28,9 @@ export class PrescriptionItemDto {
 
   @ApiProperty({ example: '2' })
   @IsString()
-  @Matches(/^\d{1,14}(\.\d{1,4})?$/, { message: 'Cantidad prescrita inválida (máximo 4 decimales)' })
+  @Matches(/^\d{1,14}(\.\d{1,4})?$/, {
+    message: 'Cantidad prescrita inválida (máximo 4 decimales)',
+  })
   cantidadPrescrita!: string;
 
   @ApiPropertyOptional()
@@ -118,7 +120,9 @@ export class DispensePrescriptionItemDto {
 
   @ApiProperty({ example: '2' })
   @IsString()
-  @Matches(/^\d{1,14}(\.\d{1,4})?$/, { message: 'Cantidad a dispensar inválida (máximo 4 decimales)' })
+  @Matches(/^\d{1,14}(\.\d{1,4})?$/, {
+    message: 'Cantidad a dispensar inválida (máximo 4 decimales)',
+  })
   cantidad!: string;
 }
 

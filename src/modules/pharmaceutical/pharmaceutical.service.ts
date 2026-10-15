@@ -1,3 +1,4 @@
+import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import { Injectable } from '@nestjs/common';
 import {
   ControlledLedgerMovementType,
@@ -70,7 +71,9 @@ export class PharmaceuticalService {
   async topProducts(establishmentId: string, limit = 10) {
     const rows = await this.prisma.saleItem.groupBy({
       by: ['productId'],
-      where: { sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' } },
+      where: {
+        sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' },
+      },
       _sum: { cantidad: true, totalLinea: true },
       orderBy: { _sum: { totalLinea: 'desc' } },
       take: limit,
@@ -90,11 +93,16 @@ export class PharmaceuticalService {
   async rotationAbc(establishmentId: string) {
     const rows = await this.prisma.saleItem.groupBy({
       by: ['productId'],
-      where: { sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' } },
+      where: {
+        sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' },
+      },
       _sum: { totalLinea: true },
     });
     const sorted = rows
-      .map((r) => ({ productId: r.productId, total: Number(r._sum.totalLinea?.toString() ?? '0') }))
+      .map((r) => ({
+        productId: r.productId,
+        total: Number(r._sum.totalLinea?.toString() ?? '0'),
+      }))
       .sort((a, b) => b.total - a.total);
     const grand = sorted.reduce((s, r) => s + r.total, 0) || 1;
     let cumulative = 0;
@@ -116,7 +124,11 @@ export class PharmaceuticalService {
     });
   }
 
-  async monthlyControlledReport(establishmentId: string, year: number, month: number) {
+  async monthlyControlledReport(
+    establishmentId: string,
+    year: number,
+    month: number,
+  ) {
     const tz = await this.resolveTimeZone(establishmentId);
     const yearMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
     const { start, end } = monthBoundsInTimeZone(yearMonth, tz);
@@ -128,7 +140,9 @@ export class PharmaceuticalService {
           select: {
             nombre: true,
             codigoInterno: true,
-            controlledSubstanceCategory: { select: { codigo: true, nombre: true, schedule: true } },
+            controlledSubstanceCategory: {
+              select: { codigo: true, nombre: true, schedule: true },
+            },
           },
         },
         user: { select: { nombre: true } },
@@ -204,28 +218,35 @@ export class PharmaceuticalService {
     expiryDaysAhead = 90,
     range?: DateRangeInput,
   ) {
-    const warehouseIds = await this.resolveWarehouseIds(establishmentId, warehouseId);
+    const warehouseIds = await this.resolveWarehouseIds(
+      establishmentId,
+      warehouseId,
+    );
     const dateFilter = await this.buildDateFilter(establishmentId, range);
 
-    const shrinkageMovements = await this.prisma.inventoryInboundMovement.findMany({
-      where: {
-        deletedAt: null,
-        movementType: InventoryMovementType.AJUSTE,
-        cantidad: { lt: 0 },
-        warehouseId: { in: warehouseIds },
-        ...(dateFilter ? { fechaRegistro: dateFilter } : {}),
-      },
-      include: {
-        product: { select: { nombre: true, codigoInterno: true, costoUnitario: true } },
-        warehouse: { select: { nombre: true } },
-      },
-      orderBy: { fechaRegistro: 'desc' },
-      take: 500,
-    });
+    const shrinkageMovements =
+      await this.prisma.inventoryInboundMovement.findMany({
+        where: {
+          deletedAt: null,
+          movementType: InventoryMovementType.AJUSTE,
+          cantidad: { lt: 0 },
+          warehouseId: { in: warehouseIds },
+          ...(dateFilter ? { fechaRegistro: dateFilter } : {}),
+        },
+        include: {
+          product: {
+            select: { nombre: true, codigoInterno: true, costoUnitario: true },
+          },
+          warehouse: { select: { nombre: true } },
+        },
+        orderBy: { fechaRegistro: 'desc' },
+        take: 500,
+      });
 
     const shrinkage = shrinkageMovements.map((m) => {
       const qty = m.cantidad.abs();
-      const unitCost = m.costoUnitario ?? m.product.costoUnitario ?? new Prisma.Decimal(0);
+      const unitCost =
+        m.costoUnitario ?? m.product.costoUnitario ?? new Prisma.Decimal(0);
       return {
         tipo: 'MERMA' as const,
         fecha: m.fechaRegistro.toISOString(),
@@ -270,8 +291,14 @@ export class PharmaceuticalService {
       };
     });
 
-    const totalMermas = shrinkage.reduce((acc, r) => acc + Number(r.valorizado), 0);
-    const totalVencimientos = expiring.reduce((acc, r) => acc + Number(r.valorizado), 0);
+    const totalMermas = shrinkage.reduce(
+      (acc, r) => acc + Number(r.valorizado),
+      0,
+    );
+    const totalVencimientos = expiring.reduce(
+      (acc, r) => acc + Number(r.valorizado),
+      0,
+    );
 
     return {
       shrinkage,
@@ -315,12 +342,21 @@ export class PharmaceuticalService {
       },
     });
 
-    type Bucket = { key: string; label: string; ventas: number; costo: number; utilidad: number; margenPct: number };
+    type Bucket = {
+      key: string;
+      label: string;
+      ventas: number;
+      costo: number;
+      utilidad: number;
+      margenPct: number;
+    };
     const buckets = new Map<string, Bucket>();
 
     for (const item of saleItems) {
       const revenue = Number(item.totalLinea.toString());
-      const unitCost = Number((item.product.costoUnitario ?? new Prisma.Decimal(0)).toString());
+      const unitCost = Number(
+        (item.product.costoUnitario ?? new Prisma.Decimal(0)).toString(),
+      );
       const cost = unitCost * Number(item.cantidad.toString());
 
       let key: string;
@@ -336,7 +372,14 @@ export class PharmaceuticalService {
         label = item.product.nombre;
       }
 
-      const row = buckets.get(key) ?? { key, label, ventas: 0, costo: 0, utilidad: 0, margenPct: 0 };
+      const row = buckets.get(key) ?? {
+        key,
+        label,
+        ventas: 0,
+        costo: 0,
+        utilidad: 0,
+        margenPct: 0,
+      };
       row.ventas += revenue;
       row.costo += cost;
       buckets.set(key, row);
@@ -363,7 +406,11 @@ export class PharmaceuticalService {
     range?: DateRangeInput,
     warehouseId?: string,
   ) {
-    const parsed = await this.parseRange(establishmentId, range?.from, range?.to);
+    const parsed = await this.parseRange(
+      establishmentId,
+      range?.from,
+      range?.to,
+    );
     const dateFilter = this.buildDateFilterFromParsed(parsed);
     const tz = parsed.timeZone ?? (await this.resolveTimeZone(establishmentId));
     const sales = await this.prisma.sale.findMany({
@@ -382,7 +429,12 @@ export class PharmaceuticalService {
       },
     });
 
-    type Bucket = { key: string; label: string; ventas: number; transacciones: number };
+    type Bucket = {
+      key: string;
+      label: string;
+      ventas: number;
+      transacciones: number;
+    };
     const buckets = new Map<string, Bucket>();
 
     for (const sale of sales) {
@@ -403,7 +455,12 @@ export class PharmaceuticalService {
         label = sale.seller.nombre;
       }
 
-      const row = buckets.get(key) ?? { key, label, ventas: 0, transacciones: 0 };
+      const row = buckets.get(key) ?? {
+        key,
+        label,
+        ventas: 0,
+        transacciones: 0,
+      };
       row.ventas += Number(sale.total.toString());
       row.transacciones += 1;
       buckets.set(key, row);
@@ -414,7 +471,10 @@ export class PharmaceuticalService {
       .sort((a, b) => Number(b.ventas) - Number(a.ventas));
   }
 
-  async dispensationByMedicoReport(establishmentId: string, range?: DateRangeInput) {
+  async dispensationByMedicoReport(
+    establishmentId: string,
+    range?: DateRangeInput,
+  ) {
     const dateFilter = await this.buildDateFilter(establishmentId, range);
     const sales = await this.prisma.sale.findMany({
       where: {
@@ -451,10 +511,13 @@ export class PharmaceuticalService {
     for (const sale of sales) {
       const rx = sale.prescription;
       if (!rx) continue;
-      const key = rx.medicoId ?? rx.medicoCmp ?? rx.medicoNombre ?? 'sin-medico';
+      const key =
+        rx.medicoId ?? rx.medicoCmp ?? rx.medicoNombre ?? 'sin-medico';
       const nombre =
         rx.medicoNombre ??
-        (rx.medico ? `${rx.medico.nombres} ${rx.medico.apellidos}` : 'Médico no registrado');
+        (rx.medico
+          ? `${rx.medico.nombres} ${rx.medico.apellidos}`
+          : 'Médico no registrado');
       const row = buckets.get(key) ?? {
         medicoId: rx.medicoId,
         medicoNombre: nombre,
@@ -464,7 +527,10 @@ export class PharmaceuticalService {
         total: 0,
       };
       row.dispensaciones += 1;
-      row.items += sale.items.reduce((acc, i) => acc + Number(i.cantidad.toString()), 0);
+      row.items += sale.items.reduce(
+        (acc, i) => acc + Number(i.cantidad.toString()),
+        0,
+      );
       row.total += Number(sale.total.toString());
       buckets.set(key, row);
     }
@@ -504,7 +570,9 @@ export class PharmaceuticalService {
           select: {
             nombre: true,
             codigoInterno: true,
-            controlledSubstanceCategory: { select: { codigo: true, nombre: true, schedule: true } },
+            controlledSubstanceCategory: {
+              select: { codigo: true, nombre: true, schedule: true },
+            },
           },
         },
         user: { select: { nombre: true } },
@@ -535,7 +603,9 @@ export class PharmaceuticalService {
           select: {
             nombre: true,
             codigoInterno: true,
-            controlledSubstanceCategory: { select: { codigo: true, nombre: true, schedule: true } },
+            controlledSubstanceCategory: {
+              select: { codigo: true, nombre: true, schedule: true },
+            },
           },
         },
         user: { select: { nombre: true } },
@@ -597,7 +667,9 @@ export class PharmaceuticalService {
     const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
-        ...(establishment?.tenantId ? { tenantId: establishment.tenantId } : {}),
+        ...(establishment?.tenantId
+          ? { tenantId: establishment.tenantId }
+          : {}),
         registroSanitario: { not: null },
         registroSanitarioVigencia: { not: null, lte: limit },
       },
@@ -617,7 +689,8 @@ export class PharmaceuticalService {
       nombre: p.nombre,
       registroSanitario: p.registroSanitario,
       codigoMedicamentoDigemid: p.codigoMedicamentoDigemid,
-      registroSanitarioVigencia: p.registroSanitarioVigencia?.toISOString() ?? null,
+      registroSanitarioVigencia:
+        p.registroSanitarioVigencia?.toISOString() ?? null,
       estado:
         p.registroSanitarioVigencia && p.registroSanitarioVigencia < now
           ? 'VENCIDO'
@@ -687,7 +760,10 @@ export class PharmaceuticalService {
 
   async bpaStorageReport(establishmentId: string) {
     const zones = await this.prisma.warehouseZone.findMany({
-      where: { warehouse: { establishmentId, deletedAt: null }, deletedAt: null },
+      where: {
+        warehouse: { establishmentId, deletedAt: null },
+        deletedAt: null,
+      },
       include: {
         warehouse: { select: { nombre: true } },
         temperatureLogs: {
@@ -757,7 +833,10 @@ export class PharmaceuticalService {
     }));
   }
 
-  private async resolveWarehouseIds(establishmentId: string, warehouseId?: string) {
+  private async resolveWarehouseIds(
+    establishmentId: string,
+    warehouseId?: string,
+  ) {
     if (warehouseId) return [warehouseId];
     const rows = await this.prisma.warehouse.findMany({
       where: { establishmentId, deletedAt: null },
@@ -770,11 +849,17 @@ export class PharmaceuticalService {
     establishmentId: string,
     range?: DateRangeInput,
   ): Promise<Prisma.DateTimeFilter | undefined> {
-    const parsed = await this.parseRange(establishmentId, range?.from, range?.to);
+    const parsed = await this.parseRange(
+      establishmentId,
+      range?.from,
+      range?.to,
+    );
     return this.buildDateFilterFromParsed(parsed);
   }
 
-  private buildDateFilterFromParsed(range?: DateRange): Prisma.DateTimeFilter | undefined {
+  private buildDateFilterFromParsed(
+    range?: DateRange,
+  ): Prisma.DateTimeFilter | undefined {
     if (!range?.from && !range?.to) return undefined;
     return {
       ...(range.from ? { gte: range.from } : {}),
@@ -815,6 +900,6 @@ export class PharmaceuticalService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    return writeWorkbookBuffer(workbook);
   }
 }

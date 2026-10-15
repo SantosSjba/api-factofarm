@@ -6,7 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Express } from 'express';
-import { actorFromJwt, assertTenantAccess } from '../../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  assertTenantAccess,
+} from '../../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
 import type { JwtRequestUser } from '../../auth/domain/auth.types';
 import { FILE_REPOSITORY } from '../domain/file.repository';
@@ -37,7 +40,9 @@ export class FilesService {
       throw new BadRequestException('Archivo vacío');
     }
     if (file.size > MAX_BYTES) {
-      throw new BadRequestException('El archivo supera el tamaño máximo permitido');
+      throw new BadRequestException(
+        'El archivo supera el tamaño máximo permitido',
+      );
     }
 
     const stored = await this.storage.saveBuffer(file);
@@ -76,7 +81,10 @@ export class FilesService {
     };
   }
 
-  private assertFileTenantAccess(actor: JwtRequestUser, fileTenantId: string | null): void {
+  private assertFileTenantAccess(
+    actor: JwtRequestUser,
+    fileTenantId: string | null,
+  ): void {
     if (!fileTenantId) {
       if (isPlatformAdmin(actor.role)) {
         return;

@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { createE2eApp, closeE2eApp, DEMO_ADMIN } from './helpers/e2e-app';
@@ -15,7 +15,10 @@ describe('FactoFarm API (e2e)', () => {
   });
 
   it('GET /api/v1 returns health message', () => {
-    return request(app.getHttpServer()).get('/api/v1').expect(200).expect('FactoFarm API OK');
+    return request(app.getHttpServer())
+      .get('/api/v1')
+      .expect(200)
+      .expect('FactoFarm API OK');
   });
 
   it('GET /api/v1/health/ready checks database', () => {
@@ -29,11 +32,17 @@ describe('FactoFarm API (e2e)', () => {
   it('POST /api/v1/auth/login rejects invalid credentials', () => {
     return request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'no-existe@factosysperu.com', password: 'wrong-password-123' })
+      .send({
+        email: 'no-existe@factosysperu.com',
+        password: 'wrong-password-123',
+      })
       .expect(401);
   });
 
   it('POST /api/v1/auth/login accepts demo admin', () => {
-    return request(app.getHttpServer()).post('/api/v1/auth/login').send(DEMO_ADMIN).expect(200);
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send(DEMO_ADMIN)
+      .expect(200);
   });
 });

@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -21,14 +35,21 @@ export class InventoryPhysicalCountsController {
     @Query('page') page?: number,
     @Query('pageSize') pageSize?: number,
   ) {
-    return this.service.findAll(Number(page) || 1, Number(pageSize) || 10, actor);
+    return this.service.findAll(
+      Number(page) || 1,
+      Number(pageSize) || 10,
+      actor,
+    );
   }
 
   @Get(':id')
   @RequirePermissions('inventory.read', 'nav.reporte_inventario')
   @ApiOperation({ summary: 'Detalle de conteo físico' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findOne(id, actor);
   }
 
@@ -36,7 +57,10 @@ export class InventoryPhysicalCountsController {
   @RequirePermissions('inventory.adjust', 'nav.reporte_inventario')
   @ApiOperation({ summary: 'Iniciar conteo físico' })
   @ApiBody({ type: CreatePhysicalCountDto })
-  create(@Body() dto: CreatePhysicalCountDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreatePhysicalCountDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(dto, actor);
   }
 
@@ -56,7 +80,10 @@ export class InventoryPhysicalCountsController {
   @RequirePermissions('inventory.adjust', 'nav.reporte_inventario')
   @ApiOperation({ summary: 'Finalizar conteo y generar ajustes' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  finalize(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  finalize(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.finalize(id, actor);
   }
 }

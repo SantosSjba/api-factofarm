@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { isTaxGravado } from '../../../common/utils/sale-pricing.util';
-import type { EmitDocumentInput } from '../domain/billing-provider.port';
 
 @Injectable()
 export class UblBuilderService {
@@ -113,7 +112,8 @@ export class UblBuilderService {
       taxAffectationCodigo?: string | null;
     }>;
   }): string {
-    const relatedTypeCode = input.relatedDocumentType === 'FACTURA' ? '01' : '03';
+    const relatedTypeCode =
+      input.relatedDocumentType === 'FACTURA' ? '01' : '03';
     const linesXml = input.lines
       .map(
         (line) => `
@@ -200,7 +200,8 @@ export class UblBuilderService {
       taxAffectationCodigo?: string | null;
     }>;
   }): string {
-    const relatedTypeCode = input.relatedDocumentType === 'FACTURA' ? '01' : '03';
+    const relatedTypeCode =
+      input.relatedDocumentType === 'FACTURA' ? '01' : '03';
     const linesXml = input.lines
       .map(
         (line) => `

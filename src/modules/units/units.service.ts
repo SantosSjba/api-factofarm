@@ -1,6 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
@@ -38,7 +45,13 @@ export class UnitsService {
       pageSize: filters.pageSize,
     });
     const [items, total] = await Promise.all([
-      this.prisma.unitOfMeasure.findMany({ where, orderBy: { nombre: 'asc' }, skip, take, select: selectRow }),
+      this.prisma.unitOfMeasure.findMany({
+        where,
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+        select: selectRow,
+      }),
       this.prisma.unitOfMeasure.count({ where }),
     ]);
     return buildPaginatedResult(items, total, page, pageSize);
@@ -52,7 +65,12 @@ export class UnitsService {
         data: { codigo, nombre },
         select: selectRow,
       });
-      await this.audit.log({ userId: actorId, action: 'CREATE', entity: 'UnitOfMeasure', entityId: created.id });
+      await this.audit.log({
+        userId: actorId,
+        action: 'CREATE',
+        entity: 'UnitOfMeasure',
+        entityId: created.id,
+      });
       return created;
     } catch (err) {
       this.handleKnownError(err);
@@ -69,8 +87,18 @@ export class UnitsService {
     if (dto.codigo !== undefined) data.codigo = dto.codigo.trim().toUpperCase();
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim().toUpperCase();
     try {
-      const updated = await this.prisma.unitOfMeasure.update({ where: { id }, data, select: selectRow });
-      await this.audit.log({ userId: actorId, action: 'UPDATE', entity: 'UnitOfMeasure', entityId: id, diff: dto });
+      const updated = await this.prisma.unitOfMeasure.update({
+        where: { id },
+        data,
+        select: selectRow,
+      });
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE',
+        entity: 'UnitOfMeasure',
+        entityId: id,
+        diff: dto,
+      });
       return updated;
     } catch (err) {
       this.handleKnownError(err);
@@ -84,11 +112,21 @@ export class UnitsService {
     });
     if (!current) throw new NotFoundException('Unidad no encontrada');
     await this.integrity.assertCanDeleteUnit(id);
-    await this.prisma.unitOfMeasure.update({ where: { id }, data: { deletedAt: new Date() } });
-    await this.audit.log({ userId: actorId, action: 'DELETE', entity: 'UnitOfMeasure', entityId: id });
+    await this.prisma.unitOfMeasure.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'UnitOfMeasure',
+      entityId: id,
+    });
   }
 
-  private buildWhere(filters?: MaestroListQueryDto): Prisma.UnitOfMeasureWhereInput {
+  private buildWhere(
+    filters?: MaestroListQueryDto,
+  ): Prisma.UnitOfMeasureWhereInput {
     const search = filters?.search?.trim();
     return {
       deletedAt: null,
@@ -104,8 +142,13 @@ export class UnitsService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new ConflictException('Ya existe una unidad con ese código o nombre.');
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'Ya existe una unidad con ese código o nombre.',
+      );
     }
     throw err;
   }

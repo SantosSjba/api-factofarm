@@ -6,7 +6,18 @@ describe('BillingService', () => {
   const prisma = {
     establishmentBillingConfig: {
       findUnique: jest.fn(),
-      upsert: jest.fn(),
+      upsert: jest.fn<
+        Promise<unknown>,
+        [
+          {
+            update: {
+              apiTokenEncrypted?: string;
+              rucEmisor?: string;
+              apiUrl?: string;
+            };
+          },
+        ]
+      >(),
     },
     electronicDocument: {
       findFirst: jest.fn(),
@@ -78,16 +89,22 @@ describe('BillingService', () => {
   });
 
   it('permite MOCK en producción (farmacia sin OSE / solo NV)', async () => {
-    config.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : 'secret'));
+    config.get.mockImplementation((key: string) =>
+      key === 'NODE_ENV' ? 'production' : 'secret',
+    );
     prisma.establishmentBillingConfig.findUnique.mockResolvedValue(null);
     prisma.establishmentBillingConfig.upsert.mockResolvedValue({ id: 'cfg-1' });
-    const cfg = await service.upsertConfig('est-1', { provider: BillingProviderType.MOCK });
+    const cfg = await service.upsertConfig('est-1', {
+      provider: BillingProviderType.MOCK,
+    });
     expect(prisma.establishmentBillingConfig.upsert).toHaveBeenCalled();
     expect(cfg.provider).toBe(BillingProviderType.MOCK);
   });
 
   it('rechaza Bizlinks no implementado', async () => {
-    config.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : 'secret'));
+    config.get.mockImplementation((key: string) =>
+      key === 'NODE_ENV' ? 'production' : 'secret',
+    );
     await expect(
       service.upsertConfig('est-1', { provider: BillingProviderType.BIZLINKS }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -145,7 +162,10 @@ describe('BillingService', () => {
         createdAt: new Date('2026-07-09'),
       },
     ]);
-    const result = await service.listDocuments('est-1', { page: 1, pageSize: 10 });
+    const result = await service.listDocuments('est-1', {
+      page: 1,
+      pageSize: 10,
+    });
     expect(result.total).toBe(1);
     expect(result.items).toHaveLength(1);
   });

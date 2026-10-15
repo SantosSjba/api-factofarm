@@ -94,7 +94,10 @@ export class UserProfileDto {
   @MaxLength(120)
   cargo?: string;
 
-  @ApiPropertyOptional({ maxLength: 2048, description: 'URL o ruta de foto (legado / externa)' })
+  @ApiPropertyOptional({
+    maxLength: 2048,
+    description: 'URL o ruta de foto (legado / externa)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2048)

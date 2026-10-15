@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import {
   buildPaginatedResult,
@@ -7,7 +11,12 @@ import {
 import type { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  assertTenantAccess,
+  actorFromJwt,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -30,7 +39,10 @@ export class CategoriesService {
   ) {}
 
   async findAll(filters?: MaestroListQueryDto, actor?: JwtRequestUser) {
-    const where = this.buildWhere(filters, actor ? tenantWhere(actorFromJwt(actor)) : {});
+    const where = this.buildWhere(
+      filters,
+      actor ? tenantWhere(actorFromJwt(actor)) : {},
+    );
 
     if (filters?.page == null) {
       return this.prisma.category.findMany({
@@ -61,12 +73,17 @@ export class CategoriesService {
 
   async findTree(actor?: JwtRequestUser) {
     const rows = await this.prisma.category.findMany({
-      where: { deletedAt: null, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      where: {
+        deletedAt: null,
+        ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      },
       orderBy: { nombre: 'asc' },
       select: selectCategory,
     });
-    const byId = new Map(rows.map((r) => [r.id, { ...r, children: [] as typeof rows }]));
-    const roots: (typeof rows[number] & { children: typeof rows })[] = [];
+    const byId = new Map(
+      rows.map((r) => [r.id, { ...r, children: [] as typeof rows }]),
+    );
+    const roots: ((typeof rows)[number] & { children: typeof rows })[] = [];
     for (const row of rows) {
       const node = byId.get(row.id)!;
       if (row.parentId && byId.has(row.parentId)) {
@@ -119,12 +136,16 @@ export class CategoriesService {
     }
     if (dto.parentId !== undefined) {
       if (dto.parentId === id) {
-        throw new ConflictException('Una categoría no puede ser padre de sí misma.');
+        throw new ConflictException(
+          'Una categoría no puede ser padre de sí misma.',
+        );
       }
       if (dto.parentId) {
         await this.assertParentExists(dto.parentId, current.tenantId);
       }
-      data.parent = dto.parentId ? { connect: { id: dto.parentId } } : { disconnect: true };
+      data.parent = dto.parentId
+        ? { connect: { id: dto.parentId } }
+        : { disconnect: true };
     }
 
     try {
@@ -211,7 +232,10 @@ export class CategoriesService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe una categoría con ese nombre.');
     }
     throw err;

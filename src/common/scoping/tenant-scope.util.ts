@@ -48,13 +48,17 @@ export function assertTenantAccess(
 
 export function assertPlatformAdmin(actor: { role: UserRole }): void {
   if (!isPlatformAdmin(actor.role)) {
-    throw new ForbiddenException('Use la consola de plataforma para esta operación');
+    throw new ForbiddenException(
+      'Use la consola de plataforma para esta operación',
+    );
   }
 }
 
 export function requireTenantId(actor: TenantScopeActor): string {
   if (isPlatformAdmin(actor.role)) {
-    throw new ForbiddenException('Use la consola de plataforma para esta operación');
+    throw new ForbiddenException(
+      'Use la consola de plataforma para esta operación',
+    );
   }
   if (!actor.tenantId) {
     throw new ForbiddenException('Usuario sin tenant asignado');

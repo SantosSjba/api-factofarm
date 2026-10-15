@@ -17,7 +17,10 @@ describe('validateSalePayments', () => {
 
   it('rechaza yape sin código de operación', () => {
     expect(() =>
-      validateSalePayments([{ metodo: PaymentMethod.YAPE, monto: 50 }], new Prisma.Decimal(50)),
+      validateSalePayments(
+        [{ metodo: PaymentMethod.YAPE, monto: 50 }],
+        new Prisma.Decimal(50),
+      ),
     ).toThrow(BadRequestException);
   });
 

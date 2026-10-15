@@ -1,3 +1,5 @@
+import { safeError } from '../../common/logging/http-logger.config';
+import { scalarText } from '../../common/utils/scalar-text.util';
 import {
   BadRequestException,
   ForbiddenException,
@@ -20,7 +22,10 @@ import {
   SaleStatus,
   UserRole,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { canVoidSaleDirectly } from '../../common/permissions/role-policy.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
@@ -61,7 +66,7 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
-import { SunatDocumentStatus } from '../../generated/prisma/client';
+
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
@@ -167,7 +172,9 @@ export class SalesService {
       rows.map((row) => {
         const { electronicDocument, _count, ...rest } = row;
         const cpe =
-          electronicDocument && !electronicDocument.deletedAt ? electronicDocument : null;
+          electronicDocument && !electronicDocument.deletedAt
+            ? electronicDocument
+            : null;
         const flags = resolveSaleActionFlags({
           documentType: rest.documentType,
           estado: rest.estado,
@@ -179,7 +186,7 @@ export class SalesService {
         });
         return {
           ...rest,
-          storage: (row.archivedAt ? 'archived' : 'hot') as 'archived' | 'hot',
+          storage: row.archivedAt ? 'archived' : 'hot',
           subtotal: rest.subtotal.toString(),
           descuentoTotal: rest.descuentoTotal.toString(),
           igvTotal: rest.igvTotal.toString(),
@@ -240,7 +247,9 @@ export class SalesService {
         seller: { select: { id: true, nombre: true } },
         items: {
           include: {
-            product: { select: { id: true, nombre: true, codigoInterno: true } },
+            product: {
+              select: { id: true, nombre: true, codigoInterno: true },
+            },
             lotLines: true,
           },
         },
@@ -248,7 +257,9 @@ export class SalesService {
         electronicDocument: {
           select: { id: true, deletedAt: true, sunatStatus: true },
         },
-        returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
+        returns: {
+          select: { items: { select: { saleItemId: true, cantidad: true } } },
+        },
       },
     });
     if (sale) {
@@ -256,7 +267,8 @@ export class SalesService {
       const previouslyReturned = new Map<string, Prisma.Decimal>();
       for (const ret of previousReturns) {
         for (const ri of ret.items) {
-          const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
+          const prev =
+            previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
           previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
         }
       }
@@ -322,7 +334,11 @@ export class SalesService {
   async getPdf(
     id: string,
     establishmentId: string,
-  ): Promise<{ buffer: Buffer; filename: string; source: 'ose' | 'generated' }> {
+  ): Promise<{
+    buffer: Buffer;
+    filename: string;
+    source: 'ose' | 'generated';
+  }> {
     const sale = await this.prisma.sale.findFirst({
       where: { id, establishmentId, deletedAt: null },
       include: {
@@ -336,7 +352,9 @@ export class SalesService {
             telefono: true,
             direccionComercial: true,
             direccionFiscal: true,
-            billingConfig: { select: { rucEmisor: true, razonSocialEmisor: true } },
+            billingConfig: {
+              select: { rucEmisor: true, razonSocialEmisor: true },
+            },
           },
         },
         items: {
@@ -374,7 +392,9 @@ export class SalesService {
         if (isValidPdfBuffer(buffer)) {
           return {
             buffer,
-            filename: archivo.nombreOriginal || `${sale.serie ?? 'DOC'}-${sale.numero ?? id}.pdf`,
+            filename:
+              archivo.nombreOriginal ||
+              `${sale.serie ?? 'DOC'}-${sale.numero ?? id}.pdf`,
             source: 'ose',
           };
         }
@@ -436,7 +456,9 @@ export class SalesService {
         precioUnitario: money(item.precioUnitario),
         totalLinea: money(item.totalLinea),
         lotes: item.lotLines.length
-          ? item.lotLines.map((l) => `${l.codigoLote}×${l.cantidad}`).join(', ')
+          ? item.lotLines
+              .map((l) => `${l.codigoLote}×${l.cantidad.toString()}`)
+              .join(', ')
           : undefined,
       })),
       footerNote,
@@ -448,7 +470,9 @@ export class SalesService {
     return { buffer, filename, source: 'generated' };
   }
 
-  private async resolveEstablishmentTimeZone(establishmentId: string): Promise<string> {
+  private async resolveEstablishmentTimeZone(
+    establishmentId: string,
+  ): Promise<string> {
     const row = await this.prisma.establishment.findFirst({
       where: { id: establishmentId, deletedAt: null },
       select: { timeZone: true },
@@ -481,7 +505,8 @@ export class SalesService {
       where: { id: logoArchivoId },
       select: { rutaRelativa: true },
     });
-    if (!archivo || !(await this.fileStorage.exists(archivo.rutaRelativa))) return null;
+    if (!archivo || !(await this.fileStorage.exists(archivo.rutaRelativa)))
+      return null;
     try {
       return await this.fileStorage.readBuffer(archivo.rutaRelativa);
     } catch {
@@ -497,18 +522,22 @@ export class SalesService {
     payload: unknown;
   }) {
     const payload = (row.payload ?? {}) as Record<string, unknown>;
-    const customer = payload.customer as { id?: string; nombre?: string } | undefined;
-    const seller = payload.seller as { id?: string; nombre?: string } | undefined;
+    const customer = payload.customer as
+      | { id?: string; nombre?: string }
+      | undefined;
+    const seller = payload.seller as
+      | { id?: string; nombre?: string }
+      | undefined;
     return {
       id: row.id,
       documentType: payload.documentType ?? null,
       serie: payload.serie ?? null,
       numero: payload.numero ?? null,
       estado: payload.estado ?? null,
-      subtotal: String(payload.subtotal ?? ''),
-      descuentoTotal: String(payload.descuentoTotal ?? ''),
-      igvTotal: String(payload.igvTotal ?? ''),
-      total: String(payload.total ?? ''),
+      subtotal: scalarText(payload.subtotal ?? ''),
+      descuentoTotal: scalarText(payload.descuentoTotal ?? ''),
+      igvTotal: scalarText(payload.igvTotal ?? ''),
+      total: scalarText(payload.total ?? ''),
       createdAt: row.originalCreatedAt,
       archivedAt: row.archivedAt,
       storage: 'archived' as const,
@@ -533,7 +562,7 @@ export class SalesService {
       archivedAt: row.archivedAt,
       storage: 'archived' as const,
       fromColdStorage: true as const,
-      total: String(payload.total ?? '0'),
+      total: scalarText(payload.total ?? '0'),
       documentType: payload.documentType ?? null,
       serie: (payload.serie as string | null | undefined) ?? null,
       numero: payload.numero ?? null,
@@ -555,13 +584,17 @@ export class SalesService {
       }
     }
 
-    await this.assertDocumentTypeAllowed(actor.establecimientoId, dto.documentType);
+    await this.assertDocumentTypeAllowed(
+      actor.establecimientoId,
+      dto.documentType,
+    );
 
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: actor.establecimientoId, deletedAt: null },
       select: { id: true, tenantId: true },
     });
-    if (!establishment) throw new NotFoundException('Establecimiento no encontrado');
+    if (!establishment)
+      throw new NotFoundException('Establecimiento no encontrado');
 
     const scopedActor = this.asScopedActor(actor);
     if (dto.customerId) {
@@ -612,7 +645,9 @@ export class SalesService {
         select: { id: true, estado: true },
       });
       if (!quotation) {
-        throw new NotFoundException('Cotización no encontrada en este establecimiento');
+        throw new NotFoundException(
+          'Cotización no encontrada en este establecimiento',
+        );
       }
       const convertible: QuotationStatus[] = [
         QuotationStatus.BORRADOR,
@@ -632,7 +667,10 @@ export class SalesService {
       dto.agreementId,
     );
 
-    dto.items = await this.expandCompoundSaleItems(dto.items, establishment.tenantId);
+    dto.items = await this.expandCompoundSaleItems(
+      dto.items,
+      establishment.tenantId,
+    );
     await assertActiveColdZoneForRefrigeratedProducts(
       this.prisma,
       dto.warehouseId,
@@ -666,7 +704,10 @@ export class SalesService {
       await this.prescriptions.validateForSale(
         dto.prescriptionId,
         actor.establecimientoId,
-        pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+        pricedItems.map((item) => ({
+          productId: item.productId,
+          cantidad: item.cantidad,
+        })),
         dto.substitutions?.map((s) => ({
           originalProductId: s.originalProductId,
           substituteProductId: s.substituteProductId,
@@ -713,8 +754,13 @@ export class SalesService {
       );
       if (promoDiscount.greaterThan(0)) {
         const prevTotal = total;
-        const newTotal = Prisma.Decimal.max(total.minus(promoDiscount), new Prisma.Decimal(0));
-        const ratio = prevTotal.isZero() ? new Prisma.Decimal(0) : newTotal.div(prevTotal);
+        const newTotal = Prisma.Decimal.max(
+          total.minus(promoDiscount),
+          new Prisma.Decimal(0),
+        );
+        const ratio = prevTotal.isZero()
+          ? new Prisma.Decimal(0)
+          : newTotal.div(prevTotal);
         subtotal = subtotal.times(ratio);
         igvTotal = igvTotal.times(ratio);
         total = newTotal;
@@ -731,7 +777,9 @@ export class SalesService {
       copagoPaciente = total.minus(coberturaConvenio);
     }
 
-    const amountToCollect = coberturaConvenio.greaterThan(0) ? copagoPaciente : total;
+    const amountToCollect = coberturaConvenio.greaterThan(0)
+      ? copagoPaciente
+      : total;
     if (amountToCollect.greaterThan(0)) {
       validateSalePayments(dto.payments, amountToCollect);
     } else if (!dto.payments.length) {
@@ -766,7 +814,10 @@ export class SalesService {
           actor.sub,
           tx,
         );
-        stockAllocations.push({ index: i, asignacion: dispatch.asignacion ?? [] });
+        stockAllocations.push({
+          index: i,
+          asignacion: dispatch.asignacion ?? [],
+        });
       }
 
       const sale = await tx.sale.create({
@@ -792,13 +843,15 @@ export class SalesService {
               : null,
           promotionCode: dto.promotionCode?.trim() || null,
           idempotencyKey: idempotencyKey?.trim() || null,
-          prescriptionValidated: dto.prescriptionValidated ?? !!dto.prescriptionId,
+          prescriptionValidated:
+            dto.prescriptionValidated ?? !!dto.prescriptionId,
           prescriptionNote: dto.prescriptionNote?.trim() || null,
           prescriptionId: dto.prescriptionId ?? null,
           controlledApprovedById: dto.controlledApprovedById ?? null,
           controlledApprovedAt: dto.controlledApprovedById ? new Date() : null,
           controlledPharmacistLicenseId: controlledLicense?.id ?? null,
-          controlledDigitalSignature: dto.controlledDigitalSignature?.trim() || null,
+          controlledDigitalSignature:
+            dto.controlledDigitalSignature?.trim() || null,
           comentario: dto.comentario?.trim() || null,
           agreementId: resolvedAgreement?.id ?? null,
           coberturaConvenio,
@@ -855,7 +908,10 @@ export class SalesService {
       if (dto.cashSessionId) {
         const cashTotal = dto.payments
           .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
-          .reduce((acc, p) => acc.plus(new Prisma.Decimal(p.monto)), new Prisma.Decimal(0));
+          .reduce(
+            (acc, p) => acc.plus(new Prisma.Decimal(p.monto)),
+            new Prisma.Decimal(0),
+          );
         if (cashTotal.greaterThan(0)) {
           await tx.cashMovement.create({
             data: {
@@ -892,9 +948,15 @@ export class SalesService {
         }
       }
 
-      if (dto.customerId && coberturaConvenio.greaterThan(0) && resolvedAgreement) {
+      if (
+        dto.customerId &&
+        coberturaConvenio.greaterThan(0) &&
+        resolvedAgreement
+      ) {
         const vencimiento = new Date();
-        vencimiento.setDate(vencimiento.getDate() + resolvedAgreement.diasCredito);
+        vencimiento.setDate(
+          vencimiento.getDate() + resolvedAgreement.diasCredito,
+        );
         await tx.accountReceivable.create({
           data: {
             establishmentId: actor.establecimientoId,
@@ -912,7 +974,9 @@ export class SalesService {
         });
       }
 
-      const creditPayment = dto.payments.find((p) => p.metodo === PaymentMethod.CREDITO);
+      const creditPayment = dto.payments.find(
+        (p) => p.metodo === PaymentMethod.CREDITO,
+      );
       if (
         dto.customerId &&
         !resolvedAgreement &&
@@ -925,7 +989,9 @@ export class SalesService {
         });
         const creditAmount = new Prisma.Decimal(creditPayment.monto);
         const vencimiento = new Date();
-        vencimiento.setDate(vencimiento.getDate() + (customer?.diasCredito ?? 0));
+        vencimiento.setDate(
+          vencimiento.getDate() + (customer?.diasCredito ?? 0),
+        );
         await tx.accountReceivable.create({
           data: {
             establishmentId: actor.establecimientoId,
@@ -945,7 +1011,10 @@ export class SalesService {
       if (dto.prescriptionId) {
         await this.prescriptions.applyDispenseFromSale(
           dto.prescriptionId,
-          pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+          pricedItems.map((item) => ({
+            productId: item.productId,
+            cantidad: item.cantidad,
+          })),
           actor.sub,
           tx,
           actor.establecimientoId,
@@ -964,31 +1033,38 @@ export class SalesService {
     });
 
     void this.billing.scheduleEmitFromSale(saleId).catch((err) => {
-      this.logger.error(
-        `Post-commit billing emit failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        event: 'sale_billing_failed',
+        saleId,
+        error: safeError(err),
+      });
     });
 
     void this.pharmaceutical
       .recordControlledOutflow(
         actor.establecimientoId,
-        pricedItems.map((item) => ({ productId: item.productId, cantidad: item.cantidad })),
+        pricedItems.map((item) => ({
+          productId: item.productId,
+          cantidad: item.cantidad,
+        })),
         `Venta ${saleId}`,
         actor.sub,
       )
       .catch((err) => {
-        this.logger.error(
-          `Post-commit controlled ledger failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logger.error({
+          event: 'sale_controlled_ledger_failed',
+          saleId,
+          error: safeError(err),
+        });
       });
 
     const saleDetail = await this.findOne(saleId, actor.establecimientoId);
     this.realtime.emitSaleCompleted(actor.establecimientoId, {
       saleId: saleDetail.id,
       total: String(saleDetail.total ?? '0'),
-      documentType: String(saleDetail.documentType ?? ''),
+      documentType: scalarText(saleDetail.documentType ?? ''),
       serie: saleDetail.serie == null ? null : String(saleDetail.serie),
-      numero: saleDetail.numero == null ? null : String(saleDetail.numero),
+      numero: saleDetail.numero == null ? null : scalarText(saleDetail.numero),
     });
     this.realtime.emitStockUpdated(actor.establecimientoId, dto.warehouseId);
 
@@ -1002,9 +1078,11 @@ export class SalesService {
           actor.sub,
         )
         .catch((err) => {
-          this.logger.error(
-            `Post-commit loyalty award failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          this.logger.error({
+            event: 'sale_loyalty_failed',
+            saleId,
+            error: safeError(err),
+          });
         });
     }
     if (dto.promotionCode?.trim()) {
@@ -1016,9 +1094,11 @@ export class SalesService {
           dto.customerId,
         )
         .catch((err) => {
-          this.logger.error(
-            `Post-commit promo redemption failed for sale ${saleId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          this.logger.error({
+            event: 'sale_promotion_failed',
+            saleId,
+            error: safeError(err),
+          });
         });
     }
 
@@ -1039,10 +1119,19 @@ export class SalesService {
     for (const row of dto.sales) {
       try {
         const sale = await this.create(row.sale, actor, row.offlineLocalId);
-        results.push({ offlineLocalId: row.offlineLocalId, ok: true, saleId: sale.id });
+        results.push({
+          offlineLocalId: row.offlineLocalId,
+          ok: true,
+          saleId: sale.id,
+        });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Error al sincronizar venta';
-        results.push({ offlineLocalId: row.offlineLocalId, ok: false, error: message });
+        const message =
+          err instanceof Error ? err.message : 'Error al sincronizar venta';
+        results.push({
+          offlineLocalId: row.offlineLocalId,
+          ok: false,
+          error: message,
+        });
       }
     }
 
@@ -1069,7 +1158,9 @@ export class SalesService {
         items: { include: { lotLines: true } },
         payments: { select: { metodo: true, monto: true } },
         _count: { select: { returns: true } },
-        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+        electronicDocument: {
+          select: { id: true, deletedAt: true, sunatStatus: true },
+        },
       },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
@@ -1105,10 +1196,12 @@ export class SalesService {
           actor.sub,
         );
       } catch (err) {
-        this.logger.error(
-          `Fallo al anular CPE antes de void local saleId=${id} establishmentId=${actor.establecimientoId}`,
-          err instanceof Error ? err.stack : String(err),
-        );
+        this.logger.error({
+          event: 'sale_cpe_void_failed',
+          saleId: id,
+          establishmentId: actor.establecimientoId,
+          error: safeError(err),
+        });
         throw err;
       }
     }
@@ -1124,7 +1217,9 @@ export class SalesService {
         },
       });
       if (locked.count !== 1) {
-        throw new BadRequestException('La venta ya no está disponible para anular');
+        throw new BadRequestException(
+          'La venta ya no está disponible para anular',
+        );
       }
 
       for (const item of sale.items) {
@@ -1209,7 +1304,10 @@ export class SalesService {
     return { ok: true, message: 'Venta anulada y stock revertido' };
   }
 
-  async listVoidRequests(establishmentId: string, status?: SaleVoidRequestStatus) {
+  async listVoidRequests(
+    establishmentId: string,
+    status?: SaleVoidRequestStatus,
+  ) {
     const rows = await this.prisma.saleVoidRequest.findMany({
       where: {
         establishmentId,
@@ -1218,7 +1316,15 @@ export class SalesService {
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: {
-        sale: { select: { id: true, serie: true, numero: true, total: true, sellerId: true } },
+        sale: {
+          select: {
+            id: true,
+            serie: true,
+            numero: true,
+            total: true,
+            sellerId: true,
+          },
+        },
         requestedBy: { select: { id: true, nombre: true } },
         approvedBy: { select: { id: true, nombre: true } },
       },
@@ -1255,12 +1361,18 @@ export class SalesService {
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
     if (sale.estado !== SaleStatus.COMPLETADA) {
-      throw new BadRequestException('Solo se pueden solicitar anulaciones de ventas completadas');
+      throw new BadRequestException(
+        'Solo se pueden solicitar anulaciones de ventas completadas',
+      );
     }
 
-    const existing = await this.prisma.saleVoidRequest.findUnique({ where: { saleId: id } });
+    const existing = await this.prisma.saleVoidRequest.findUnique({
+      where: { saleId: id },
+    });
     if (existing?.status === SaleVoidRequestStatus.PENDIENTE) {
-      throw new BadRequestException('Ya existe una solicitud pendiente para esta venta');
+      throw new BadRequestException(
+        'Ya existe una solicitud pendiente para esta venta',
+      );
     }
     if (existing?.status === SaleVoidRequestStatus.APROBADA) {
       throw new BadRequestException('La venta ya fue anulada');
@@ -1316,7 +1428,11 @@ export class SalesService {
     }
 
     // Anular primero (atómico con stock); solo si OK marcar solicitud aprobada.
-    const result = await this.voidSale(request.saleId, { reason: request.reason }, actor);
+    const result = await this.voidSale(
+      request.saleId,
+      { reason: request.reason },
+      actor,
+    );
     await this.prisma.saleVoidRequest.update({
       where: { id: requestId },
       data: {
@@ -1364,12 +1480,20 @@ export class SalesService {
     actor: { sub: string; establecimientoId: string },
   ) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
+      where: {
+        id: saleId,
+        establishmentId: actor.establecimientoId,
+        deletedAt: null,
+      },
       include: {
         items: { include: { lotLines: true } },
         payments: { select: { metodo: true, monto: true } },
-        electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
-        returns: { select: { items: { select: { saleItemId: true, cantidad: true } } } },
+        electronicDocument: {
+          select: { id: true, sunatStatus: true, deletedAt: true },
+        },
+        returns: {
+          select: { items: { select: { saleItemId: true, cantidad: true } } },
+        },
       },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
@@ -1382,7 +1506,8 @@ export class SalesService {
     const previouslyReturned = new Map<string, Prisma.Decimal>();
     for (const ret of previousReturns) {
       for (const ri of ret.items) {
-        const prev = previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
+        const prev =
+          previouslyReturned.get(ri.saleItemId) ?? new Prisma.Decimal(0);
         previouslyReturned.set(ri.saleItemId, prev.plus(ri.cantidad));
       }
     }
@@ -1401,7 +1526,9 @@ export class SalesService {
       hasRemainingQty: hasRemaining,
     });
     if (!flags.canReturn) {
-      throw new BadRequestException(flags.returnBlockedReason ?? 'No se puede devolver esta venta');
+      throw new BadRequestException(
+        flags.returnBlockedReason ?? 'No se puede devolver esta venta',
+      );
     }
 
     if (!dto.items?.length) {
@@ -1429,7 +1556,10 @@ export class SalesService {
       const item = sale.items.find((row) => row.id === line.saleItemId);
       if (!item) throw new BadRequestException('Ítem de venta no válido');
       const qty = new Prisma.Decimal(line.quantity);
-      if (qty.lte(0)) throw new BadRequestException('La cantidad a devolver debe ser mayor a cero');
+      if (qty.lte(0))
+        throw new BadRequestException(
+          'La cantidad a devolver debe ser mayor a cero',
+        );
       const remaining = remainingByItem.get(item.id) ?? new Prisma.Decimal(0);
       if (qty.greaterThan(remaining)) {
         throw new BadRequestException(
@@ -1437,13 +1567,20 @@ export class SalesService {
         );
       }
       remainingByItem.set(item.id, remaining.minus(qty));
-      totalDevuelto = totalDevuelto.plus(item.totalLinea.times(qty).div(item.cantidad));
+      totalDevuelto = totalDevuelto.plus(
+        item.totalLinea.times(qty).div(item.cantidad),
+      );
 
-      const lotRestores: Array<{ lotCode: string | null; qty: Prisma.Decimal }> = [];
+      const lotRestores: Array<{
+        lotCode: string | null;
+        qty: Prisma.Decimal;
+      }> = [];
       const explicitLot = line.lotCode?.trim() || null;
       if (item.lotLines.length > 0) {
         if (explicitLot) {
-          const soldLot = item.lotLines.find((l) => l.codigoLote === explicitLot);
+          const soldLot = item.lotLines.find(
+            (l) => l.codigoLote === explicitLot,
+          );
           if (!soldLot) {
             throw new BadRequestException(
               `El lote ${explicitLot} no corresponde a la venta del ítem`,
@@ -1508,7 +1645,10 @@ export class SalesService {
             create: returnLines.map((line) => ({
               saleItemId: line.saleItemId,
               cantidad: line.quantity,
-              codigoLote: line.lotRestores.length === 1 ? line.lotRestores[0].lotCode : null,
+              codigoLote:
+                line.lotRestores.length === 1
+                  ? line.lotRestores[0].lotCode
+                  : null,
             })),
           },
         },
@@ -1517,7 +1657,9 @@ export class SalesService {
       await tx.sale.update({
         where: { id: saleId },
         data: {
-          estado: allItemsFullyReturned ? SaleStatus.ANULADA : SaleStatus.PARCIALMENTE_DEVUELTA,
+          estado: allItemsFullyReturned
+            ? SaleStatus.ANULADA
+            : SaleStatus.PARCIALMENTE_DEVUELTA,
         },
       });
 
@@ -1539,8 +1681,14 @@ export class SalesService {
           });
         } else {
           const ratio = totalDevuelto.div(sale.total);
-          const reduceBy = Prisma.Decimal.min(ar.saldo, ar.montoTotal.times(ratio));
-          const newSaldo = Prisma.Decimal.max(ar.saldo.minus(reduceBy), new Prisma.Decimal(0));
+          const reduceBy = Prisma.Decimal.min(
+            ar.saldo,
+            ar.montoTotal.times(ratio),
+          );
+          const newSaldo = Prisma.Decimal.max(
+            ar.saldo.minus(reduceBy),
+            new Prisma.Decimal(0),
+          );
           const newMontoTotal = Prisma.Decimal.max(
             ar.montoTotal.minus(ar.montoTotal.times(ratio)),
             ar.montoPagado,
@@ -1619,9 +1767,15 @@ export class SalesService {
     actor: { sub: string; establecimientoId: string },
   ) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id: saleId, establishmentId: actor.establecimientoId, deletedAt: null },
+      where: {
+        id: saleId,
+        establishmentId: actor.establecimientoId,
+        deletedAt: null,
+      },
       include: {
-        electronicDocument: { select: { id: true, sunatStatus: true, deletedAt: true } },
+        electronicDocument: {
+          select: { id: true, sunatStatus: true, deletedAt: true },
+        },
         _count: { select: { returns: true } },
       },
     });
@@ -1639,14 +1793,19 @@ export class SalesService {
       sunatStatus: cpe?.sunatStatus ?? null,
     });
     if (!flags.canDebit) {
-      throw new BadRequestException(flags.debitBlockedReason ?? 'No se puede emitir ND');
+      throw new BadRequestException(
+        flags.debitBlockedReason ?? 'No se puede emitir ND',
+      );
     }
 
-    const electronicDocumentId = await this.billing.scheduleDebitNoteFromSale(saleId, {
-      motivo: dto.motivo.trim(),
-      descripcion: dto.descripcion.trim(),
-      total: dto.total,
-    });
+    const electronicDocumentId = await this.billing.scheduleDebitNoteFromSale(
+      saleId,
+      {
+        motivo: dto.motivo.trim(),
+        descripcion: dto.descripcion.trim(),
+        total: dto.total,
+      },
+    );
     if (!electronicDocumentId) {
       throw new BadRequestException(
         'No se pudo programar la nota de débito. Verifique OSE, estado SUNAT del comprobante y series ND.',
@@ -1685,7 +1844,10 @@ export class SalesService {
     });
 
     const mapped = products.map((p) => {
-      const resolved = this.resolveActivePrinciple(p.principioActivo, knownPrinciples);
+      const resolved = this.resolveActivePrinciple(
+        p.principioActivo,
+        knownPrinciples,
+      );
       return {
         id: p.id,
         nombre: p.nombre,
@@ -1705,7 +1867,11 @@ export class SalesService {
     }
 
     const alerts = catalogRows
-      .filter((row) => principlesInCart.has(row.principioA) && principlesInCart.has(row.principioB))
+      .filter(
+        (row) =>
+          principlesInCart.has(row.principioA) &&
+          principlesInCart.has(row.principioB),
+      )
       .map((row) => ({
         severidad: row.severidad,
         principioA: row.principioA,
@@ -1713,7 +1879,10 @@ export class SalesService {
         descripcion: row.descripcion,
         recomendacion: row.recomendacion,
         productos: withPrinciple
-          .filter((p) => p.resolved === row.principioA || p.resolved === row.principioB)
+          .filter(
+            (p) =>
+              p.resolved === row.principioA || p.resolved === row.principioB,
+          )
           .map((p) => ({
             id: p.id,
             nombre: p.nombre,
@@ -1728,7 +1897,11 @@ export class SalesService {
     };
   }
 
-  async posCatalog(establishmentId: string, warehouseId: string, search?: string) {
+  async posCatalog(
+    establishmentId: string,
+    warehouseId: string,
+    search?: string,
+  ) {
     const term = search?.trim();
     const products = await this.prisma.product.findMany({
       where: {
@@ -1766,7 +1939,9 @@ export class SalesService {
       },
     });
 
-    const lotProductIds = products.filter((p) => p.manejaLotes).map((p) => p.id);
+    const lotProductIds = products
+      .filter((p) => p.manejaLotes)
+      .map((p) => p.id);
     const eligibleByProduct = await this.lotAllocation.batchSumEligibleStock(
       lotProductIds,
       warehouseId,
@@ -1774,7 +1949,8 @@ export class SalesService {
 
     const rows = products
       .map((p) => {
-        const warehouseStock = p.warehouseStocks[0]?.cantidad ?? new Prisma.Decimal(0);
+        const warehouseStock =
+          p.warehouseStocks[0]?.cantidad ?? new Prisma.Decimal(0);
         const sellable = p.manejaLotes
           ? (eligibleByProduct.get(p.id) ?? new Prisma.Decimal(0))
           : warehouseStock;
@@ -1796,7 +1972,11 @@ export class SalesService {
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
 
-    const packs = await this.listSellablePacks(establishmentId, warehouseId, term);
+    const packs = await this.listSellablePacks(
+      establishmentId,
+      warehouseId,
+      term,
+    );
     return [...rows, ...packs];
   }
 
@@ -1835,21 +2015,28 @@ export class SalesService {
       },
     });
 
-    const componentIds = [...new Set(packs.flatMap((p) => p.items.map((i) => i.productId)))];
+    const componentIds = [
+      ...new Set(packs.flatMap((p) => p.items.map((i) => i.productId))),
+    ];
     if (!componentIds.length) return [];
 
     const stocks = await this.prisma.productWarehouseStock.findMany({
       where: { warehouseId, productId: { in: componentIds } },
       select: { productId: true, cantidad: true },
     });
-    const stockByProduct = new Map(stocks.map((s) => [s.productId, s.cantidad]));
+    const stockByProduct = new Map(
+      stocks.map((s) => [s.productId, s.cantidad]),
+    );
     const lotIds = (
       await this.prisma.product.findMany({
         where: { id: { in: componentIds }, manejaLotes: true, deletedAt: null },
         select: { id: true },
       })
     ).map((p) => p.id);
-    const eligibleLots = await this.lotAllocation.batchSumEligibleStock(lotIds, warehouseId);
+    const eligibleLots = await this.lotAllocation.batchSumEligibleStock(
+      lotIds,
+      warehouseId,
+    );
 
     return packs
       .map((pack) => {
@@ -1859,7 +2046,9 @@ export class SalesService {
           const available = lotIds.includes(item.productId)
             ? (eligibleLots.get(item.productId) ?? new Prisma.Decimal(0))
             : (stockByProduct.get(item.productId) ?? new Prisma.Decimal(0));
-          const perPack = item.cantidad.gt(0) ? available.div(item.cantidad) : new Prisma.Decimal(0);
+          const perPack = item.cantidad.gt(0)
+            ? available.div(item.cantidad)
+            : new Prisma.Decimal(0);
           if (perPack.lt(sellable)) sellable = perPack;
         }
         if (sellable.lt(1)) return null;
@@ -1869,8 +2058,12 @@ export class SalesService {
           codigoInterno: pack.codigoInterno,
           codigoBarra: null as string | null,
           precio: pack.precioUnitarioVenta.toString(),
-          stock: sellable.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN).toString(),
-          warehouseStock: sellable.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN).toString(),
+          stock: sellable
+            .toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN)
+            .toString(),
+          warehouseStock: sellable
+            .toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN)
+            .toString(),
           necesitaRecetaMedica: false,
           manejaLotes: false,
           esControlado: false,
@@ -1881,7 +2074,10 @@ export class SalesService {
       .filter((row): row is NonNullable<typeof row> => row !== null);
   }
 
-  private async expandCompoundSaleItems(items: CreateSaleItemDto[], tenantId: string) {
+  private async expandCompoundSaleItems(
+    items: CreateSaleItemDto[],
+    tenantId: string,
+  ) {
     const expanded: CreateSaleItemDto[] = [];
     for (const line of items) {
       const product = await this.prisma.product.findFirst({
@@ -1899,17 +2095,26 @@ export class SalesService {
           id: true,
           precioUnitarioVenta: true,
           items: {
-            select: { productId: true, cantidad: true, precioUnitario: true, total: true },
+            select: {
+              productId: true,
+              cantidad: true,
+              precioUnitario: true,
+              total: true,
+            },
           },
         },
       });
       if (!pack?.items.length) {
-        throw new NotFoundException(`Producto no encontrado: ${line.productId}`);
+        throw new NotFoundException(
+          `Producto no encontrado: ${line.productId}`,
+        );
       }
 
       const exploded = explodePackSaleItems(
         new Prisma.Decimal(line.quantity),
-        new Prisma.Decimal(line.unitPrice ?? pack.precioUnitarioVenta.toString()),
+        new Prisma.Decimal(
+          line.unitPrice ?? pack.precioUnitarioVenta.toString(),
+        ),
         pack.items,
       );
       for (const row of exploded) {
@@ -1982,8 +2187,14 @@ export class SalesService {
       const link = await this.prisma.productEquivalent.findFirst({
         where: {
           OR: [
-            { productId: sub.originalProductId, equivalentProductId: sub.substituteProductId },
-            { productId: sub.substituteProductId, equivalentProductId: sub.originalProductId },
+            {
+              productId: sub.originalProductId,
+              equivalentProductId: sub.substituteProductId,
+            },
+            {
+              productId: sub.substituteProductId,
+              equivalentProductId: sub.originalProductId,
+            },
           ],
         },
       });
@@ -2012,7 +2223,9 @@ export class SalesService {
       );
     }
     if (controlledApprovedById === actor.sub) {
-      throw new ForbiddenException('Un segundo usuario debe autorizar la dispensación de controlados');
+      throw new ForbiddenException(
+        'Un segundo usuario debe autorizar la dispensación de controlados',
+      );
     }
 
     return this.pharmacistLicenses.validateApproverForControlled(
@@ -2026,7 +2239,7 @@ export class SalesService {
     actor: JwtRequestUser | { sub: string; establecimientoId: string },
   ): JwtRequestUser | undefined {
     if ('role' in actor && 'tenantId' in actor && 'permissionCodes' in actor) {
-      return actor as JwtRequestUser;
+      return actor;
     }
     return undefined;
   }
@@ -2072,7 +2285,10 @@ export class SalesService {
           saleTaxAffectation: { select: { codigo: true } },
         },
       });
-      if (!product) throw new NotFoundException(`Producto no encontrado: ${line.productId}`);
+      if (!product)
+        throw new NotFoundException(
+          `Producto no encontrado: ${line.productId}`,
+        );
 
       const unitPrice = line.unitPrice
         ? new Prisma.Decimal(line.unitPrice)
@@ -2091,7 +2307,9 @@ export class SalesService {
         taxCodigo: product.saleTaxAffectation.codigo,
         discountType: line.discountType,
         discountValue:
-          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+          line.discountValue !== undefined
+            ? new Prisma.Decimal(line.discountValue)
+            : null,
       });
 
       items.push({
@@ -2100,7 +2318,9 @@ export class SalesService {
         precioUnitario: unitPrice,
         discountType: line.discountType,
         discountValue:
-          line.discountValue !== undefined ? new Prisma.Decimal(line.discountValue) : null,
+          line.discountValue !== undefined
+            ? new Prisma.Decimal(line.discountValue)
+            : null,
         ...totals,
         necesitaRecetaMedica: product.necesitaRecetaMedica,
         lotAllocationMode: line.lotAllocationMode,
@@ -2118,10 +2338,12 @@ export class SalesService {
     agreementId?: string,
   ) {
     if (agreementId) {
-      const agreementPrice = await this.prisma.agreementProductPrice.findUnique({
-        where: { agreementId_productId: { agreementId, productId } },
-        select: { precio: true },
-      });
+      const agreementPrice = await this.prisma.agreementProductPrice.findUnique(
+        {
+          where: { agreementId_productId: { agreementId, productId } },
+          select: { precio: true },
+        },
+      );
       if (agreementPrice) return agreementPrice.precio;
     }
     if (customerId) {
@@ -2207,7 +2429,9 @@ export class SalesService {
     actorId?: string,
   ) {
     const nextType =
-      targetType === 'FACTURA' ? SaleDocumentType.FACTURA : SaleDocumentType.BOLETA;
+      targetType === 'FACTURA'
+        ? SaleDocumentType.FACTURA
+        : SaleDocumentType.BOLETA;
     const canEmit = await this.billing.establishmentCanEmitCpe(establishmentId);
     if (!canEmit) {
       throw new BadRequestException(
@@ -2219,7 +2443,9 @@ export class SalesService {
       where: { id: saleId, establishmentId, deletedAt: null },
       include: {
         customer: { select: { tipoDocumento: true, numeroDocumento: true } },
-        electronicDocument: { select: { id: true, deletedAt: true, sunatStatus: true } },
+        electronicDocument: {
+          select: { id: true, deletedAt: true, sunatStatus: true },
+        },
         _count: { select: { returns: true } },
       },
     });
@@ -2238,7 +2464,8 @@ export class SalesService {
     });
     if (!flags.canConvertToCpe) {
       throw new BadRequestException(
-        flags.convertBlockedReason ?? 'No se puede migrar esta venta a boleta/factura',
+        flags.convertBlockedReason ??
+          'No se puede migrar esta venta a boleta/factura',
       );
     }
     if (nextType === SaleDocumentType.FACTURA) {
@@ -2258,7 +2485,11 @@ export class SalesService {
       );
       await tx.sale.update({
         where: { id: sale.id },
-        data: { documentType: nextType, serie: allocated.serie, numero: allocated.numero },
+        data: {
+          documentType: nextType,
+          serie: allocated.serie,
+          numero: allocated.numero,
+        },
       });
       return allocated;
     });
@@ -2277,7 +2508,9 @@ export class SalesService {
       },
     });
 
-    const docId = await this.billing.scheduleEmitFromSale(sale.id, { force: true });
+    const docId = await this.billing.scheduleEmitFromSale(sale.id, {
+      force: true,
+    });
     if (!docId) {
       throw new BadRequestException(
         'Venta migrada, pero no se pudo encolar la emisión SUNAT. Revise credenciales OSE e intente Emitir.',
@@ -2315,7 +2548,9 @@ export class SalesService {
       orderBy: { numero: 'desc' },
       select: { numero: true },
     });
-    const next = String((Number.parseInt(last?.numero ?? '0', 10) || 0) + 1).padStart(8, '0');
+    const next = String(
+      (Number.parseInt(last?.numero ?? '0', 10) || 0) + 1,
+    ).padStart(8, '0');
     return { serie, numero: next };
   }
 
@@ -2346,8 +2581,14 @@ export class SalesService {
       case PromotionType.PORCENTAJE_VENTA:
         return saleTotal.times(promo.valor).div(100);
       case PromotionType.CANTIDAD_MINIMA: {
-        const qty = items.reduce((acc, row) => acc.plus(row.cantidad), new Prisma.Decimal(0));
-        if (promo.cantidadMinima && qty.greaterThanOrEqualTo(promo.cantidadMinima)) {
+        const qty = items.reduce(
+          (acc, row) => acc.plus(row.cantidad),
+          new Prisma.Decimal(0),
+        );
+        if (
+          promo.cantidadMinima &&
+          qty.greaterThanOrEqualTo(promo.cantidadMinima)
+        ) {
           return promo.valor;
         }
         return new Prisma.Decimal(0);
@@ -2384,7 +2625,11 @@ export class SalesService {
       product: { id: string; nombre: string; codigoInterno: string | null };
       lotLines: Array<{ codigoLote: string; cantidad: Prisma.Decimal }>;
     }>;
-    payments: Array<{ metodo: PaymentMethod; monto: Prisma.Decimal; referencia: string | null }>;
+    payments: Array<{
+      metodo: PaymentMethod;
+      monto: Prisma.Decimal;
+      referencia: string | null;
+    }>;
   }) {
     return {
       id: sale.id,

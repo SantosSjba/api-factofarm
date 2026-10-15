@@ -13,9 +13,14 @@ export type OseConfigLike = {
 };
 
 /** True si el local tiene proveedor OSE + token para emitir CPE. */
-export function hasRealOseConfigured(config: OseConfigLike | null | undefined): boolean {
+export function hasRealOseConfigured(
+  config: OseConfigLike | null | undefined,
+): boolean {
   if (!config) return false;
-  return REAL_OSE_PROVIDERS.has(config.provider) && !!config.apiTokenEncrypted?.trim();
+  return (
+    REAL_OSE_PROVIDERS.has(config.provider) &&
+    !!config.apiTokenEncrypted?.trim()
+  );
 }
 
 /** En no-producción MOCK puede emitir CPE local (ACEPTADO mock) para QA. */

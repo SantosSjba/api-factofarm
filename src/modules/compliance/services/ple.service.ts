@@ -22,7 +22,14 @@ export class PleService {
       return this.buildSalesBook(establishmentId, from, to, period, book, tz);
     }
     if (book === '8.1') {
-      return this.buildPurchasesBook(establishmentId, from, to, period, book, tz);
+      return this.buildPurchasesBook(
+        establishmentId,
+        from,
+        to,
+        period,
+        book,
+        tz,
+      );
     }
     return this.buildInventoryBook(establishmentId, from, to, period, book, tz);
   }
@@ -100,7 +107,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
-  timeZone: string,
+    timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -116,7 +123,9 @@ export class PleService {
         createdAt: { gte: from, lt: to },
       },
       include: {
-        customer: { select: { tipoDocumento: true, numeroDocumento: true, nombre: true } },
+        customer: {
+          select: { tipoDocumento: true, numeroDocumento: true, nombre: true },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -167,7 +176,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
-  timeZone: string,
+    timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -230,7 +239,7 @@ export class PleService {
     to: Date,
     period: string,
     book: PleBook,
-  timeZone: string,
+    timeZone: string,
   ) {
     const config = await this.prisma.establishmentBillingConfig.findUnique({
       where: { establishmentId },
@@ -245,7 +254,9 @@ export class PleService {
         stock: { gt: 0 },
       },
       include: {
-        product: { select: { nombre: true, codigoInterno: true, codigoSunat: true } },
+        product: {
+          select: { nombre: true, codigoInterno: true, codigoSunat: true },
+        },
         warehouse: { select: { nombre: true } },
       },
       take: 5000,

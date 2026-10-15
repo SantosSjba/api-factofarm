@@ -7,7 +7,12 @@ import { Prisma } from '../../generated/prisma/client';
 import { buildPaginatedResult } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../common/services/entity-integrity.service';
-import { assertTenantAccess, actorFromJwt, requireTenantId, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  assertTenantAccess,
+  actorFromJwt,
+  requireTenantId,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
@@ -72,10 +77,14 @@ export class SuppliersService {
     const searchable: Prisma.SupplierWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'razonSocial') {
-        searchable.push({ razonSocial: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          razonSocial: { contains: search, mode: 'insensitive' },
+        });
       }
       if (field === 'all' || field === 'numeroDocumento') {
-        searchable.push({ numeroDocumento: { contains: search, mode: 'insensitive' } });
+        searchable.push({
+          numeroDocumento: { contains: search, mode: 'insensitive' },
+        });
       }
     }
 
@@ -101,7 +110,11 @@ export class SuppliersService {
 
   async findAllOptions(actor?: JwtRequestUser) {
     return this.prisma.supplier.findMany({
-      where: { deletedAt: null, habilitado: true, ...(actor ? tenantWhere(actorFromJwt(actor)) : {}) },
+      where: {
+        deletedAt: null,
+        habilitado: true,
+        ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      },
       orderBy: { razonSocial: 'asc' },
       select: { id: true, razonSocial: true, numeroDocumento: true },
     });
@@ -117,6 +130,7 @@ export class SuppliersService {
       assertTenantAccess(actorFromJwt(actor), row.tenantId);
     }
     const { tenantId: _tenantId, ...supplier } = row;
+    void _tenantId;
     return supplier;
   }
 
@@ -233,13 +247,18 @@ export class SuppliersService {
     return { ...row, precioCompra: row.precioCompra?.toString() ?? null };
   }
 
-  async removeProduct(supplierId: string, productId: string, actor?: JwtRequestUser) {
+  async removeProduct(
+    supplierId: string,
+    productId: string,
+    actor?: JwtRequestUser,
+  ) {
     await this.ensureSupplier(supplierId, actor);
     const link = await this.prisma.supplierProduct.findUnique({
       where: { supplierId_productId: { supplierId, productId } },
       select: { id: true },
     });
-    if (!link) throw new NotFoundException('Producto no vinculado al proveedor');
+    if (!link)
+      throw new NotFoundException('Producto no vinculado al proveedor');
 
     await this.prisma.supplierProduct.delete({
       where: { supplierId_productId: { supplierId, productId } },
@@ -264,7 +283,10 @@ export class SuppliersService {
     return row;
   }
 
-  private toCreateInput(dto: CreateSupplierDto, tenantId: string): Prisma.SupplierCreateInput {
+  private toCreateInput(
+    dto: CreateSupplierDto,
+    tenantId: string,
+  ): Prisma.SupplierCreateInput {
     return {
       tenant: { connect: { id: tenantId } },
       razonSocial: dto.razonSocial.trim().toUpperCase(),
@@ -274,8 +296,12 @@ export class SuppliersService {
       department: dto.departmentId
         ? { connect: { id: dto.departmentId } }
         : undefined,
-      province: dto.provinceId ? { connect: { id: dto.provinceId } } : undefined,
-      district: dto.districtId ? { connect: { id: dto.districtId } } : undefined,
+      province: dto.provinceId
+        ? { connect: { id: dto.provinceId } }
+        : undefined,
+      district: dto.districtId
+        ? { connect: { id: dto.districtId } }
+        : undefined,
       direccion: dto.direccion?.trim() || null,
       telefono: dto.telefono?.trim() || null,
       correoElectronico: dto.correoElectronico?.trim().toLowerCase() || null,
@@ -315,10 +341,13 @@ export class SuppliersService {
         ? { connect: { id: dto.districtId } }
         : { disconnect: true };
     }
-    if (dto.direccion !== undefined) data.direccion = dto.direccion?.trim() || null;
-    if (dto.telefono !== undefined) data.telefono = dto.telefono?.trim() || null;
+    if (dto.direccion !== undefined)
+      data.direccion = dto.direccion?.trim() || null;
+    if (dto.telefono !== undefined)
+      data.telefono = dto.telefono?.trim() || null;
     if (dto.correoElectronico !== undefined) {
-      data.correoElectronico = dto.correoElectronico?.trim().toLowerCase() || null;
+      data.correoElectronico =
+        dto.correoElectronico?.trim().toLowerCase() || null;
     }
     if (dto.contactoNombre !== undefined) {
       data.contactoNombre = dto.contactoNombre?.trim() || null;
@@ -368,7 +397,10 @@ export class SuppliersService {
   }
 
   private handleKnownError(err: unknown): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
       throw new ConflictException('Ya existe un proveedor con ese documento.');
     }
     throw err;

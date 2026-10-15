@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -16,7 +30,10 @@ export class InventoryTransfersController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.traslados')
   @ApiOperation({ summary: 'Listar transferencias entre almacenes' })
-  findAll(@Query() query: InventoryTransferListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: InventoryTransferListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(query, actor);
   }
 
@@ -24,7 +41,10 @@ export class InventoryTransfersController {
   @RequirePermissions('inventory.write', 'nav.traslados')
   @ApiOperation({ summary: 'Crear transferencia (borrador)' })
   @ApiBody({ type: CreateInventoryTransferDto })
-  create(@Body() dto: CreateInventoryTransferDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateInventoryTransferDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.create(dto, actor);
   }
 
@@ -32,7 +52,10 @@ export class InventoryTransfersController {
   @RequirePermissions('inventory.write', 'nav.traslados')
   @ApiOperation({ summary: 'Despachar transferencia (salida origen)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  dispatch(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  dispatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.dispatch(id, actor);
   }
 
@@ -40,7 +63,10 @@ export class InventoryTransfersController {
   @RequirePermissions('inventory.write', 'nav.traslados')
   @ApiOperation({ summary: 'Recibir transferencia (ingreso destino)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  receive(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  receive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.receive(id, actor);
   }
 
@@ -48,7 +74,10 @@ export class InventoryTransfersController {
   @RequirePermissions('inventory.write', 'nav.traslados')
   @ApiOperation({ summary: 'Anular transferencia en borrador' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.cancel(id, actor);
   }
 }

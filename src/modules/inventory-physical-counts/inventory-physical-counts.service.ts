@@ -1,9 +1,22 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryPhysicalCountStatus, Prisma } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  InventoryPhysicalCountStatus,
+  Prisma,
+} from '../../generated/prisma/client';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
-import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { InventoryMovementsService } from '../inventory-movements/inventory-movements.service';
@@ -71,7 +84,9 @@ export class InventoryPhysicalCountsService {
         user: { select: { nombre: true } },
         items: {
           include: {
-            product: { select: { id: true, nombre: true, codigoInterno: true } },
+            product: {
+              select: { id: true, nombre: true, codigoInterno: true },
+            },
           },
         },
       },
@@ -125,7 +140,11 @@ export class InventoryPhysicalCountsService {
     return { id: created.id };
   }
 
-  async upsertItem(countId: string, dto: UpsertPhysicalCountItemDto, actor: JwtRequestUser) {
+  async upsertItem(
+    countId: string,
+    dto: UpsertPhysicalCountItemDto,
+    actor: JwtRequestUser,
+  ) {
     const count = await this.loadOpenCount(countId, actor);
     await this.scope.assertProductInTenant(actor, dto.productId);
     const systemQty = await this.resolveSystemQty(
@@ -174,7 +193,8 @@ export class InventoryPhysicalCountsService {
       },
       include: { items: true },
     });
-    if (!count) throw new NotFoundException('Conteo no encontrado o ya finalizado');
+    if (!count)
+      throw new NotFoundException('Conteo no encontrado o ya finalizado');
 
     const claimed = await this.prisma.inventoryPhysicalCount.updateMany({
       where: {
@@ -182,10 +202,15 @@ export class InventoryPhysicalCountsService {
         estado: InventoryPhysicalCountStatus.EN_PROCESO,
         deletedAt: null,
       },
-      data: { estado: InventoryPhysicalCountStatus.PROCESANDO, comentario: null },
+      data: {
+        estado: InventoryPhysicalCountStatus.PROCESANDO,
+        comentario: null,
+      },
     });
     if (claimed.count !== 1) {
-      throw new BadRequestException('El conteo ya está siendo finalizado o cambió de estado');
+      throw new BadRequestException(
+        'El conteo ya está siendo finalizado o cambió de estado',
+      );
     }
 
     let applied = 0;
@@ -243,7 +268,8 @@ export class InventoryPhysicalCountsService {
         message: 'Conteo finalizado; ajustes generados según diferencias',
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al finalizar conteo';
+      const message =
+        err instanceof Error ? err.message : 'Error al finalizar conteo';
       await this.prisma.inventoryPhysicalCount.update({
         where: { id: countId },
         data: {
@@ -265,14 +291,24 @@ export class InventoryPhysicalCountsService {
       },
       select: { id: true, warehouseId: true },
     });
-    if (!count) throw new BadRequestException('Conteo no disponible para edición');
+    if (!count)
+      throw new BadRequestException('Conteo no disponible para edición');
     return count;
   }
 
-  private async resolveSystemQty(warehouseId: string, productId: string, lotCode?: string) {
+  private async resolveSystemQty(
+    warehouseId: string,
+    productId: string,
+    lotCode?: string,
+  ) {
     if (lotCode?.trim()) {
       const lot = await this.prisma.productLotStock.findFirst({
-        where: { warehouseId, productId, codigoLote: lotCode.trim(), deletedAt: null },
+        where: {
+          warehouseId,
+          productId,
+          codigoLote: lotCode.trim(),
+          deletedAt: null,
+        },
         select: { stock: true },
       });
       return lot?.stock ?? new Prisma.Decimal(0);

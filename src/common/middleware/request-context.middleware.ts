@@ -1,3 +1,4 @@
+import { safeRequestId } from '../logging/http-logger.config';
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { RequestContextService } from '../services/request-context.service';
@@ -9,14 +10,18 @@ export class RequestContextMiddleware implements NestMiddleware {
   use(req: Request, _res: Response, next: NextFunction): void {
     const forwarded = req.headers['x-forwarded-for'];
     const ip =
-      (typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined) ??
+      (typeof forwarded === 'string'
+        ? forwarded.split(',')[0]?.trim()
+        : undefined) ??
       req.ip ??
       req.socket.remoteAddress;
     const userAgent =
-      typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
-    const rawRequestId =
-      typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : req.id;
-    const requestId = rawRequestId != null ? String(rawRequestId) : undefined;
+      typeof req.headers['user-agent'] === 'string'
+        ? req.headers['user-agent']
+        : undefined;
+    const requestId = safeRequestId(
+      typeof req.id === 'string' ? req.id : req.headers['x-request-id'],
+    );
 
     this.context.run({ ipAddress: ip, userAgent, requestId }, () => next());
   }

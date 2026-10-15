@@ -4,7 +4,8 @@ export const REALTIME_EVENTS = {
   BILLING_STATUS: 'billing.status',
 } as const;
 
-export type RealtimeEvent = (typeof REALTIME_EVENTS)[keyof typeof REALTIME_EVENTS];
+export type RealtimeEvent =
+  (typeof REALTIME_EVENTS)[keyof typeof REALTIME_EVENTS];
 
 export function establishmentRoom(establishmentId: string): string {
   return `establishment:${establishmentId}`;

@@ -5,18 +5,28 @@ import { InventoryMovementsService } from './inventory-movements.service';
 
 describe('InventoryMovementsService.listWarehouses (QA-CAMPANA-07)', () => {
   const actor: JwtRequestUser = {
-    sub: 'cashier', email: 'cashier@example.test', role: UserRole.CAJERO,
-    tenantId: 'tenant-a', establecimientoId: 'branch-a', permissionCodes: ['sales.read'],
+    sub: 'cashier',
+    email: 'cashier@example.test',
+    role: UserRole.CAJERO,
+    tenantId: 'tenant-a',
+    establecimientoId: 'branch-a',
+    permissionCodes: ['sales.read'],
   };
   const setup = () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const scope = {
       assertEstablishmentInTenant: jest.fn().mockResolvedValue(undefined),
-      establishmentIdsForActor: jest.fn().mockResolvedValue(['branch-a', 'branch-b']),
+      establishmentIdsForActor: jest
+        .fn()
+        .mockResolvedValue(['branch-a', 'branch-b']),
     };
     const service = new InventoryMovementsService(
-      { warehouse: { findMany } } as never, {} as never, {} as never,
-      scope as never, {} as never, {} as never,
+      { warehouse: { findMany } } as never,
+      {} as never,
+      {} as never,
+      scope as never,
+      {} as never,
+      {} as never,
     );
     return { service, scope, findMany };
   };
@@ -24,22 +34,36 @@ describe('InventoryMovementsService.listWarehouses (QA-CAMPANA-07)', () => {
   it('valida la pertenencia de la sede antes de listar almacenes para POS', async () => {
     const { service, scope, findMany } = setup();
     await service.listWarehouses(actor);
-    expect(scope.assertEstablishmentInTenant).toHaveBeenCalledWith(actor, 'branch-a');
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ establishmentId: 'branch-a', deletedAt: null }),
-    }));
+    expect(scope.assertEstablishmentInTenant).toHaveBeenCalledWith(
+      actor,
+      'branch-a',
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          establishmentId: 'branch-a',
+          deletedAt: null,
+        }) as unknown,
+      }) as unknown,
+    );
   });
 
   it('rechaza una sede ajena sin consultar sus almacenes', async () => {
     const { service, scope, findMany } = setup();
-    scope.assertEstablishmentInTenant.mockRejectedValue(new ForbiddenException());
-    await expect(service.listWarehouses(actor)).rejects.toThrow(ForbiddenException);
+    scope.assertEstablishmentInTenant.mockRejectedValue(
+      new ForbiddenException(),
+    );
+    await expect(service.listWarehouses(actor)).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(findMany).not.toHaveBeenCalled();
   });
 
   it('rechaza POS sin sede asignada', async () => {
     const { service, findMany } = setup();
-    await expect(service.listWarehouses({ ...actor, establecimientoId: '' })).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.listWarehouses({ ...actor, establecimientoId: '' }),
+    ).rejects.toThrow(ForbiddenException);
     expect(findMany).not.toHaveBeenCalled();
   });
 
@@ -48,8 +72,13 @@ describe('InventoryMovementsService.listWarehouses (QA-CAMPANA-07)', () => {
     const inventoryActor = { ...actor, permissionCodes: ['inventory.read'] };
     await service.listWarehouses(inventoryActor);
     expect(scope.establishmentIdsForActor).toHaveBeenCalledWith(inventoryActor);
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { deletedAt: null, establishmentId: { in: ['branch-a', 'branch-b'] } },
-    }));
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          establishmentId: { in: ['branch-a', 'branch-b'] },
+        },
+      }) as unknown,
+    );
   });
 });

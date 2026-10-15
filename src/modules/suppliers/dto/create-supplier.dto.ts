@@ -26,7 +26,10 @@ export class CreateSupplierDto {
   @MaxLength(300)
   nombreComercial?: string;
 
-  @ApiProperty({ enum: CustomerDocumentType, default: CustomerDocumentType.RUC })
+  @ApiProperty({
+    enum: CustomerDocumentType,
+    default: CustomerDocumentType.RUC,
+  })
   @IsEnum(CustomerDocumentType)
   tipoDocumento!: CustomerDocumentType;
 

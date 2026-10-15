@@ -1,6 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, UserLeaveStatus } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import {
   dateRangeBoundsInTimeZone,
@@ -56,7 +63,12 @@ export class StaffService {
         },
       });
     }
-    await this.audit.log({ userId: actorId, action: 'UPSERT', entity: 'UserWorkSchedule', entityId: userId });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPSERT',
+      entity: 'UserWorkSchedule',
+      entityId: userId,
+    });
     return this.getWorkSchedule(userId, establishmentId);
   }
 
@@ -138,18 +150,30 @@ export class StaffService {
         activo: true,
       },
     });
-    await this.audit.log({ userId: actorId, action: 'UPSERT', entity: 'UserCommissionRule', entityId: row.id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPSERT',
+      entity: 'UserCommissionRule',
+      entityId: row.id,
+    });
     return { id: row.id, commissionPercent: row.commissionPercent.toString() };
   }
 
-  async getProductivityReport(establishmentId: string, query: StaffProductivityQueryDto) {
+  async getProductivityReport(
+    establishmentId: string,
+    query: StaffProductivityQueryDto,
+  ) {
     const fromYmd = this.toYmd(query.from);
     const toYmd = this.toYmd(query.to);
     if (!fromYmd || !toYmd) {
       throw new BadRequestException('Rango de fechas inválido');
     }
     const tz = await this.resolveTimeZone(establishmentId);
-    const { start: from, end: to } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+    const { start: from, end: to } = dateRangeBoundsInTimeZone(
+      fromYmd,
+      toYmd,
+      tz,
+    );
 
     const sellers = await this.prisma.user.findMany({
       where: { establecimientoId: establishmentId, deletedAt: null },
@@ -174,7 +198,8 @@ export class StaffService {
           select: { commissionPercent: true },
         });
         const ventasTotal = salesAgg._sum.total ?? new Prisma.Decimal(0);
-        const commissionPercent = rule?.commissionPercent ?? new Prisma.Decimal(0);
+        const commissionPercent =
+          rule?.commissionPercent ?? new Prisma.Decimal(0);
         const comision = ventasTotal.times(commissionPercent).div(100);
 
         return {
@@ -192,7 +217,12 @@ export class StaffService {
     return { from: from.toISOString(), to: to.toISOString(), employees: rows };
   }
 
-  async createLeave(userId: string, establishmentId: string, dto: CreateLeaveDto, actorId: string) {
+  async createLeave(
+    userId: string,
+    establishmentId: string,
+    dto: CreateLeaveDto,
+    actorId: string,
+  ) {
     await this.ensureUserInEstablishment(userId, establishmentId);
     const fromYmd = this.toYmd(dto.fromDate);
     const toYmd = this.toYmd(dto.toDate);
@@ -212,7 +242,12 @@ export class StaffService {
         notas: dto.notas?.trim() || null,
       },
     });
-    await this.audit.log({ userId: actorId, action: 'CREATE', entity: 'UserLeave', entityId: row.id });
+    await this.audit.log({
+      userId: actorId,
+      action: 'CREATE',
+      entity: 'UserLeave',
+      entityId: row.id,
+    });
     return { id: row.id, estado: row.estado };
   }
 
@@ -231,7 +266,12 @@ export class StaffService {
       where: { id: leaveId },
       data: { estado: dto.estado },
     });
-    await this.audit.log({ userId: actorId, action: 'UPDATE', entity: 'UserLeave', entityId: leaveId });
+    await this.audit.log({
+      userId: actorId,
+      action: 'UPDATE',
+      entity: 'UserLeave',
+      entityId: leaveId,
+    });
     return { id: row.id, estado: row.estado };
   }
 
@@ -257,12 +297,20 @@ export class StaffService {
     }));
   }
 
-  private async ensureUserInEstablishment(userId: string, establishmentId: string) {
+  private async ensureUserInEstablishment(
+    userId: string,
+    establishmentId: string,
+  ) {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, establecimientoId: establishmentId, deletedAt: null },
+      where: {
+        id: userId,
+        establecimientoId: establishmentId,
+        deletedAt: null,
+      },
       select: { id: true },
     });
-    if (!user) throw new NotFoundException('Usuario no encontrado en esta sucursal');
+    if (!user)
+      throw new NotFoundException('Usuario no encontrado en esta sucursal');
   }
 
   private toYmd(value?: string): string | null {

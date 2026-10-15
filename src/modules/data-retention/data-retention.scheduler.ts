@@ -1,3 +1,4 @@
+import { safeError } from '../../common/logging/http-logger.config';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
@@ -19,9 +20,10 @@ export class DataRetentionScheduler implements OnModuleInit {
 
   private async reloadJobs(): Promise<void> {
     for (const name of ['data-retention-audit', 'data-retention-archive']) {
-      if (this.schedulerRegistry.doesExist('cron', name)) this.schedulerRegistry.deleteCronJob(name);
+      if (this.schedulerRegistry.doesExist('cron', name))
+        this.schedulerRegistry.deleteCronJob(name);
     }
-    const auditCron = (await this.retention.getCronExpression());
+    const auditCron = await this.retention.getCronExpression();
     const auditJob = new CronJob(auditCron, () => {
       void this.handleAuditCron();
     });
@@ -29,7 +31,7 @@ export class DataRetentionScheduler implements OnModuleInit {
     auditJob.start();
     this.logger.log(`Cron retención AuditLog: ${auditCron}`);
 
-    const archiveCron = (await this.retention.getArchiveCronExpression());
+    const archiveCron = await this.retention.getArchiveCronExpression();
     const archiveJob = new CronJob(archiveCron, () => {
       void this.handleArchiveCron();
     });
@@ -41,7 +43,10 @@ export class DataRetentionScheduler implements OnModuleInit {
   private async handleAuditCron(): Promise<void> {
     // B-LOG-20: purge only when ENABLED + CONFIRM=I_UNDERSTAND; otherwise dry-run.
     const mode = (await this.retention.canPurge()) ? 'purge' : 'dry-run';
-    if ((await this.retention.isPurgeEnabled()) && !(await this.retention.isPurgeConfirmed())) {
+    if (
+      (await this.retention.isPurgeEnabled()) &&
+      !(await this.retention.isPurgeConfirmed())
+    ) {
       this.logger.warn(
         'DATA_RETENTION_PURGE_ENABLED=true pero falta DATA_RETENTION_PURGE_CONFIRM=I_UNDERSTAND — ejecutando dry-run.',
       );
@@ -52,14 +57,17 @@ export class DataRetentionScheduler implements OnModuleInit {
         `Cron AuditLog mode=${mode} count=${result.deletedCount} status=${result.status}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Cron AuditLog falló: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.error({
+        event: 'audit_retention_failed',
+        error: safeError(error),
+      });
     }
   }
 
   private async handleArchiveCron(): Promise<void> {
-    const mode = (await this.retention.isArchiveEnabled()) ? 'archive' : 'dry-run';
+    const mode = (await this.retention.isArchiveEnabled())
+      ? 'archive'
+      : 'dry-run';
     try {
       const sales = await this.retention.runSalesArchive(mode);
       const kardex = await this.retention.runKardexArchive(mode);
@@ -67,9 +75,7 @@ export class DataRetentionScheduler implements OnModuleInit {
         `Cron archive mode=${mode} sales=${sales.deletedCount} kardex=${kardex.deletedCount}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Cron archive falló: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.error({ event: 'archive_failed', error: safeError(error) });
     }
   }
 }

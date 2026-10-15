@@ -10,7 +10,12 @@ export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('menu-tree')
-  @RequirePermissions('users.read', 'users.write', 'tenants.read', 'nav.platform_clientes')
+  @RequirePermissions(
+    'users.read',
+    'users.write',
+    'tenants.read',
+    'nav.platform_clientes',
+  )
   @ApiOperation({
     summary: 'Árbol de permisos alineado con el menú lateral',
     description:
@@ -21,17 +26,28 @@ export class PermissionsController {
   }
 
   @Get('menu-trees')
-  @RequirePermissions('users.read', 'users.write', 'tenants.read', 'nav.platform_clientes')
+  @RequirePermissions(
+    'users.read',
+    'users.write',
+    'tenants.read',
+    'nav.platform_clientes',
+  )
   @ApiOperation({
     summary: 'Árboles de permisos del menú lateral (Fase 0 + Fase 1)',
-    description: 'Requiere users.read/write o tenants.read / nav.platform_clientes.',
+    description:
+      'Requiere users.read/write o tenants.read / nav.platform_clientes.',
   })
   menuTrees() {
     return this.permissionsService.menuTrees();
   }
 
   @Get('role-templates')
-  @RequirePermissions('users.read', 'users.write', 'tenants.read', 'nav.platform_clientes')
+  @RequirePermissions(
+    'users.read',
+    'users.write',
+    'tenants.read',
+    'nav.platform_clientes',
+  )
   @ApiOperation({ summary: 'Plantillas de permisos por rol' })
   roleTemplates() {
     return this.permissionsService.roleTemplates();

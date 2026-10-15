@@ -12,7 +12,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -44,19 +50,29 @@ export class InventoryMovementsController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Listar inventario por producto y almacén' })
-  list(@Query() query: InventoryMovementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  list(
+    @Query() query: InventoryMovementListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.list(query, actor);
   }
 
   @Get('lots')
   @RequirePermissions('inventory.read', 'nav.lotes')
   @ApiOperation({ summary: 'Listar lotes con stock' })
-  listLots(@Query() query: InventoryLotListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  listLots(
+    @Query() query: InventoryLotListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.listLots(query, actor);
   }
 
   @Get('kardex')
-  @RequirePermissions('inventory.read', 'nav.reporte_kardex', 'nav.kardex_valorizado')
+  @RequirePermissions(
+    'inventory.read',
+    'nav.reporte_kardex',
+    'nav.kardex_valorizado',
+  )
   @ApiOperation({
     summary: 'Kardex valorizado por producto',
     description:
@@ -68,15 +84,26 @@ export class InventoryMovementsController {
 
   @Get('alerts')
   @RequirePermissions('inventory.read')
-  @ApiOperation({ summary: 'Alertas de inventario (stock bajo, vencimientos, cadena de frío)' })
+  @ApiOperation({
+    summary: 'Alertas de inventario (stock bajo, vencimientos, cadena de frío)',
+  })
   alerts(@CurrentUser() actor: JwtRequestUser) {
     return this.service.alerts(actor);
   }
 
   @Get('valuation-report')
-  @RequirePermissions('inventory.read', 'nav.reporte_inventario', 'nav.kardex_valorizado')
-  @ApiOperation({ summary: 'Reporte de inventario valorizado (PEPS / promedio)' })
-  valuationReport(@Query() query: InventoryValuationReportQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'inventory.read',
+    'nav.reporte_inventario',
+    'nav.kardex_valorizado',
+  )
+  @ApiOperation({
+    summary: 'Reporte de inventario valorizado (PEPS / promedio)',
+  })
+  valuationReport(
+    @Query() query: InventoryValuationReportQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.valuationReport(query, actor);
   }
 
@@ -89,28 +116,45 @@ export class InventoryMovementsController {
 
   @Post('adjustments')
   @RequirePermissions('inventory.adjust', 'nav.inventario_movimientos')
-  @ApiOperation({ summary: 'Ajuste de stock (con aprobación si supera umbral)' })
-  createAdjustment(@Body() dto: CreateAdjustmentDto, @CurrentUser() actor: JwtRequestUser) {
+  @ApiOperation({
+    summary: 'Ajuste de stock (con aprobación si supera umbral)',
+  })
+  createAdjustment(
+    @Body() dto: CreateAdjustmentDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.createAdjustment(dto, actor);
   }
 
   @Post('adjustments/:id/approve')
   @RequirePermissions('inventory.adjust')
   @ApiOperation({ summary: 'Aprobar ajuste pendiente (segunda autorización)' })
-  approveAdjustment(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  approveAdjustment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.approveAdjustment(id, actor);
   }
 
   @Post('adjustments/:id/reject')
   @RequirePermissions('inventory.adjust')
   @ApiOperation({ summary: 'Rechazar ajuste pendiente' })
-  rejectAdjustment(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  rejectAdjustment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.rejectAdjustment(id, actor);
   }
 
   @Get('sales/available-lots')
-  @RequirePermissions('inventory.read', 'nav.inventario_movimientos', 'nav.lotes')
-  @ApiOperation({ summary: 'Lotes elegibles para venta (respeta bloqueo de vencidos)' })
+  @RequirePermissions(
+    'inventory.read',
+    'nav.inventario_movimientos',
+    'nav.lotes',
+  )
+  @ApiOperation({
+    summary: 'Lotes elegibles para venta (respeta bloqueo de vencidos)',
+  })
   listSaleAvailableLots(
     @Query('productId', ParseUUIDPipe) productId: string,
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
@@ -120,8 +164,14 @@ export class InventoryMovementsController {
   }
 
   @Post('sales/allocation-preview')
-  @RequirePermissions('inventory.read', 'nav.inventario_movimientos', 'nav.lotes')
-  @ApiOperation({ summary: 'Previsualizar asignación FEFO/FIFO o manual de lotes para venta' })
+  @RequirePermissions(
+    'inventory.read',
+    'nav.inventario_movimientos',
+    'nav.lotes',
+  )
+  @ApiOperation({
+    summary: 'Previsualizar asignación FEFO/FIFO o manual de lotes para venta',
+  })
   previewSaleLotAllocation(
     @Body() dto: SaleLotAllocationPreviewDto,
     @CurrentUser() actor: JwtRequestUser,
@@ -136,7 +186,10 @@ export class InventoryMovementsController {
     description:
       'Requiere saleId de una venta del establecimiento del actor. Uso interno (POS/hospital) llama al servicio sin este endpoint.',
   })
-  dispatchSaleStock(@Body() dto: DispatchSaleStockDto, @CurrentUser() actor: JwtRequestUser) {
+  dispatchSaleStock(
+    @Body() dto: DispatchSaleStockDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.dispatchSaleStock(dto, actor.sub, undefined, actor);
   }
 
@@ -149,7 +202,9 @@ export class InventoryMovementsController {
 
   @Get('catalogs/transfer-reasons')
   @RequirePermissions('inventory.read')
-  @ApiOperation({ summary: 'Listar motivos de traslado para ingreso de inventario' })
+  @ApiOperation({
+    summary: 'Listar motivos de traslado para ingreso de inventario',
+  })
   listTransferReasons() {
     return this.service.listTransferReasons();
   }
@@ -249,16 +304,30 @@ export class InventoryMovementsController {
 
   @Get('import/template')
   @RequirePermissions('inventory.read')
-  @ApiOperation({ summary: 'Descargar plantilla de importación de inventario (lotes/series)' })
-  async downloadImportTemplate(
+  @ApiOperation({
+    summary: 'Descargar plantilla de importación de inventario (lotes/series)',
+  })
+  downloadImportTemplate(
     @Query() query: InventoryImportTemplateQueryDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
-    const mode = query.mode && inventoryImportTemplateModes.includes(query.mode) ? query.mode : 'LOTES';
+  ): StreamableFile {
+    const mode =
+      query.mode && inventoryImportTemplateModes.includes(query.mode)
+        ? query.mode
+        : 'LOTES';
     const buffer = this.service.buildImportTemplateBuffer(mode);
-    const filename = mode === 'SERIES' ? 'movement_item_lots.xlsx' : 'movement_item_lots_group.xlsx';
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const filename =
+      mode === 'SERIES'
+        ? 'movement_item_lots.xlsx'
+        : 'movement_item_lots_group.xlsx';
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 }

@@ -7,7 +7,10 @@ import {
   HospitalConsumptionStatus,
   Prisma,
 } from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -39,8 +42,12 @@ export class HospitalService {
       ...(query.search?.trim()
         ? {
             OR: [
-              { codigo: { contains: query.search.trim(), mode: 'insensitive' } },
-              { nombre: { contains: query.search.trim(), mode: 'insensitive' } },
+              {
+                codigo: { contains: query.search.trim(), mode: 'insensitive' },
+              },
+              {
+                nombre: { contains: query.search.trim(), mode: 'insensitive' },
+              },
             ],
           }
         : {}),
@@ -66,13 +73,19 @@ export class HospitalService {
     );
   }
 
-  async createArea(establishmentId: string, dto: CreateHospitalAreaDto, userId: string) {
+  async createArea(
+    establishmentId: string,
+    dto: CreateHospitalAreaDto,
+    userId: string,
+  ) {
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: establishmentId, deletedAt: null },
       select: { esHospital: true },
     });
     if (!establishment?.esHospital) {
-      throw new BadRequestException('El establecimiento no está marcado como hospital');
+      throw new BadRequestException(
+        'El establecimiento no está marcado como hospital',
+      );
     }
 
     const codigo = dto.codigo.trim().toUpperCase();
@@ -80,7 +93,8 @@ export class HospitalService {
       where: { establishmentId, codigo, deletedAt: null },
       select: { id: true },
     });
-    if (exists) throw new BadRequestException('Ya existe un área con ese código');
+    if (exists)
+      throw new BadRequestException('Ya existe un área con ese código');
 
     const row = await this.prisma.hospitalArea.create({
       data: {
@@ -90,11 +104,19 @@ export class HospitalService {
         tipo: dto.tipo,
       },
     });
-    await this.audit.log({ userId, action: 'CREATE', entity: 'HospitalArea', entityId: row.id });
+    await this.audit.log({
+      userId,
+      action: 'CREATE',
+      entity: 'HospitalArea',
+      entityId: row.id,
+    });
     return row;
   }
 
-  async listConsumptions(establishmentId: string, query: HospitalConsumptionListQueryDto) {
+  async listConsumptions(
+    establishmentId: string,
+    query: HospitalConsumptionListQueryDto,
+  ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.HospitalInternalConsumptionWhereInput = {
       establishmentId,
@@ -110,7 +132,9 @@ export class HospitalService {
         take,
         orderBy: { createdAt: 'desc' },
         include: {
-          hospitalArea: { select: { id: true, codigo: true, nombre: true, tipo: true } },
+          hospitalArea: {
+            select: { id: true, codigo: true, nombre: true, tipo: true },
+          },
           solicitadoPor: { select: { id: true, nombre: true } },
           items: {
             include: { product: { select: { id: true, nombre: true } } },
@@ -147,7 +171,8 @@ export class HospitalService {
     dto: CreateHospitalConsumptionDto,
     actor: JwtRequestUser,
   ) {
-    if (!dto.items?.length) throw new BadRequestException('Debe incluir al menos un producto');
+    if (!dto.items?.length)
+      throw new BadRequestException('Debe incluir al menos un producto');
 
     await this.scope.assertWarehouseInTenant(actor, dto.warehouseId);
     const warehouse = await this.prisma.warehouse.findFirst({
@@ -157,7 +182,12 @@ export class HospitalService {
     if (!warehouse) throw new NotFoundException('Almacén no válido');
 
     const area = await this.prisma.hospitalArea.findFirst({
-      where: { id: dto.hospitalAreaId, establishmentId, deletedAt: null, activo: true },
+      where: {
+        id: dto.hospitalAreaId,
+        establishmentId,
+        deletedAt: null,
+        activo: true,
+      },
       select: { id: true, codigo: true },
     });
     if (!area) throw new NotFoundException('Área hospitalaria no válida');
@@ -200,11 +230,17 @@ export class HospitalService {
     return { id: row.id, estado: row.estado };
   }
 
-  async dispenseConsumption(id: string, establishmentId: string, userId: string) {
-    const consumption = await this.prisma.hospitalInternalConsumption.findFirst({
-      where: { id, establishmentId, deletedAt: null },
-      include: { items: true, hospitalArea: { select: { codigo: true } } },
-    });
+  async dispenseConsumption(
+    id: string,
+    establishmentId: string,
+    userId: string,
+  ) {
+    const consumption = await this.prisma.hospitalInternalConsumption.findFirst(
+      {
+        where: { id, establishmentId, deletedAt: null },
+        include: { items: true, hospitalArea: { select: { codigo: true } } },
+      },
+    );
     if (!consumption) throw new NotFoundException('Solicitud no encontrada');
     if (consumption.estado !== HospitalConsumptionStatus.SOLICITADO) {
       throw new BadRequestException('La solicitud ya fue procesada');
@@ -251,13 +287,17 @@ export class HospitalService {
   }
 
   async cancelConsumption(id: string, establishmentId: string, userId: string) {
-    const consumption = await this.prisma.hospitalInternalConsumption.findFirst({
-      where: { id, establishmentId, deletedAt: null },
-      select: { id: true, estado: true },
-    });
+    const consumption = await this.prisma.hospitalInternalConsumption.findFirst(
+      {
+        where: { id, establishmentId, deletedAt: null },
+        select: { id: true, estado: true },
+      },
+    );
     if (!consumption) throw new NotFoundException('Solicitud no encontrada');
     if (consumption.estado !== HospitalConsumptionStatus.SOLICITADO) {
-      throw new BadRequestException('Solo se pueden cancelar solicitudes pendientes');
+      throw new BadRequestException(
+        'Solo se pueden cancelar solicitudes pendientes',
+      );
     }
 
     await this.prisma.hospitalInternalConsumption.update({

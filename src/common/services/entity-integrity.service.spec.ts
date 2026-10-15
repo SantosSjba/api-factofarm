@@ -40,7 +40,9 @@ describe('EntityIntegrityService', () => {
 
   it('bloquea eliminar producto con ventas', async () => {
     prisma.saleItem.count.mockResolvedValue(2);
-    prisma.productWarehouseStock.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+    prisma.productWarehouseStock.aggregate.mockResolvedValue({
+      _count: { _all: 0 },
+    });
     prisma.productLotStock.count.mockResolvedValue(0);
     prisma.productSerial.count.mockResolvedValue(0);
     prisma.purchaseOrderItem.count.mockResolvedValue(0);
@@ -54,7 +56,9 @@ describe('EntityIntegrityService', () => {
 
   it('permite eliminar producto sin dependencias', async () => {
     prisma.saleItem.count.mockResolvedValue(0);
-    prisma.productWarehouseStock.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+    prisma.productWarehouseStock.aggregate.mockResolvedValue({
+      _count: { _all: 0 },
+    });
     prisma.productLotStock.count.mockResolvedValue(0);
     prisma.productSerial.count.mockResolvedValue(0);
     prisma.purchaseOrderItem.count.mockResolvedValue(0);
@@ -67,13 +71,15 @@ describe('EntityIntegrityService', () => {
   it('bloquea eliminar cliente con CxC pendiente', async () => {
     prisma.accountReceivable.count.mockResolvedValue(1);
     prisma.deliveryOrder.count.mockResolvedValue(0);
-    await expect(service.assertCanDeleteCustomer('c1')).rejects.toThrow(/cuentas por cobrar/);
+    await expect(service.assertCanDeleteCustomer('c1')).rejects.toThrow(
+      /cuentas por cobrar/,
+    );
   });
 
   it('bloquea mutar serie vendida', () => {
     expect(() =>
       service.assertCanMutateProductSerial({
-        estado: 'VENDIDO' as never,
+        estado: 'VENDIDO',
         vendido: true,
       }),
     ).toThrow(/vendida o reservada/);
@@ -81,8 +87,8 @@ describe('EntityIntegrityService', () => {
 
   it('bloquea segunda sesión abierta en la misma caja', async () => {
     prisma.cashSession = { count: jest.fn().mockResolvedValue(1) };
-    await expect(service.assertCashRegisterHasNoOpenSession('caja-1')).rejects.toThrow(
-      /sesión abierta/,
-    );
+    await expect(
+      service.assertCashRegisterHasNoOpenSession('caja-1'),
+    ).rejects.toThrow(/sesión abierta/);
   });
 });

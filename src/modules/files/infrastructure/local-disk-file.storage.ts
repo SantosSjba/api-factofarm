@@ -47,8 +47,8 @@ export class LocalDiskFileStorage implements IFileStorage {
     return join(this.uploadsRoot, rutaRelativa);
   }
 
-  async exists(rutaRelativa: string): Promise<boolean> {
-    return existsSync(this.resolveAbsolutePath(rutaRelativa));
+  exists(rutaRelativa: string): Promise<boolean> {
+    return Promise.resolve(existsSync(this.resolveAbsolutePath(rutaRelativa)));
   }
 
   createReadStream(rutaRelativa: string): Readable {

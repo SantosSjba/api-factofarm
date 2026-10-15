@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -16,7 +23,10 @@ export class AuditController {
   @Get()
   @RequirePermissions('audit.read', 'nav.usuarios')
   @ApiOperation({ summary: 'Consultar registro de auditoría (compliance)' })
-  findAll(@Query() query: AuditLogQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: AuditLogQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.service.findAll(query, actor);
   }
 
@@ -33,7 +43,10 @@ export class AuditController {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('auditoria-factofarm.xlsx')}`,
     );
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(buffer);
   }
 }

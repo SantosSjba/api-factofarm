@@ -6,7 +6,10 @@ describe('Billing sale flow (mock OSE)', () => {
   const mock = new MockBillingProvider();
 
   it('emite boleta mock y permite RC/baja en desarrollo', async () => {
-    const caps = getBillingProviderCapabilities(BillingProviderType.MOCK, 'development');
+    const caps = getBillingProviderCapabilities(
+      BillingProviderType.MOCK,
+      'development',
+    );
     expect(caps.mockAllowed).toBe(true);
     expect(caps.supportsDailySummary).toBe(true);
     expect(caps.supportsVoidDocument).toBe(true);

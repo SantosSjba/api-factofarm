@@ -118,7 +118,9 @@ export class UpdatePromotionDto {
 }
 
 export class LoyaltyAdjustDto {
-  @ApiProperty({ description: 'Puntos a sumar (negativo para canje/descuento)' })
+  @ApiProperty({
+    description: 'Puntos a sumar (negativo para canje/descuento)',
+  })
   @Type(() => Number)
   @IsInt()
   puntos!: number;

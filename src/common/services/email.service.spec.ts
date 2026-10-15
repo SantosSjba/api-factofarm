@@ -14,7 +14,7 @@ describe('Correo configurable sin enviar mensajes reales', () => {
       new ConfigService({
         NODE_ENV: production ? 'production' : 'development',
       }),
-      { get: async (key: string) => values[key] ?? '' } as never,
+      { get: (key: string) => Promise.resolve(values[key] ?? '') } as never,
     );
   }
   it('recuperación usa credenciales y remitente del panel', async () => {
@@ -39,8 +39,8 @@ describe('Correo configurable sin enviar mensajes reales', () => {
       expect.objectContaining({
         from: 'Botica <no-reply@example.com>',
         to: 'test@example.invalid',
-        text: expect.stringContaining('token=demo'),
-      }),
+        text: expect.stringContaining('token=demo') as unknown,
+      }) as unknown,
     );
   });
   it('no simula envío en producción si SMTP no está configurado', async () => {
@@ -55,10 +55,12 @@ describe('Correo configurable sin enviar mensajes reales', () => {
       SMTP_PORT: '587',
     }).sendTransactional('test@example.invalid', 'test', 'test');
     expect(nodemailer.createTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 587, secure: false }),
+      expect.objectContaining({ port: 587, secure: false }) as unknown,
     );
     expect(sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'FactoFarm <noreply@factofarm.local>' }),
+      expect.objectContaining({
+        from: 'FactoFarm <noreply@factofarm.local>',
+      }) as unknown,
     );
   });
 });

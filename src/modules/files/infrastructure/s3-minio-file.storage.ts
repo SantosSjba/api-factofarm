@@ -1,3 +1,4 @@
+import { safeError } from '../../../common/logging/http-logger.config';
 import {
   CreateBucketCommand,
   GetObjectCommand,
@@ -27,7 +28,10 @@ export class S3MinioFileStorage implements IFileStorage {
   private bucketReady: Promise<void>;
 
   constructor(config: ConfigService) {
-    const endpoint = (config.get<string>('S3_ENDPOINT') ?? '').replace(/\/$/, '');
+    const endpoint = (config.get<string>('S3_ENDPOINT') ?? '').replace(
+      /\/$/,
+      '',
+    );
     const region = config.get<string>('S3_REGION') ?? 'us-east-1';
     const accessKeyId = config.get<string>('S3_ACCESS_KEY') ?? '';
     const secretAccessKey = config.get<string>('S3_SECRET_KEY') ?? '';
@@ -52,14 +56,15 @@ export class S3MinioFileStorage implements IFileStorage {
       this.logger.log(`MinIO/S3 bucket listo: ${this.bucket}`);
     } catch {
       try {
-        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+        await this.client.send(
+          new CreateBucketCommand({ Bucket: this.bucket }),
+        );
         this.logger.log(`MinIO/S3 bucket creado: ${this.bucket}`);
       } catch (err) {
-        this.logger.warn(
-          `No se pudo verificar/crear bucket ${this.bucket}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        this.logger.warn({
+          event: 'storage_bucket_unavailable',
+          error: safeError(err),
+        });
       }
     }
   }
@@ -124,7 +129,11 @@ export class S3MinioFileStorage implements IFileStorage {
     const stream = await this.createReadStream(rutaRelativa);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const data: unknown = chunk;
+      if (Buffer.isBuffer(data)) chunks.push(Buffer.from(data));
+      else if (typeof data === 'string' || data instanceof Uint8Array)
+        chunks.push(Buffer.from(data));
+      else throw new Error('Fragmento de archivo S3 inválido');
     }
     return Buffer.concat(chunks);
   }

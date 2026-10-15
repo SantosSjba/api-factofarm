@@ -40,7 +40,10 @@ export class PublicContactService {
       await this.email.sendTransactional(salesEmail, subject, text);
     } else {
       this.logger.warn('[DEV] Sin SALES_CONTACT_EMAIL — solicitud de cuenta:');
-      this.logger.warn(text);
+      this.logger.warn({
+        event: 'notification_skipped',
+        reason: 'recipient_not_configured',
+      });
     }
 
     return { ok: true };

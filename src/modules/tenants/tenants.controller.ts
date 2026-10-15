@@ -39,7 +39,10 @@ export class TenantsController {
   @Get()
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Listar clientes SaaS (plataforma FactoFarm)' })
-  findAll(@Query() query: TenantListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: TenantListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.tenants.findAll({
       search: query.search,
@@ -53,7 +56,10 @@ export class TenantsController {
   @Get('leads')
   @RequirePermissions('tenants.read', 'nav.platform_leads')
   @ApiOperation({ summary: 'Listar leads comerciales' })
-  listLeads(@Query() query: TenantListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  listLeads(
+    @Query() query: TenantListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.tenants.listLeads({
       status: query.status,
@@ -76,7 +82,9 @@ export class TenantsController {
 
   @Post('leads/:id/convert')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
-  @ApiOperation({ summary: 'Convertir lead en cliente y aprovisionar acceso inicial' })
+  @ApiOperation({
+    summary: 'Convertir lead en cliente y aprovisionar acceso inicial',
+  })
   convertLead(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConvertTenantLeadDto,
@@ -89,7 +97,10 @@ export class TenantsController {
   @Get('complaints')
   @RequirePermissions('complaints.read', 'nav.platform_reclamaciones')
   @ApiOperation({ summary: 'Listar reclamos del libro virtual' })
-  listComplaints(@Query() query: ComplaintListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  listComplaints(
+    @Query() query: ComplaintListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.complaints.findAll({
       search: query.search,
@@ -102,7 +113,10 @@ export class TenantsController {
   @Get('complaints/:id')
   @RequirePermissions('complaints.read', 'nav.platform_reclamaciones')
   @ApiOperation({ summary: 'Detalle de reclamo' })
-  getComplaint(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  getComplaint(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.complaints.findOne(id);
   }
@@ -122,7 +136,10 @@ export class TenantsController {
   @Get(':id')
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Detalle de cliente SaaS' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.tenants.findOne(id);
   }
@@ -150,7 +167,10 @@ export class TenantsController {
   @Post(':id/activate')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Activar cliente' })
-  activate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  activate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.tenants.activate(id, actor.sub);
   }
@@ -158,7 +178,10 @@ export class TenantsController {
   @Post(':id/suspend')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
   @ApiOperation({ summary: 'Suspender cliente' })
-  suspend(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  suspend(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     assertPlatformAdmin(actor);
     return this.tenants.suspend(id, actor.sub);
   }
@@ -166,7 +189,8 @@ export class TenantsController {
   @Post(':id/enter-panel')
   @RequirePermissions('tenants.read', 'nav.platform_clientes')
   @ApiOperation({
-    summary: 'Generar acceso de soporte al panel del cliente (abrir en nueva pestaña)',
+    summary:
+      'Generar acceso de soporte al panel del cliente (abrir en nueva pestaña)',
   })
   enterPanel(
     @Param('id', ParseUUIDPipe) id: string,
@@ -178,7 +202,9 @@ export class TenantsController {
 
   @Post(':id/provision')
   @RequirePermissions('tenants.write', 'nav.platform_clientes')
-  @ApiOperation({ summary: 'Aprovisionar establecimiento y usuario administrador' })
+  @ApiOperation({
+    summary: 'Aprovisionar establecimiento y usuario administrador',
+  })
   provision(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ProvisionTenantDto,

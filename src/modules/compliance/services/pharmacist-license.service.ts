@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
+
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
@@ -87,7 +87,7 @@ export class PharmacistLicenseService {
             : dto.vigenciaHasta
               ? new Date(dto.vigenciaHasta)
               : undefined,
-        userId: dto.userId === null ? null : dto.userId ?? undefined,
+        userId: dto.userId === null ? null : (dto.userId ?? undefined),
         activo: dto.activo ?? undefined,
       },
     });
@@ -144,7 +144,7 @@ export class PharmacistLicenseService {
       select: { titularPharmacistLicenseId: true },
     });
 
-    let license =
+    const license =
       approver.pharmacistLicense ??
       (establishment?.titularPharmacistLicenseId
         ? await this.prisma.pharmacistLicense.findFirst({
@@ -163,7 +163,9 @@ export class PharmacistLicenseService {
     }
 
     if (license.vigenciaHasta && license.vigenciaHasta < new Date()) {
-      throw new BadRequestException('La colegiatura del farmacéutico está vencida');
+      throw new BadRequestException(
+        'La colegiatura del farmacéutico está vencida',
+      );
     }
 
     if (digitalSignature) {
@@ -178,8 +180,14 @@ export class PharmacistLicenseService {
     return license;
   }
 
-  buildDispensationSignature(licenseId: string, approverUserId: string, establishmentId: string) {
-    return this.crypto.hashSignature(`${licenseId}:${approverUserId}:${establishmentId}`);
+  buildDispensationSignature(
+    licenseId: string,
+    approverUserId: string,
+    establishmentId: string,
+  ) {
+    return this.crypto.hashSignature(
+      `${licenseId}:${approverUserId}:${establishmentId}`,
+    );
   }
 
   private async ensure(id: string) {
@@ -187,6 +195,7 @@ export class PharmacistLicenseService {
       where: { id, deletedAt: null },
       select: { id: true },
     });
-    if (!row) throw new NotFoundException('Licencia farmacéutica no encontrada');
+    if (!row)
+      throw new NotFoundException('Licencia farmacéutica no encontrada');
   }
 }

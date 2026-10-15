@@ -34,7 +34,11 @@ describeIntegration('Factiliza billing integration (sandbox)', () => {
       moneda: 'PEN',
       esContingencia: false,
       emisor: { ruc, razonSocial: 'BOTICA INTEGRACION TEST' },
-      receptor: { tipoDoc: '1', numeroDoc: '00000001', nombre: 'CLIENTE PRUEBA' },
+      receptor: {
+        tipoDoc: '1',
+        numeroDoc: '00000001',
+        nombre: 'CLIENTE PRUEBA',
+      },
       subtotal: '8.47',
       igvTotal: '1.53',
       total: '10.00',
@@ -59,9 +63,14 @@ describeIntegration('Factiliza billing integration (sandbox)', () => {
 
 describe('Factiliza capabilities contract', () => {
   it('documenta limitaciones RC/baja/especiales', () => {
-    const caps = getBillingProviderCapabilities(BillingProviderType.FACTILIZA, 'production');
+    const caps = getBillingProviderCapabilities(
+      BillingProviderType.FACTILIZA,
+      'production',
+    );
     expect(caps.supportsDailySummary).toBe(false);
-    expect(caps.unsupportedSpecialDocuments.map((row) => row.documentType)).toEqual([
+    expect(
+      caps.unsupportedSpecialDocuments.map((row) => row.documentType),
+    ).toEqual([
       'RETENCION',
       'PERCEPCION',
       'LIQUIDACION_COMPRA',

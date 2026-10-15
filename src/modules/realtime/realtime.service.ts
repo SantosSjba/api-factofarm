@@ -15,7 +15,11 @@ export class RealtimeService {
     this.server = server;
   }
 
-  emitToEstablishment(establishmentId: string, event: RealtimeEvent, payload: unknown) {
+  emitToEstablishment(
+    establishmentId: string,
+    event: RealtimeEvent,
+    payload: unknown,
+  ) {
     if (!this.server) return;
     this.server.to(establishmentRoom(establishmentId)).emit(event, payload);
   }
@@ -25,7 +29,11 @@ export class RealtimeService {
     this.server.to(saleRoom(saleId)).emit(event, payload);
   }
 
-  emitStockUpdated(establishmentId: string, warehouseId: string, productId?: string) {
+  emitStockUpdated(
+    establishmentId: string,
+    warehouseId: string,
+    productId?: string,
+  ) {
     this.emitToEstablishment(establishmentId, REALTIME_EVENTS.STOCK_UPDATED, {
       warehouseId,
       productId,
@@ -35,17 +43,36 @@ export class RealtimeService {
 
   emitSaleCompleted(
     establishmentId: string,
-    payload: { saleId: string; total: string; documentType: string; serie?: string | null; numero?: string | null },
+    payload: {
+      saleId: string;
+      total: string;
+      documentType: string;
+      serie?: string | null;
+      numero?: string | null;
+    },
   ) {
-    this.emitToEstablishment(establishmentId, REALTIME_EVENTS.SALE_COMPLETED, payload);
+    this.emitToEstablishment(
+      establishmentId,
+      REALTIME_EVENTS.SALE_COMPLETED,
+      payload,
+    );
   }
 
   emitBillingStatus(
     establishmentId: string,
     saleId: string,
-    payload: { saleId: string; sunatStatus: string; sunatCodigo?: string | null; sunatDescripcion?: string | null },
+    payload: {
+      saleId: string;
+      sunatStatus: string;
+      sunatCodigo?: string | null;
+      sunatDescripcion?: string | null;
+    },
   ) {
     this.emitToSale(saleId, REALTIME_EVENTS.BILLING_STATUS, payload);
-    this.emitToEstablishment(establishmentId, REALTIME_EVENTS.BILLING_STATUS, payload);
+    this.emitToEstablishment(
+      establishmentId,
+      REALTIME_EVENTS.BILLING_STATUS,
+      payload,
+    );
   }
 }

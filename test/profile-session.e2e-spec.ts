@@ -41,7 +41,9 @@ describe('Perfil y seguridad de contraseña', () => {
       .post('/api/v1/auth/login')
       .send({ email, password: 'Test123!old' })
       .expect(200);
-    const bearer = { Authorization: `Bearer ${login.body.accessToken}` };
+    const bearer = {
+      Authorization: `Bearer ${(login.body as { accessToken: string }).accessToken}`,
+    };
     await request(app.getHttpServer())
       .patch('/api/v1/auth/me')
       .set(bearer)
@@ -57,7 +59,9 @@ describe('Perfil y seguridad de contraseña', () => {
       .set(bearer)
       .send({ nombre: ' Perfil actualizado ' })
       .expect(200);
-    expect(updated.body.nombre).toBe('Perfil actualizado');
+    expect((updated.body as { nombre: string }).nombre).toBe(
+      'Perfil actualizado',
+    );
     await request(app.getHttpServer())
       .post('/api/v1/auth/change-password')
       .set(bearer)
@@ -79,7 +83,9 @@ describe('Perfil y seguridad de contraseña', () => {
       .expect(401);
     await request(app.getHttpServer())
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: login.body.refreshToken })
+      .send({
+        refreshToken: (login.body as { refreshToken: string }).refreshToken,
+      })
       .expect(401);
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')

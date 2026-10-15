@@ -46,7 +46,10 @@ export class SaleLotAllocationPreviewDto {
   @Min(0.0001)
   quantity!: number;
 
-  @ApiProperty({ enum: SaleLotAllocationMode, default: SaleLotAllocationMode.AUTO })
+  @ApiProperty({
+    enum: SaleLotAllocationMode,
+    default: SaleLotAllocationMode.AUTO,
+  })
   @IsEnum(SaleLotAllocationMode)
   mode: SaleLotAllocationMode = SaleLotAllocationMode.AUTO;
 

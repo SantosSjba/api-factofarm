@@ -31,7 +31,10 @@ describe('PharmacistLicenseService', () => {
   });
 
   it('crea licencia farmacéutica', async () => {
-    prisma.pharmacistLicense.create.mockResolvedValue({ id: 'pl-1', fullName: 'Dr. Test' });
+    prisma.pharmacistLicense.create.mockResolvedValue({
+      id: 'pl-1',
+      fullName: 'Dr. Test',
+    });
     const row = await service.create({
       colegiaturaCqp: 'CQP-123',
       fullName: 'Dr. Test',
@@ -42,8 +45,8 @@ describe('PharmacistLicenseService', () => {
 
   it('lanza not found al actualizar inexistente', async () => {
     prisma.pharmacistLicense.findFirst.mockResolvedValue(null);
-    await expect(service.update('missing', { fullName: 'X' })).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.update('missing', { fullName: 'X' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

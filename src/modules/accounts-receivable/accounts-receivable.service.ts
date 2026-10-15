@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
-  AccountReceivableStatus,
-  Prisma,
-} from '../../generated/prisma/client';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AccountReceivableStatus, Prisma } from '../../generated/prisma/client';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -25,7 +29,12 @@ export class AccountsReceivableService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: { in: [AccountReceivableStatus.PENDIENTE, AccountReceivableStatus.PARCIAL] },
+        estado: {
+          in: [
+            AccountReceivableStatus.PENDIENTE,
+            AccountReceivableStatus.PARCIAL,
+          ],
+        },
         fechaVencimiento: { lt: now },
       },
       data: { estado: AccountReceivableStatus.VENCIDA },
@@ -35,7 +44,9 @@ export class AccountsReceivableService {
       establishmentId,
       deletedAt: null,
       ...(query.customerId ? { customerId: query.customerId } : {}),
-      ...(query.estado ? { estado: query.estado as AccountReceivableStatus } : {}),
+      ...(query.estado
+        ? { estado: query.estado as AccountReceivableStatus }
+        : {}),
     };
 
     const [total, rows] = await Promise.all([
@@ -54,7 +65,9 @@ export class AccountsReceivableService {
           fechaEmision: true,
           fechaVencimiento: true,
           estado: true,
-          customer: { select: { id: true, nombre: true, numeroDocumento: true } },
+          customer: {
+            select: { id: true, nombre: true, numeroDocumento: true },
+          },
           agreement: { select: { id: true, codigo: true, nombre: true } },
           sale: { select: { id: true, serie: true, numero: true } },
         },
@@ -86,7 +99,10 @@ export class AccountsReceivableService {
       where: { id, establishmentId, deletedAt: null },
     });
     if (!ar) throw new NotFoundException('Cuenta por cobrar no encontrada');
-    if (ar.estado === AccountReceivableStatus.PAGADA || ar.estado === AccountReceivableStatus.ANULADA) {
+    if (
+      ar.estado === AccountReceivableStatus.PAGADA ||
+      ar.estado === AccountReceivableStatus.ANULADA
+    ) {
       throw new BadRequestException('La cuenta ya está cerrada');
     }
 
@@ -113,7 +129,10 @@ export class AccountsReceivableService {
           deletedAt: null,
           saldo: { gte: monto },
           estado: {
-            notIn: [AccountReceivableStatus.PAGADA, AccountReceivableStatus.ANULADA],
+            notIn: [
+              AccountReceivableStatus.PAGADA,
+              AccountReceivableStatus.ANULADA,
+            ],
           },
         },
         data: {
@@ -131,10 +150,9 @@ export class AccountsReceivableService {
         where: { id },
         select: { saldo: true },
       });
-      const nuevoEstado =
-        arAfter.saldo.lessThanOrEqualTo(0)
-          ? AccountReceivableStatus.PAGADA
-          : AccountReceivableStatus.PARCIAL;
+      const nuevoEstado = arAfter.saldo.lessThanOrEqualTo(0)
+        ? AccountReceivableStatus.PAGADA
+        : AccountReceivableStatus.PARCIAL;
       await tx.accountReceivable.update({
         where: { id },
         data: { estado: nuevoEstado },

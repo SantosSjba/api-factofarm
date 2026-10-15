@@ -101,7 +101,7 @@ export class RealtimeGateway
   handleDisconnect(client: Socket) {
     const user = (client.data as { user?: AuthJwtPayload }).user;
     if (user) {
-      this.logger.debug(`Cliente WS desconectado: ${user.email}`);
+      this.logger.debug({ event: 'websocket_disconnected', userId: user.sub });
     }
   }
 

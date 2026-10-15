@@ -1,3 +1,9 @@
+import type { App } from 'supertest/types';
+function isAuditMethod(
+  method: string,
+): method is 'get' | 'post' | 'patch' | 'put' | 'delete' {
+  return ['get', 'post', 'patch', 'put', 'delete'].includes(method);
+}
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { writeFileSync } from 'node:fs';
@@ -11,7 +17,7 @@ import { UserRole } from '../src/generated/prisma/client';
 
 /** Auditoría transversal: inventario de endpoints, lecturas y configuración. */
 describe('Beta audit transversal', () => {
-  let app: INestApplication;
+  let app: INestApplication<App>;
   const evidence: Array<{
     method: string;
     path: string;
@@ -49,15 +55,15 @@ describe('Beta audit transversal', () => {
     for (const [path, operations] of Object.entries(doc.paths)) {
       if (path === '/api/v1' || publicPaths.some((p) => path.startsWith(p)))
         continue;
-      for (const method of Object.keys(operations!)) {
-        if (!['get', 'post', 'patch', 'put', 'delete'].includes(method))
-          continue;
+      for (const method of Object.keys(operations)) {
+        if (!isAuditMethod(method)) continue;
         const resolved = path.replace(
           /\{[^}]+\}/g,
           '00000000-0000-4000-8000-000000000000',
         );
-        const res = await (request(app.getHttpServer()) as any)
+        const res = await request(app.getHttpServer())
           [method](resolved)
+          .timeout({ response: 15000, deadline: 30000 })
           .send({});
         evidence.push({
           method,
@@ -72,7 +78,7 @@ describe('Beta audit transversal', () => {
     expect(failures).toEqual([]);
   }, 120000);
   it('lecturas sin parámetros no producen errores de servidor', async () => {
-    const auth = await loginAsAdmin(app as never);
+    const auth = await loginAsAdmin(app);
     const doc = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle('audit').setVersion('1').build(),
@@ -88,6 +94,7 @@ describe('Beta audit transversal', () => {
         continue;
       const res = await request(app.getHttpServer())
         .get(path)
+        .timeout({ response: 15000, deadline: 30000 })
         .set('Authorization', `Bearer ${auth.token}`);
       evidence.push({
         method: 'get',
@@ -96,12 +103,14 @@ describe('Beta audit transversal', () => {
         check: 'admin-read',
       });
       if (res.status >= 500)
-        failures.push(`${path}: ${res.status} ${res.body?.message}`);
+        failures.push(
+          `${path}: ${res.status} ${JSON.stringify((res.body as { message?: string | string[] })?.message)}`,
+        );
     }
     expect(failures).toEqual([]);
   }, 300000);
   it('todos los roles reales pueden leer su perfil y tienen prohibida configuración global', async () => {
-    const auth = await loginAsAdmin(app as never);
+    const auth = await loginAsAdmin(app);
     const prisma = app.get(PrismaService);
     const reference = await prisma.user.findUniqueOrThrow({
       where: { id: auth.userId },
@@ -166,7 +175,7 @@ describe('Beta audit transversal', () => {
     }
   }, 180000);
   it('todos los DTO de escritura rechazan campos desconocidos antes de modificar datos', async () => {
-    const auth = await loginAsAdmin(app as never);
+    const auth = await loginAsAdmin(app);
     const doc = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle('audit').setVersion('1').build(),
@@ -189,8 +198,9 @@ describe('Beta audit transversal', () => {
           /\{[^}]+\}/g,
           '00000000-0000-4000-8000-000000000000',
         );
-        const res = await (request(app.getHttpServer()) as any)
+        const res = await request(app.getHttpServer())
           [method](resolved)
+          .timeout({ response: 15000, deadline: 30000 })
           .set('Authorization', `Bearer ${auth.token}`)
           .send({ __unexpected_beta_field: true });
         evidence.push({
@@ -210,16 +220,14 @@ describe('Beta audit transversal', () => {
     const operator = await prisma.user.findFirstOrThrow({
       where: { role: UserRole.SUPER_ADMIN, deletedAt: null },
     });
-    const token = await app
-      .get(JwtService)
-      .signAsync({
-        sub: operator.id,
-        email: operator.email,
-        role: operator.role,
-        tenantId: operator.tenantId,
-        establecimientoId: operator.establecimientoId,
-        permissionCodes: [],
-      });
+    const token = await app.get(JwtService).signAsync({
+      sub: operator.id,
+      email: operator.email,
+      role: operator.role,
+      tenantId: operator.tenantId,
+      establecimientoId: operator.establecimientoId,
+      permissionCodes: [],
+    });
     const bearer = { Authorization: `Bearer ${token}` };
     const original = await prisma.platformSetting.findUnique({
       where: { key: 'PASSWORD_RESET_EXPIRES_MINUTES' },
@@ -248,8 +256,12 @@ describe('Beta audit transversal', () => {
       const res = await request(app.getHttpServer())
         .get('/api/v1/public/settings')
         .expect(200);
-      expect(res.body).not.toHaveProperty('SMTP_PASS');
-      expect(res.body).not.toHaveProperty('JWT_SECRET');
+      expect(res.body as { message?: string | string[] }).not.toHaveProperty(
+        'SMTP_PASS',
+      );
+      expect(res.body as { message?: string | string[] }).not.toHaveProperty(
+        'JWT_SECRET',
+      );
     } finally {
       if (original)
         await prisma.platformSetting.update({

@@ -9,7 +9,13 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
@@ -27,7 +33,10 @@ export class WarehousesController {
   @Get()
   @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
   @ApiOperation({ summary: 'Listar almacenes' })
-  findAll(@Query() query: WarehouseListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  findAll(
+    @Query() query: WarehouseListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.warehousesService.findAll(query, actor);
   }
 
@@ -35,7 +44,10 @@ export class WarehousesController {
   @RequirePermissions('inventory.write')
   @ApiOperation({ summary: 'Crear almacén' })
   @ApiBody({ type: CreateWarehouseDto })
-  create(@Body() dto: CreateWarehouseDto, @CurrentUser() actor: JwtRequestUser) {
+  create(
+    @Body() dto: CreateWarehouseDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.warehousesService.create(dto, actor);
   }
 
@@ -55,7 +67,10 @@ export class WarehousesController {
   @RequirePermissions('inventory.write')
   @ApiOperation({ summary: 'Eliminar almacén (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtRequestUser) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     return this.warehousesService.remove(id, actor);
   }
 }

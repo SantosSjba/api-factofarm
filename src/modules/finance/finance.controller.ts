@@ -28,15 +28,29 @@ export class FinanceController {
   ) {}
 
   @Get('cash-flow')
-  @RequirePermissions('finance.read', 'nav.finanzas_movimientos', 'nav.contabilidad_reporte_resumido')
-  async cashFlow(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'finance.read',
+    'nav.finanzas_movimientos',
+    'nav.contabilidad_reporte_resumido',
+  )
+  async cashFlow(
+    @Query() query: FinancePeriodQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.getCashFlow(establishmentId, query);
   }
 
   @Get('margin-report')
-  @RequirePermissions('finance.read', 'nav.balance', 'nav.contabilidad_resumen_venta')
-  async margin(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'finance.read',
+    'nav.balance',
+    'nav.contabilidad_resumen_venta',
+  )
+  async margin(
+    @Query() query: FinancePeriodQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.getMarginReport(establishmentId, query);
   }
@@ -64,35 +78,59 @@ export class FinanceController {
 
   @Post('bank-accounts')
   @RequirePermissions('finance.write', 'nav.balance')
-  async createBankAccount(@Body() dto: CreateBankAccountDto, @CurrentUser() actor: JwtRequestUser) {
+  async createBankAccount(
+    @Body() dto: CreateBankAccountDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.createBankAccount(establishmentId, dto, actor.sub);
   }
 
   @Get('bank-movements')
-  @RequirePermissions('finance.read', 'nav.balance', 'nav.transacciones', 'nav.conciliacion_bancaria')
-  async bankMovements(@Query() query: BankMovementListQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  @RequirePermissions(
+    'finance.read',
+    'nav.balance',
+    'nav.transacciones',
+    'nav.conciliacion_bancaria',
+  )
+  async bankMovements(
+    @Query() query: BankMovementListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.listBankMovements(establishmentId, query);
   }
 
   @Post('bank-movements')
   @RequirePermissions('finance.write', 'nav.balance')
-  async createBankMovement(@Body() dto: CreateBankMovementDto, @CurrentUser() actor: JwtRequestUser) {
+  async createBankMovement(
+    @Body() dto: CreateBankMovementDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.createBankMovement(establishmentId, dto, actor.sub);
   }
 
   @Post('bank-movements/reconcile')
   @RequirePermissions('finance.write', 'nav.balance')
-  async reconcile(@Body() dto: BulkReconcileMovementsDto, @CurrentUser() actor: JwtRequestUser) {
+  async reconcile(
+    @Body() dto: BulkReconcileMovementsDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.service.reconcileMovements(establishmentId, dto.movementIds, actor.sub);
+    return this.service.reconcileMovements(
+      establishmentId,
+      dto.movementIds,
+      actor.sub,
+    );
   }
 
   @Post('purchase-budgets')
   @RequirePermissions('finance.write', 'nav.finanzas_ingresos')
-  async upsertBudget(@Body() dto: UpsertPurchaseBudgetDto, @CurrentUser() actor: JwtRequestUser) {
+  async upsertBudget(
+    @Body() dto: UpsertPurchaseBudgetDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.upsertPurchaseBudget(establishmentId, dto, actor.sub);
   }
@@ -109,21 +147,30 @@ export class FinanceController {
 
   @Get('payments-by-method')
   @RequirePermissions('finance.read', 'nav.ingresos_egresos_medio_pago')
-  async paymentsByMethod(@Query() query: FinancePeriodQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async paymentsByMethod(
+    @Query() query: FinancePeriodQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.getPaymentsByMethod(establishmentId, query);
   }
 
   @Get('recent-payments')
   @RequirePermissions('finance.read', 'nav.pagos')
-  async recentPayments(@Query() query: RecentPaymentsQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async recentPayments(
+    @Query() query: RecentPaymentsQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.getRecentPayments(establishmentId, query);
   }
 
   @Get('general-ledger')
   @RequirePermissions('finance.read', 'nav.libro_mayor')
-  async generalLedger(@Query() query: GeneralLedgerQueryDto, @CurrentUser() actor: JwtRequestUser) {
+  async generalLedger(
+    @Query() query: GeneralLedgerQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.getGeneralLedger(establishmentId, query);
   }

@@ -11,7 +11,10 @@ export type BillingProviderCapabilities = {
   supportsDailySummary: boolean;
   supportsVoidDocument: boolean;
   supportedSpecialDocuments: BillingSpecialDocumentType[];
-  unsupportedSpecialDocuments: { documentType: BillingSpecialDocumentType; reason: string }[];
+  unsupportedSpecialDocuments: {
+    documentType: BillingSpecialDocumentType;
+    reason: string;
+  }[];
   notes: string[];
 };
 
@@ -37,10 +40,12 @@ export function getBillingProviderCapabilities(
       supportsDailySummary: false,
       supportsVoidDocument: false,
       supportedSpecialDocuments: [],
-      unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
-        documentType,
-        reason: FACTILIZA_UNSUPPORTED_REASON,
-      })),
+      unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map(
+        (documentType) => ({
+          documentType,
+          reason: FACTILIZA_UNSUPPORTED_REASON,
+        }),
+      ),
       notes: [
         'Prerrequisito: cuenta y token ya creados en el panel Factiliza (app.factiliza.com).',
         'Aquí solo pega URL + Bearer; FactoFarm emite factura/boleta/NC/ND y guía remitente.',
@@ -70,10 +75,13 @@ export function getBillingProviderCapabilities(
       supportsDailySummary: false,
       supportsVoidDocument: true,
       supportedSpecialDocuments: [],
-      unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
-        documentType,
-        reason: 'No cableado aún con APIsPERU. Use Nubefact o el panel APIsPERU.',
-      })),
+      unsupportedSpecialDocuments: FACTILIZA_UNSUPPORTED_SPECIAL.map(
+        (documentType) => ({
+          documentType,
+          reason:
+            'No cableado aún con APIsPERU. Use Nubefact o el panel APIsPERU.',
+        }),
+      ),
       notes: [
         'Prerrequisito: empresa creada en el panel APIsPERU (certificado PEM + usuario SOL) con su token permanente.',
         'Aquí pega URL (https://facturacion.apisperu.com/api/v1) y ese token; FactoFarm emite factura/boleta/NC/ND y baja.',
@@ -90,7 +98,9 @@ export function getBillingProviderCapabilities(
     mockAllowed: true,
     supportsDailySummary: !isProduction,
     supportsVoidDocument: !isProduction,
-    supportedSpecialDocuments: isProduction ? [] : [...FACTILIZA_UNSUPPORTED_SPECIAL],
+    supportedSpecialDocuments: isProduction
+      ? []
+      : [...FACTILIZA_UNSUPPORTED_SPECIAL],
     unsupportedSpecialDocuments: isProduction
       ? FACTILIZA_UNSUPPORTED_SPECIAL.map((documentType) => ({
           documentType,
@@ -110,7 +120,9 @@ export function assertSpecialDocumentSupported(
   nodeEnv = process.env.NODE_ENV,
 ): void {
   const caps = getBillingProviderCapabilities(provider, nodeEnv);
-  const blocked = caps.unsupportedSpecialDocuments.find((row) => row.documentType === documentType);
+  const blocked = caps.unsupportedSpecialDocuments.find(
+    (row) => row.documentType === documentType,
+  );
   if (blocked) {
     throw new Error(blocked.reason);
   }

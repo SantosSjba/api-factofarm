@@ -43,7 +43,9 @@ export class ColdChainService {
     });
     if (!zone) throw new NotFoundException('Zona de almacén no encontrada');
     if (zone.tipo !== 'REFRIGERADO') {
-      throw new NotFoundException('La zona debe ser de tipo refrigerado para registrar temperatura');
+      throw new NotFoundException(
+        'La zona debe ser de tipo refrigerado para registrar temperatura',
+      );
     }
 
     const fecha = dto.fecha ? new Date(dto.fecha) : new Date();

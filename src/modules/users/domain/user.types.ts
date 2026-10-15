@@ -1,4 +1,7 @@
-import type { IdentityDocumentType, UserRole } from '../../../generated/prisma/client';
+import type {
+  IdentityDocumentType,
+  UserRole,
+} from '../../../generated/prisma/client';
 
 export type UserProfileSnapshot = {
   tipoDocumento: IdentityDocumentType | null;

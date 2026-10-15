@@ -1,3 +1,4 @@
+import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import {
@@ -5,7 +6,10 @@ import {
   decodeCursor,
   encodeCursor,
 } from '../../common/dto/cursor-pagination.dto';
-import { buildPaginatedResult, paginationArgs } from '../../common/dto/pagination.dto';
+import {
+  buildPaginatedResult,
+  paginationArgs,
+} from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   dateRangeBoundsInTimeZone,
@@ -15,7 +19,10 @@ import {
 import { AuditLogExportQueryDto, AuditLogQueryDto } from './dto/audit-log.dto';
 import * as XLSX from 'xlsx';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
-import { actorFromJwt, tenantWhere } from '../../common/scoping/tenant-scope.util';
+import {
+  actorFromJwt,
+  tenantWhere,
+} from '../../common/scoping/tenant-scope.util';
 
 type AuditLogRow = {
   id: string;
@@ -100,7 +107,11 @@ export class AuditService {
     query: AuditLogExportQueryDto | AuditLogQueryDto,
     actor: JwtRequestUser,
   ): Promise<Prisma.AuditLogWhereInput> {
-    const dateFilter = await this.dateFilterForActor(actor, query.from, query.to);
+    const dateFilter = await this.dateFilterForActor(
+      actor,
+      query.from,
+      query.to,
+    );
     return {
       ...tenantWhere(actorFromJwt(actor)),
       ...(query.entity ? { entity: query.entity } : {}),
@@ -155,7 +166,10 @@ export class AuditService {
     };
   }
 
-  async buildExportBuffer(query: AuditLogExportQueryDto, actor: JwtRequestUser) {
+  async buildExportBuffer(
+    query: AuditLogExportQueryDto,
+    actor: JwtRequestUser,
+  ) {
     const limit = query.limit ?? 5000;
     const rows = await this.prisma.auditLog.findMany({
       where: await this.buildWhere(query, actor),
@@ -177,6 +191,6 @@ export class AuditService {
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(normalized);
     XLSX.utils.book_append_sheet(workbook, sheet, 'auditoria');
-    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    return writeWorkbookBuffer(workbook);
   }
 }

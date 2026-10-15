@@ -58,11 +58,15 @@ export function isValidIdentityDocumentNumber(
   return true;
 }
 
-export function identityDocumentNumberMessage(tipo: string | undefined | null): string {
+export function identityDocumentNumberMessage(
+  tipo: string | undefined | null,
+): string {
   if (tipo === 'DNI') return 'DNI debe tener 8 dígitos.';
   if (tipo === 'CE') return 'CE debe tener 9 a 12 caracteres alfanuméricos.';
-  if (tipo === 'PASAPORTE') return 'Pasaporte debe tener 6 a 12 caracteres alfanuméricos.';
-  if (tipo === 'OTRO') return 'Número de documento no válido (alfanumérico / guiones, máx. 20).';
+  if (tipo === 'PASAPORTE')
+    return 'Pasaporte debe tener 6 a 12 caracteres alfanuméricos.';
+  if (tipo === 'OTRO')
+    return 'Número de documento no válido (alfanumérico / guiones, máx. 20).';
   if (tipo === 'RUC') return 'RUC no válido.';
   return 'Número de documento no válido para el tipo seleccionado.';
 }

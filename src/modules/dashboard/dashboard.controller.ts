@@ -20,7 +20,9 @@ export class DashboardController {
 
   @Get('chain-summary')
   @RequirePermissions('nav.dashboard_admin')
-  @ApiOperation({ summary: 'Vista consolidada multi-sucursal del tenant (últimos 30 días)' })
+  @ApiOperation({
+    summary: 'Vista consolidada multi-sucursal del tenant (últimos 30 días)',
+  })
   getChainSummary(@CurrentUser() actor: JwtRequestUser) {
     return this.dashboard.getChainSummary(actor);
   }
@@ -61,7 +63,11 @@ export class DashboardController {
   }
 
   @Get('accountant')
-  @RequirePermissions('nav.dashboard_admin', 'nav.cuentas_pagar', 'nav.cuentas_cobrar')
+  @RequirePermissions(
+    'nav.dashboard_admin',
+    'nav.cuentas_pagar',
+    'nav.cuentas_cobrar',
+  )
   @ApiOperation({ summary: 'Dashboard contador / finanzas' })
   getAccountant(@CurrentUser() actor: JwtRequestUser) {
     return this.dashboard.getAccountantDashboard(actor);
