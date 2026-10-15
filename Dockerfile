@@ -13,7 +13,8 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm exec nest build \
+# Solo emite JS (sin type-check) para no agotar la RAM del VPS; el CI ya valida tipos con `pnpm run build`
+RUN pnpm exec tsc -p tsconfig.build.json --noCheck \
     && pnpm prune --prod
 
 FROM node:24-alpine AS runner
