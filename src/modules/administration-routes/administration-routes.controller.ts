@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateAdministrationRouteDto } from './dto/create-administration-route.dto';
 import { UpdateAdministrationRouteDto } from './dto/update-administration-route.dto';
@@ -50,6 +51,7 @@ export class AdministrationRoutesController {
     @Body() dto: UpdateAdministrationRouteDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.administrationRoutesService.update(id, dto, actor.sub);
   }
 
@@ -60,6 +62,7 @@ export class AdministrationRoutesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.administrationRoutesService.remove(id, actor.sub);
   }
 }

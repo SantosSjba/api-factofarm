@@ -19,6 +19,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateLaboratoryDto } from './dto/create-laboratory.dto';
 import { UpdateLaboratoryDto } from './dto/update-laboratory.dto';
@@ -57,6 +58,7 @@ export class LaboratoriesController {
     @Body() dto: UpdateLaboratoryDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.laboratoriesService.update(id, dto, actor.sub);
   }
 
@@ -68,6 +70,7 @@ export class LaboratoriesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.laboratoriesService.remove(id, actor.sub);
   }
 }

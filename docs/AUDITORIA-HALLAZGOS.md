@@ -294,11 +294,11 @@ Fuente: [`BETA-LAUNCH-CHECKLIST.md`](./BETA-LAUNCH-CHECKLIST.md), [`SAAS-TENANT-
 | A9 CPE solo con OSE real | `[ ]` | Producto; no bug de código |
 | B5 Volumen uploads | `[ ]` | Cubierto como **I-INF-01** |
 | B6 Sentry | `[ ]` | Ops; no re-listado como defect |
-| C2 Series POS catálogo | `[ ]` | Front aún free-text en POS |
+| C2 Series POS catálogo | `[x]` | Corregido 2026-10-14 (validación backend + selector POS) |
 | C3 Libro reclamaciones por farmacia | `[ ]` | = **B-PER-20** (modelo) |
 | C4 ARCO anonimización profunda | `[ ]` | Soft-delete customer only |
 | C5 WhatsApp/Meta / email cotización | `[ ]` | wa.me + SMS pendiente |
-| C6 Catálogos globales solo lectura | `[ ]` | Labs/médicos writable por tenants |
+| C6 Catálogos globales solo lectura | `[x]` | Corregido 2026-10-14: crear sí; editar/eliminar solo SUPER_ADMIN |
 | Bizlinks / RC Factiliza / APIsPERU parcial | código | Capability flags; no “bug” sino scope |
 | Signup self-service | front | “Próximamente disponible” |
 | Partitioning / multi-DB | DATA-RETENTION | Fase 4/5 no aplicadas |

@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateMedicoDto, UpdateMedicoDto } from './dto/medico.dto';
 import { MedicosService } from './medicos.service';
@@ -43,6 +44,7 @@ export class MedicosController {
     @Body() dto: UpdateMedicoDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.service.update(id, dto, actor.sub);
   }
 
@@ -52,6 +54,7 @@ export class MedicosController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.service.remove(id, actor.sub);
   }
 }

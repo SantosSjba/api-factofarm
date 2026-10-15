@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreatePharmaceuticalFormDto } from './dto/create-pharmaceutical-form.dto';
 import { UpdatePharmaceuticalFormDto } from './dto/update-pharmaceutical-form.dto';
@@ -50,6 +51,7 @@ export class PharmaceuticalFormsController {
     @Body() dto: UpdatePharmaceuticalFormDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.pharmaceuticalFormsService.update(id, dto, actor.sub);
   }
 
@@ -60,6 +62,7 @@ export class PharmaceuticalFormsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.pharmaceuticalFormsService.remove(id, actor.sub);
   }
 }

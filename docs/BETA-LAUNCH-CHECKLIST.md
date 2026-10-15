@@ -59,11 +59,11 @@ Leyenda: `[x]` hecho en código/docs · `[ ]` pendiente operativo (Coolify / neg
 | # | Ítem | Estado |
 |---|------|--------|
 | C1 | Socket.IO CORS alineado a `FRONTEND_URL`/`CORS_ORIGINS` | `[x]` |
-| C2 | Series POS desde catálogo (no texto libre) | `[ ]` |
+| C2 | Series POS desde catálogo (no texto libre) | `[x]` (2026-10-14: backend valida contra `EstablishmentSeries`; POS usa selector `GET /sales/pos-series`) |
 | C3 | Libro de reclamaciones **por farmacia** (hoy = plataforma) | `[ ]` producto |
 | C4 | ARCO anonimización profunda | `[ ]` |
 | C5 | WhatsApp Business API / email cotización automático | `[ ]` |
-| C6 | Catálogos globales (labs/médicos) solo lectura para tenants | `[ ]` |
+| C6 | Catálogos globales (labs/médicos) solo lectura para tenants | `[x]` (2026-10-14: farmacias crean; editar/eliminar solo SUPER_ADMIN en `/platform/catalogos/*`) |
 
 ---
 

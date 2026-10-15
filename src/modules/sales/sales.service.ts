@@ -69,6 +69,9 @@ import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
 
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
+/** Serie usada cuando el establecimiento aún no registra series del tipo. */
+const DEFAULT_SALE_SERIE = 'NV01';
+
 const DOC_SERIES_MAP: Record<SaleDocumentType, DocumentSeriesType> = {
   BOLETA: DocumentSeriesType.BOLETA_VENTA_ELECTRONICA,
   FACTURA: DocumentSeriesType.FACTURA_ELECTRONICA,
@@ -2520,6 +2523,41 @@ export class SalesService {
     return this.findOne(sale.id, establishmentId);
   }
 
+  /** Series que el POS puede usar por tipo de comprobante (mismo criterio que la venta). */
+  async posDocumentSeries(
+    establishmentId: string,
+  ): Promise<Record<SaleDocumentType, string[]>> {
+    const entries = await Promise.all(
+      (Object.keys(DOC_SERIES_MAP) as SaleDocumentType[]).map(
+        async (type) =>
+          [
+            type,
+            await this.allowedSeries(
+              this.prisma,
+              establishmentId,
+              DOC_SERIES_MAP[type],
+            ),
+          ] as const,
+      ),
+    );
+    return Object.fromEntries(entries) as Record<SaleDocumentType, string[]>;
+  }
+
+  private async allowedSeries(
+    db: Prisma.TransactionClient | PrismaService,
+    establishmentId: string,
+    seriesType: DocumentSeriesType,
+  ): Promise<string[]> {
+    const registered = await db.establishmentSeries.findMany({
+      where: { establishmentId, documentType: seriesType },
+      orderBy: { numero: 'asc' },
+      select: { numero: true },
+    });
+    return registered.length
+      ? registered.map((s) => s.numero)
+      : [DEFAULT_SALE_SERIE];
+  }
+
   private async resolveDocumentNumber(
     establishmentId: string,
     documentType: SaleDocumentType,
@@ -2528,12 +2566,17 @@ export class SalesService {
   ) {
     const db = tx ?? this.prisma;
     const seriesType = DOC_SERIES_MAP[documentType];
-    const series = await db.establishmentSeries.findFirst({
-      where: { establishmentId, documentType: seriesType },
-      orderBy: { numero: 'asc' },
-      select: { numero: true },
-    });
-    const serie = serieInput?.trim() || series?.numero || 'NV01';
+    const allowed = await this.allowedSeries(db, establishmentId, seriesType);
+    const requested = serieInput?.trim().toUpperCase();
+    // C2: la serie debe pertenecer al catálogo del establecimiento (no texto libre).
+    const serie = requested
+      ? allowed.find((numero) => numero.toUpperCase() === requested)
+      : allowed[0];
+    if (!serie) {
+      throw new BadRequestException(
+        `La serie ${requested} no está registrada para este tipo de comprobante en el establecimiento.`,
+      );
+    }
 
     if (tx) {
       await tx.$executeRaw`

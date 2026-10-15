@@ -75,6 +75,16 @@ export class SalesController {
     return this.service.posCatalog(establishmentId, warehouseId, search);
   }
 
+  @Get('pos-series')
+  @RequirePermissions('sales.read', 'nav.punto_venta')
+  @ApiOperation({
+    summary: 'Series válidas del establecimiento por tipo de comprobante (POS)',
+  })
+  async posSeries(@CurrentUser() actor: JwtRequestUser) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.posDocumentSeries(establishmentId);
+  }
+
   @Get('pos-substitutes')
   @RequirePermissions('sales.read', 'nav.punto_venta')
   @ApiOperation({

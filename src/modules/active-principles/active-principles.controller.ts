@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { MaestroListQueryDto } from '../../common/dto/maestro-list-query.dto';
+import { assertPlatformAdmin } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateActivePrincipleDto } from './dto/create-active-principle.dto';
 import { UpdateActivePrincipleDto } from './dto/update-active-principle.dto';
@@ -50,6 +51,7 @@ export class ActivePrinciplesController {
     @Body() dto: UpdateActivePrincipleDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.activePrinciplesService.update(id, dto, actor.sub);
   }
 
@@ -60,6 +62,7 @@ export class ActivePrinciplesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
+    assertPlatformAdmin(actor);
     return this.activePrinciplesService.remove(id, actor.sub);
   }
 }
