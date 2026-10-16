@@ -72,7 +72,11 @@ export class PharmaceuticalService {
     const rows = await this.prisma.saleItem.groupBy({
       by: ['productId'],
       where: {
-        sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' },
+        sale: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
+        },
       },
       _sum: { cantidad: true, totalLinea: true },
       orderBy: { _sum: { totalLinea: 'desc' } },
@@ -94,7 +98,11 @@ export class PharmaceuticalService {
     const rows = await this.prisma.saleItem.groupBy({
       by: ['productId'],
       where: {
-        sale: { establishmentId, deletedAt: null, estado: 'COMPLETADA' },
+        sale: {
+          establishmentId,
+          deletedAt: null,
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
+        },
       },
       _sum: { totalLinea: true },
     });
@@ -322,7 +330,7 @@ export class PharmaceuticalService {
         sale: {
           establishmentId,
           deletedAt: null,
-          estado: 'COMPLETADA',
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
           ...(dateFilter ? { createdAt: dateFilter } : {}),
         },
       },
@@ -417,7 +425,7 @@ export class PharmaceuticalService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         ...(warehouseId ? { warehouseId } : {}),
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       },
@@ -480,7 +488,7 @@ export class PharmaceuticalService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         prescriptionId: { not: null },
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       },

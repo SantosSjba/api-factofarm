@@ -3,12 +3,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AccountReceivableStatus, Prisma } from '../../generated/prisma/client';
+import {
+  AccountReceivableStatus,
+  PaymentMethod,
+  Prisma,
+} from '../../generated/prisma/client';
 import {
   buildPaginatedResult,
   paginationArgs,
 } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  assertPaymentReference,
+  normalizePaymentMethod,
+  registerCashFlow,
+} from '../cash-registers/cash-session.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AccountReceivableListQueryDto,
@@ -116,12 +125,29 @@ export class AccountsReceivableService {
       );
     }
 
+    const metodo = normalizePaymentMethod(dto.metodo);
+    if (dto.metodo?.trim() && !metodo) {
+      throw new BadRequestException(
+        'Medio de pago no válido (use efectivo, Yape, Plin, tarjeta o transferencia)',
+      );
+    }
+    assertPaymentReference(metodo, dto.referencia);
+
     const result = await this.prisma.$transaction(async (tx) => {
+      if (metodo === PaymentMethod.EFECTIVO) {
+        await registerCashFlow(tx, {
+          establishmentId,
+          userId,
+          monto,
+          comentario: `Cobro ${ar.documentoRef ?? 'cuenta por cobrar'}`,
+          referencia: dto.referencia,
+        });
+      }
       await tx.accountReceivablePayment.create({
         data: {
           accountReceivableId: id,
           monto,
-          metodoPago: dto.metodo?.trim() || null,
+          metodoPago: metodo ?? null,
           referencia: dto.referencia?.trim() || null,
           createdById: userId,
         },

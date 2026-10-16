@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BankMovementType, Prisma } from '../../generated/prisma/client';
+import {
+  BankMovementType,
+  PaymentMethod,
+  Prisma,
+  SaleStatus,
+} from '../../generated/prisma/client';
 import {
   buildPaginatedResult,
   paginationArgs,
@@ -35,89 +40,129 @@ export class FinanceService {
     private readonly audit: AuditLogService,
   ) {}
 
+  /**
+   * Flujo de caja (base efectivo): entra lo cobrado (ventas al contado + cobros de cuentas por
+   * cobrar) y sale lo pagado (pagos a proveedores + devoluciones al contado). Antes se sumaban
+   * ventas totales y además sus cobros (doble conteo del crédito), y compras devengadas además
+   * de sus pagos.
+   */
   async getCashFlow(establishmentId: string, query: FinancePeriodQueryDto) {
     const { from, to } = await this.parseRange(establishmentId, query);
+    const saleInRange = {
+      establishmentId,
+      deletedAt: null,
+      createdAt: { gte: from, lt: to },
+      // Anulada sin devoluciones = venta dejada sin efecto: no hubo cobro neto.
+      OR: [{ estado: { not: SaleStatus.ANULADA } }, { returns: { some: {} } }],
+    } satisfies Prisma.SaleWhereInput;
 
-    const salesAgg = await this.prisma.sale.aggregate({
-      where: {
-        establishmentId,
-        deletedAt: null,
-        estado: 'COMPLETADA',
-        createdAt: { gte: from, lt: to },
-      },
-      _sum: { total: true },
-      _count: true,
-    });
+    const [
+      salesCount,
+      salePayments,
+      purchasesAgg,
+      apPayments,
+      arPayments,
+      cashMovements,
+      returns,
+    ] = await Promise.all([
+      this.prisma.sale.count({ where: saleInRange }),
+      this.prisma.payment.aggregate({
+        where: {
+          metodo: { not: PaymentMethod.CREDITO },
+          sale: saleInRange,
+        },
+        _sum: { monto: true },
+      }),
+      this.prisma.accountPayable.aggregate({
+        where: {
+          establishmentId,
+          deletedAt: null,
+          fechaEmision: { gte: from, lt: to },
+        },
+        _sum: { montoTotal: true },
+        _count: true,
+      }),
+      this.prisma.accountPayablePayment.aggregate({
+        where: {
+          fechaPago: { gte: from, lt: to },
+          accountPayable: { establishmentId, deletedAt: null },
+        },
+        _sum: { monto: true },
+        _count: true,
+      }),
+      this.prisma.accountReceivablePayment.aggregate({
+        where: {
+          pagadoAt: { gte: from, lt: to },
+          accountReceivable: { establishmentId, deletedAt: null },
+        },
+        _sum: { monto: true },
+        _count: true,
+      }),
+      this.prisma.cashMovement.aggregate({
+        where: {
+          createdAt: { gte: from, lt: to },
+          cashSession: { cashRegister: { establishmentId } },
+        },
+        _sum: { monto: true },
+        _count: true,
+      }),
+      this.prisma.saleReturn.findMany({
+        where: {
+          createdAt: { gte: from, lt: to },
+          sale: { establishmentId, deletedAt: null },
+        },
+        select: {
+          totalDevuelto: true,
+          sale: {
+            select: {
+              total: true,
+              payments: { select: { metodo: true, monto: true } },
+            },
+          },
+        },
+      }),
+    ]);
 
-    const purchasesAgg = await this.prisma.accountPayable.aggregate({
-      where: {
-        establishmentId,
-        deletedAt: null,
-        fechaEmision: { gte: from, lt: to },
-      },
-      _sum: { montoTotal: true },
-      _count: true,
-    });
+    const zero = new Prisma.Decimal(0);
+    // Sólo se devuelve dinero por la parte cobrada al contado de la venta.
+    const devoluciones = returns.reduce((acc, r) => {
+      if (r.sale.total.lte(0)) return acc;
+      const contado = r.sale.payments
+        .filter((p) => p.metodo !== PaymentMethod.CREDITO)
+        .reduce((sum, p) => sum.plus(p.monto), zero);
+      return acc.plus(r.totalDevuelto.times(contado).div(r.sale.total));
+    }, zero);
 
-    const apPayments = await this.prisma.accountPayablePayment.aggregate({
-      where: {
-        fechaPago: { gte: from, lt: to },
-        accountPayable: { establishmentId, deletedAt: null },
-      },
-      _sum: { monto: true },
-      _count: true,
-    });
-
-    const arPayments = await this.prisma.accountReceivablePayment.aggregate({
-      where: {
-        pagadoAt: { gte: from, lt: to },
-        accountReceivable: { establishmentId, deletedAt: null },
-      },
-      _sum: { monto: true },
-      _count: true,
-    });
-
-    const cashMovements = await this.prisma.cashMovement.aggregate({
-      where: {
-        createdAt: { gte: from, lt: to },
-        cashSession: { cashRegister: { establishmentId } },
-      },
-      _sum: { monto: true },
-      _count: true,
-    });
-
-    const ingresosVentas = salesAgg._sum.total ?? new Prisma.Decimal(0);
-    const egresosCompras =
-      purchasesAgg._sum.montoTotal ?? new Prisma.Decimal(0);
-    const egresosAp = apPayments._sum?.monto ?? new Prisma.Decimal(0);
-    const ingresosAr = arPayments._sum.monto ?? new Prisma.Decimal(0);
+    const ingresosVentas = salePayments._sum.monto ?? zero;
+    const comprasDevengadas = purchasesAgg._sum.montoTotal ?? zero;
+    const egresosAp = apPayments._sum?.monto ?? zero;
+    const ingresosAr = arPayments._sum.monto ?? zero;
     const flujoNeto = ingresosVentas
       .plus(ingresosAr)
-      .minus(egresosCompras)
-      .minus(egresosAp);
+      .minus(egresosAp)
+      .minus(devoluciones);
 
     return {
       from: from.toISOString(),
       to: to.toISOString(),
       ingresos: {
         ventas: ingresosVentas.toString(),
-        ventasCount: salesAgg._count,
+        ventasCount: salesCount,
         cobrosClientes: ingresosAr.toString(),
         cobrosCount: arPayments._count,
       },
       egresos: {
-        compras: egresosCompras.toString(),
+        compras: comprasDevengadas.toString(),
         comprasCount: purchasesAgg._count,
         pagosProveedores: egresosAp.toString(),
         pagosProveedoresCount: apPayments._count,
+        devoluciones: devoluciones.toDecimalPlaces(2).toString(),
       },
       caja: {
-        movimientosTotal: (
-          cashMovements._sum.monto ?? new Prisma.Decimal(0)
-        ).toString(),
+        movimientosTotal: (cashMovements._sum.monto ?? zero).toString(),
         movimientosCount: cashMovements._count,
       },
-      flujoNeto: flujoNeto.toString(),
+      flujoNeto: flujoNeto.toDecimalPlaces(2).toString(),
     };
   }
 
@@ -129,7 +174,10 @@ export class FinanceService {
         sale: {
           establishmentId,
           deletedAt: null,
-          estado: 'COMPLETADA',
+          // Las ventas con devolución parcial siguen siendo ventas (antes desaparecían).
+          estado: {
+            in: [SaleStatus.COMPLETADA, SaleStatus.PARCIALMENTE_DEVUELTA],
+          },
           createdAt: { gte: from, lt: to },
         },
       },
@@ -209,7 +257,7 @@ export class FinanceService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       select: {
@@ -580,7 +628,7 @@ export class FinanceService {
         sale: {
           establishmentId,
           deletedAt: null,
-          estado: 'COMPLETADA',
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
           createdAt: { gte: from, lt: to },
         },
       },
@@ -714,7 +762,7 @@ export class FinanceService {
         sale: {
           establishmentId,
           deletedAt: null,
-          estado: 'COMPLETADA',
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
           ...(dateFilter ? { createdAt: dateFilter } : {}),
         },
       },
@@ -845,7 +893,7 @@ export class FinanceService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       select: {

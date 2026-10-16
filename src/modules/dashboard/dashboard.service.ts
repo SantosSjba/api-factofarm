@@ -196,7 +196,7 @@ export class DashboardService {
             where: {
               establishmentId: est.id,
               deletedAt: null,
-              estado: 'COMPLETADA',
+              estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
               createdAt: { gte: since },
             },
           }),
@@ -204,7 +204,7 @@ export class DashboardService {
             where: {
               establishmentId: est.id,
               deletedAt: null,
-              estado: 'COMPLETADA',
+              estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
               createdAt: { gte: since },
             },
             _sum: { total: true },
@@ -252,7 +252,7 @@ export class DashboardService {
     const sales = await this.prisma.sale.findMany({
       where: {
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: start, lt: endExclusive },
         establishment: { tenantId },
       },
@@ -300,7 +300,7 @@ export class DashboardService {
           where: {
             establishmentId,
             deletedAt: null,
-            estado: 'COMPLETADA',
+            estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
             createdAt: { gte: startOfDay },
           },
           _sum: { total: true },
@@ -310,7 +310,7 @@ export class DashboardService {
           where: {
             establishmentId,
             deletedAt: null,
-            estado: 'COMPLETADA',
+            estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
             createdAt: { gte: startOfWeek },
           },
           _sum: { total: true },
@@ -386,7 +386,7 @@ export class DashboardService {
           establishmentId,
           sellerId: actor.sub,
           deletedAt: null,
-          estado: 'COMPLETADA',
+          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
           createdAt: { gte: startOfDay },
         },
         _sum: { total: true },

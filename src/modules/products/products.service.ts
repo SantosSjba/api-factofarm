@@ -2418,7 +2418,10 @@ export class ProductsService {
     const { page, pageSize, skip, take } = paginationArgs(query);
     const where: Prisma.SaleItemWhereInput = {
       productId: id,
-      sale: { deletedAt: null, estado: 'COMPLETADA' },
+      sale: {
+        deletedAt: null,
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
+      },
     };
 
     const [total, rows] = await Promise.all([

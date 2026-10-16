@@ -275,7 +275,7 @@ export class AgreementsService {
         establishmentId,
         agreementId: id,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       select: {
@@ -348,7 +348,7 @@ export class AgreementsService {
         establishmentId,
         agreementId: id,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       select: {

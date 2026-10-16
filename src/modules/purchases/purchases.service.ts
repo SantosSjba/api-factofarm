@@ -6,6 +6,7 @@ import {
 import {
   AccountPayableStatus,
   InventoryMovementType,
+  PaymentMethod,
   Prisma,
   PurchaseOrderStatus,
   SupplierCreditNoteStatus,
@@ -18,10 +19,14 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { computeSaleLineTotals } from '../../common/utils/sale-pricing.util';
 import {
   formatDateYmdInTimeZone,
-  monthBoundsInTimeZone,
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import {
+  assertPaymentReference,
+  normalizePaymentMethod,
+  registerCashFlow,
+} from '../cash-registers/cash-session.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   assertLotExpiryConsistent,
@@ -155,27 +160,29 @@ export class PurchasesService {
       dto.items,
       actor,
     );
-    const numero = await this.nextPurchaseOrderNumber(establishmentId);
-
-    const created = await this.prisma.purchaseOrder.create({
-      data: {
-        establishmentId,
-        supplierId: dto.supplierId,
-        warehouseId: dto.warehouseId,
-        createdById,
-        numero,
-        subtotal,
-        igvTotal,
-        total,
-        comentario: dto.comentario?.trim() || null,
-        condicionesPago: dto.condicionesPago?.trim() || null,
-        fechaEntregaEstimada: dto.fechaEntregaEstimada
-          ? new Date(dto.fechaEntregaEstimada)
-          : null,
-        items: { create: itemRows },
-      },
-      select: { id: true },
-    });
+    const created = await this.withFreshNumber(
+      () => this.nextPurchaseOrderNumber(establishmentId),
+      (numero) =>
+        this.prisma.purchaseOrder.create({
+          data: {
+            establishmentId,
+            supplierId: dto.supplierId,
+            warehouseId: dto.warehouseId,
+            createdById,
+            numero,
+            subtotal,
+            igvTotal,
+            total,
+            comentario: dto.comentario?.trim() || null,
+            condicionesPago: dto.condicionesPago?.trim() || null,
+            fechaEntregaEstimada: dto.fechaEntregaEstimada
+              ? new Date(dto.fechaEntregaEstimada)
+              : null,
+            items: { create: itemRows },
+          },
+          select: { id: true },
+        }),
+    );
 
     await this.audit.log({
       userId: createdById,
@@ -654,12 +661,29 @@ export class PurchasesService {
       );
     }
 
+    const metodo = normalizePaymentMethod(dto.metodo);
+    if (dto.metodo?.trim() && !metodo) {
+      throw new BadRequestException(
+        'Medio de pago no válido (use efectivo, Yape, Plin, tarjeta o transferencia)',
+      );
+    }
+    assertPaymentReference(metodo, dto.referencia);
+
     const result = await this.prisma.$transaction(async (tx) => {
+      if (metodo === PaymentMethod.EFECTIVO) {
+        await registerCashFlow(tx, {
+          establishmentId,
+          userId: actorId,
+          monto: monto.negated(),
+          comentario: `Pago a proveedor ${ap.numeroDocumento ?? ''}`.trim(),
+          referencia: dto.referencia,
+        });
+      }
       await tx.accountPayablePayment.create({
         data: {
           accountPayableId: id,
           monto,
-          metodo: dto.metodo?.trim() || null,
+          metodo: metodo ?? null,
           referencia: dto.referencia?.trim() || null,
         },
       });
@@ -929,7 +953,7 @@ export class PurchasesService {
           sale: {
             establishmentId,
             deletedAt: null,
-            estado: 'COMPLETADA',
+            estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
             createdAt: { gte: since },
           },
         },
@@ -1196,24 +1220,59 @@ export class PurchasesService {
     return { subtotal, igvTotal, total, itemRows };
   }
 
-  private async nextPurchaseOrderNumber(establishmentId: string) {
+  /**
+   * Correlativo anual por local tomado del último número emitido (no de un conteo: con
+   * conteos, un registro borrado o dos altas simultáneas repetían el número).
+   */
+  private async nextYearlyNumber(
+    establishmentId: string,
+    prefix: 'OC' | 'GR',
+  ): Promise<string> {
     const tz = await this.resolveTimeZone(establishmentId);
     const year = Number(formatDateYmdInTimeZone(new Date(), tz).slice(0, 4));
-    const { start: yearStart } = monthBoundsInTimeZone(`${year}-01`, tz);
-    const count = await this.prisma.purchaseOrder.count({
-      where: { establishmentId, createdAt: { gte: yearStart } },
-    });
-    return `OC-${year}-${String(count + 1).padStart(5, '0')}`;
+    const base = `${prefix}-${year}-`;
+    const where = { establishmentId, numero: { startsWith: base } };
+    const last =
+      prefix === 'OC'
+        ? await this.prisma.purchaseOrder.findFirst({
+            where,
+            orderBy: { numero: 'desc' },
+            select: { numero: true },
+          })
+        : await this.prisma.goodsReceipt.findFirst({
+            where,
+            orderBy: { numero: 'desc' },
+            select: { numero: true },
+          });
+    const n = Number.parseInt(last?.numero?.slice(base.length) ?? '0', 10) || 0;
+    return `${base}${String(n + 1).padStart(5, '0')}`;
   }
 
-  private async nextGoodsReceiptNumber(establishmentId: string) {
-    const tz = await this.resolveTimeZone(establishmentId);
-    const year = Number(formatDateYmdInTimeZone(new Date(), tz).slice(0, 4));
-    const { start: yearStart } = monthBoundsInTimeZone(`${year}-01`, tz);
-    const count = await this.prisma.goodsReceipt.count({
-      where: { establishmentId, createdAt: { gte: yearStart } },
-    });
-    return `GR-${year}-${String(count + 1).padStart(5, '0')}`;
+  private nextPurchaseOrderNumber(establishmentId: string) {
+    return this.nextYearlyNumber(establishmentId, 'OC');
+  }
+
+  private nextGoodsReceiptNumber(establishmentId: string) {
+    return this.nextYearlyNumber(establishmentId, 'GR');
+  }
+
+  /** Reintenta si otra orden tomó el mismo correlativo al mismo tiempo. */
+  private async withFreshNumber<T>(
+    next: () => Promise<string>,
+    create: (numero: string) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const numero = await next();
+      try {
+        return await create(numero);
+      } catch (err) {
+        const retry =
+          attempt < 2 &&
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002';
+        if (!retry) throw err;
+      }
+    }
   }
 
   private mapPurchaseOrder(row: {

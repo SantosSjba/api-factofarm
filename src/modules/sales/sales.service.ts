@@ -13,6 +13,7 @@ import {
   CashMovementType,
   CashSessionStatus,
   DocumentSeriesType,
+  InventoryMovementType,
   PaymentMethod,
   Prisma,
   PromotionType,
@@ -50,6 +51,10 @@ import { FILE_STORAGE } from '../files/domain/file.storage';
 import type { IFileStorage } from '../files/domain/file.storage';
 import { isValidPdfBuffer } from '../billing/utils/pdf-buffer.util';
 import { validateSalePayments } from './utils/payment-validation.util';
+import {
+  assertSaleCustomerRules,
+  creditAmount,
+} from './utils/sale-customer-rules.util';
 import { SaleLotAllocationMode } from '../inventory-movements/dto/sale-lot-allocation-preview.dto';
 import {
   CreateSaleDto,
@@ -721,6 +726,11 @@ export class SalesService {
       throw new BadRequestException(
         'La venta incluye productos con receta obligatoria. Seleccione una receta o valide manualmente.',
       );
+    } else if (requiresRx && (dto.prescriptionNote?.trim().length ?? 0) < 3) {
+      // Validación manual: debe quedar registro de la receta vista (N°/médico/CMP).
+      throw new BadRequestException(
+        'Al validar la receta manualmente indique su referencia (N° de receta, médico o CMP).',
+      );
     }
 
     let subtotal = new Prisma.Decimal(0);
@@ -788,6 +798,8 @@ export class SalesService {
     } else if (!dto.payments.length) {
       dto.payments = [{ metodo: PaymentMethod.EFECTIVO, monto: 0 }];
     }
+
+    await this.assertCustomerRulesForSale(dto, total);
 
     const saleId = await this.prisma.$transaction(async (tx) => {
       const { serie, numero } = await this.resolveDocumentNumber(
@@ -977,20 +989,14 @@ export class SalesService {
         });
       }
 
-      const creditPayment = dto.payments.find(
-        (p) => p.metodo === PaymentMethod.CREDITO,
-      );
-      if (
-        dto.customerId &&
-        !resolvedAgreement &&
-        creditPayment &&
-        new Prisma.Decimal(creditPayment.monto).greaterThan(0)
-      ) {
+      // Suma todas las líneas a crédito (antes sólo se registraba la primera).
+      const creditTotal = creditAmount(dto.payments);
+      if (dto.customerId && !resolvedAgreement && creditTotal.greaterThan(0)) {
         const customer = await tx.customer.findFirst({
           where: { id: dto.customerId },
           select: { diasCredito: true },
         });
-        const creditAmount = new Prisma.Decimal(creditPayment.monto);
+        const creditAmountValue = creditTotal;
         const vencimiento = new Date();
         vencimiento.setDate(
           vencimiento.getDate() + (customer?.diasCredito ?? 0),
@@ -1001,9 +1007,9 @@ export class SalesService {
             customerId: dto.customerId,
             saleId: sale.id,
             documentoRef: `${serie}-${numero}`,
-            montoTotal: creditAmount,
+            montoTotal: creditAmountValue,
             montoPagado: new Prisma.Decimal(0),
-            saldo: creditAmount,
+            saldo: creditAmountValue,
             fechaVencimiento: vencimiento,
             estado: AccountReceivableStatus.PENDIENTE,
             comentario: 'Venta a crédito',
@@ -1495,7 +1501,12 @@ export class SalesService {
           select: { id: true, sunatStatus: true, deletedAt: true },
         },
         returns: {
-          select: { items: { select: { saleItemId: true, cantidad: true } } },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            items: {
+              select: { saleItemId: true, cantidad: true, codigoLote: true },
+            },
+          },
         },
       },
     });
@@ -1579,6 +1590,36 @@ export class SalesService {
         qty: Prisma.Decimal;
       }> = [];
       const explicitLot = line.lotCode?.trim() || null;
+      // Saldo devolvible por lote: se reproducen las devoluciones anteriores con la misma regla
+      // (lote indicado o reparto en orden), para no reponer dos veces el mismo lote.
+      const lotLeft = new Map(
+        item.lotLines.map((l) => [l.codigoLote, l.cantidad]),
+      );
+      const consume = (code: string, qty: Prisma.Decimal) =>
+        lotLeft.set(
+          code,
+          (lotLeft.get(code) ?? new Prisma.Decimal(0)).minus(qty),
+        );
+      for (const ret of previousReturns) {
+        for (const ri of ret.items) {
+          if (ri.saleItemId !== item.id) continue;
+          if (ri.codigoLote) {
+            consume(ri.codigoLote, ri.cantidad);
+            continue;
+          }
+          let left = ri.cantidad;
+          for (const sold of item.lotLines) {
+            if (left.lte(0)) break;
+            const take = Prisma.Decimal.min(
+              Prisma.Decimal.max(lotLeft.get(sold.codigoLote) ?? 0, 0),
+              left,
+            );
+            if (take.lte(0)) continue;
+            consume(sold.codigoLote, take);
+            left = left.minus(take);
+          }
+        }
+      }
       if (item.lotLines.length > 0) {
         if (explicitLot) {
           const soldLot = item.lotLines.find(
@@ -1589,9 +1630,13 @@ export class SalesService {
               `El lote ${explicitLot} no corresponde a la venta del ítem`,
             );
           }
-          if (qty.greaterThan(soldLot.cantidad)) {
+          const lotAvailable = Prisma.Decimal.max(
+            lotLeft.get(explicitLot) ?? 0,
+            0,
+          );
+          if (qty.greaterThan(lotAvailable)) {
             throw new BadRequestException(
-              `Del lote ${explicitLot} sólo se vendieron ${soldLot.cantidad.toString()} unidades; deje el lote vacío para repartir la devolución entre los lotes vendidos`,
+              `Del lote ${explicitLot} quedan ${lotAvailable.toString()} unidades por devolver (vendidas ${soldLot.cantidad.toString()}); deje el lote vacío para repartir la devolución entre los lotes vendidos`,
             );
           }
           lotRestores.push({ lotCode: explicitLot, qty });
@@ -1600,7 +1645,10 @@ export class SalesService {
           let left = qty;
           for (const soldLot of item.lotLines) {
             if (left.lte(0)) break;
-            const take = Prisma.Decimal.min(soldLot.cantidad, left);
+            const take = Prisma.Decimal.min(
+              Prisma.Decimal.max(lotLeft.get(soldLot.codigoLote) ?? 0, 0),
+              left,
+            );
             if (take.lte(0)) continue;
             lotRestores.push({ lotCode: soldLot.codigoLote, qty: take });
             left = left.minus(take);
@@ -1639,6 +1687,8 @@ export class SalesService {
             reason: `Devolución venta ${sale.serie}-${sale.numero}`,
             userId: actor.sub,
             tx,
+            transferReasonCode: 'DEVOLUCION_RECIBIDA',
+            movementType: InventoryMovementType.INGRESO,
           });
         }
       }
@@ -2561,6 +2611,48 @@ export class SalesService {
     return registered.length
       ? registered.map((s) => s.numero)
       : [DEFAULT_SALE_SERIE];
+  }
+
+  /** Reglas del adquirente (SUNAT y crédito) evaluadas antes de mover stock. */
+  private async assertCustomerRulesForSale(
+    dto: CreateSaleDto,
+    total: Prisma.Decimal,
+  ) {
+    const customer = dto.customerId
+      ? await this.prisma.customer.findFirst({
+          where: { id: dto.customerId, deletedAt: null },
+          select: {
+            nombre: true,
+            tipoDocumento: true,
+            numeroDocumento: true,
+            limiteCredito: true,
+          },
+        })
+      : null;
+    const needsBalance =
+      !!dto.customerId && creditAmount(dto.payments).greaterThan(0);
+    const open = needsBalance
+      ? await this.prisma.accountReceivable.aggregate({
+          where: {
+            customerId: dto.customerId,
+            deletedAt: null,
+            estado: {
+              notIn: [
+                AccountReceivableStatus.PAGADA,
+                AccountReceivableStatus.ANULADA,
+              ],
+            },
+          },
+          _sum: { saldo: true },
+        })
+      : null;
+    assertSaleCustomerRules({
+      documentType: dto.documentType,
+      total,
+      payments: dto.payments,
+      customer,
+      openCreditBalance: open?._sum.saldo ?? new Prisma.Decimal(0),
+    });
   }
 
   private async resolveDocumentNumber(

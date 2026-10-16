@@ -187,7 +187,7 @@ export class StaffService {
             establishmentId,
             sellerId: seller.id,
             deletedAt: null,
-            estado: 'COMPLETADA',
+            estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
             createdAt: { gte: from, lt: to },
           },
           _sum: { total: true },

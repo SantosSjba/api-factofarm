@@ -10,6 +10,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { cashOnHand } from './cash-session.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paymentRequiresReference } from '../sales/utils/payment-validation.util';
 import {
@@ -228,17 +229,28 @@ export class CashRegistersService {
         estado: CashSessionStatus.ABIERTA,
         cashRegister: { establishmentId },
       },
-      include: { movements: true },
+      select: { id: true },
     });
     if (!session) throw new NotFoundException('Sesión de caja no encontrada');
 
-    const montoSistema = session.movements.reduce(
-      (acc, row) => acc.plus(row.monto),
-      new Prisma.Decimal(0),
-    );
+    // El arqueo compara efectivo contado contra efectivo esperado: los movimientos con otros
+    // medios (Yape, tarjeta…) no están en la gaveta.
+    const montoSistema = await cashOnHand(this.prisma, sessionId);
     const montoFisico = new Prisma.Decimal(dto.montoCierreFisico);
     const diferencia = montoFisico.minus(montoSistema);
+    if (!diferencia.isZero() && !dto.notasCierre?.trim()) {
+      throw new BadRequestException(
+        `El arqueo tiene una diferencia de S/ ${diferencia.toFixed(2)} (sistema S/ ${montoSistema.toFixed(2)}, contado S/ ${montoFisico.toFixed(2)}). Explique la diferencia en las notas de cierre.`,
+      );
+    }
 
+    const closed = await this.prisma.cashSession.updateMany({
+      where: { id: sessionId, estado: CashSessionStatus.ABIERTA },
+      data: { estado: CashSessionStatus.CERRADA },
+    });
+    if (closed.count !== 1) {
+      throw new BadRequestException('La sesión de caja ya fue cerrada');
+    }
     await this.prisma.cashSession.update({
       where: { id: sessionId },
       data: {
@@ -300,18 +312,32 @@ export class CashRegistersService {
       );
     }
 
+    if (!dto.comentario?.trim()) {
+      throw new BadRequestException(
+        'Indique el motivo del ingreso o egreso de caja.',
+      );
+    }
+    const metodo = dto.metodoPago ?? PaymentMethod.EFECTIVO;
     const signed =
       dto.tipo === CashMovementType.EGRESO
         ? new Prisma.Decimal(dto.monto).negated()
         : new Prisma.Decimal(dto.monto);
+    if (signed.isNegative() && metodo === PaymentMethod.EFECTIVO) {
+      const available = await cashOnHand(this.prisma, sessionId);
+      if (signed.abs().greaterThan(available)) {
+        throw new BadRequestException(
+          `Efectivo insuficiente en caja: disponible S/ ${available.toFixed(2)}, egreso S/ ${signed.abs().toFixed(2)}.`,
+        );
+      }
+    }
 
     await this.prisma.cashMovement.create({
       data: {
         cashSessionId: sessionId,
         tipo: dto.tipo,
         monto: signed,
-        metodoPago: dto.metodoPago ?? PaymentMethod.EFECTIVO,
-        comentario: dto.comentario?.trim() || null,
+        metodoPago: metodo,
+        comentario: dto.comentario.trim(),
       },
     });
 
@@ -347,10 +373,13 @@ export class CashRegistersService {
     });
     if (!session) throw new NotFoundException('Sesión no encontrada');
 
-    const saldo = session.movements.reduce(
-      (acc, row) => acc.plus(row.monto),
-      new Prisma.Decimal(0),
-    );
+    const saldo = session.movements
+      .filter(
+        (row) =>
+          row.metodoPago === PaymentMethod.EFECTIVO &&
+          row.tipo !== CashMovementType.CIERRE,
+      )
+      .reduce((acc, row) => acc.plus(row.monto), new Prisma.Decimal(0));
 
     const totalesPorMetodo: Partial<Record<PaymentMethod, Prisma.Decimal>> = {};
     const pagosDigitales: Array<{

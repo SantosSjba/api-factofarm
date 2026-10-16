@@ -42,7 +42,7 @@ export class PleService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       _sum: { subtotal: true, igvTotal: true, total: true },
@@ -119,7 +119,7 @@ export class PleService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       include: {

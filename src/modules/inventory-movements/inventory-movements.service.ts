@@ -767,6 +767,22 @@ export class InventoryMovementsService {
     if (pending.requestedById === actorId) {
       throw new ForbiddenException('Otro usuario debe aprobar el ajuste');
     }
+    // El ajuste guarda la diferencia calculada al solicitarlo: si el stock se movió después,
+    // aplicarla dejaría un saldo distinto al contado.
+    const movedSince = await this.prisma.inventoryInboundMovement.findFirst({
+      where: {
+        productId: pending.productId,
+        warehouseId: pending.warehouseId,
+        createdAt: { gt: pending.createdAt },
+        ...(pending.codigoLote ? { codigoLote: pending.codigoLote } : {}),
+      },
+      select: { id: true },
+    });
+    if (movedSince) {
+      throw new BadRequestException(
+        'El stock de este producto cambió después de la solicitud (ventas, ingresos u otros ajustes). Rechace este ajuste y registre un nuevo conteo.',
+      );
+    }
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.inventoryPendingAdjustment.updateMany({
@@ -948,11 +964,16 @@ export class InventoryMovementsService {
     reason: string;
     userId: string;
     tx?: Prisma.TransactionClient;
+    /** Motivo y tipo de kardex propios (p. ej. devolución de venta) en vez de "ajuste". */
+    transferReasonCode?: string;
+    movementType?: InventoryMovementType;
   }) {
     if (input.delta.isZero()) return;
 
     const isInbound = input.delta.greaterThan(0);
-    const reasonCode = isInbound ? ADJUST_IN_CODE : ADJUST_OUT_CODE;
+    const reasonCode =
+      input.transferReasonCode ??
+      (isInbound ? ADJUST_IN_CODE : ADJUST_OUT_CODE);
     const db = input.tx ?? this.prisma;
     const transferReason = await db.inventoryTransferReason.findFirst({
       where: { codigo: reasonCode, deletedAt: null, activo: true },
@@ -972,7 +993,7 @@ export class InventoryMovementsService {
           productId: input.productId,
           warehouseId: input.warehouseId,
           transferReasonId: transferReason.id,
-          movementType: InventoryMovementType.AJUSTE,
+          movementType: input.movementType ?? InventoryMovementType.AJUSTE,
           cantidad: isInbound ? amount : amount.negated(),
           codigoLote: input.lotCode,
           comentario: input.reason,

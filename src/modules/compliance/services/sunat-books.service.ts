@@ -27,7 +27,7 @@ export class SunatBooksService {
       where: {
         establishmentId,
         deletedAt: null,
-        estado: 'COMPLETADA',
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
         createdAt: { gte: from, lt: to },
       },
       include: {
