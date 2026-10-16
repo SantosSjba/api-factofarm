@@ -1049,24 +1049,7 @@ export class SalesService {
       });
     });
 
-    void this.pharmaceutical
-      .recordControlledOutflow(
-        actor.establecimientoId,
-        pricedItems.map((item) => ({
-          productId: item.productId,
-          cantidad: item.cantidad,
-        })),
-        `Venta ${saleId}`,
-        actor.sub,
-      )
-      .catch((err) => {
-        this.logger.error({
-          event: 'sale_controlled_ledger_failed',
-          saleId,
-          error: safeError(err),
-        });
-      });
-
+    // El libro de controlados se asienta dentro de la transacción, al descontar el stock.
     const saleDetail = await this.findOne(saleId, actor.establecimientoId);
     this.realtime.emitSaleCompleted(actor.establecimientoId, {
       saleId: saleDetail.id,

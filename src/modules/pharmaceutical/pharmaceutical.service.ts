@@ -22,40 +22,6 @@ type DateRange = { from?: Date; to?: Date; timeZone?: string };
 export class PharmaceuticalService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async recordControlledOutflow(
-    establishmentId: string,
-    items: Array<{ productId: string; cantidad: Prisma.Decimal }>,
-    reference: string,
-    userId?: string,
-  ) {
-    for (const item of items) {
-      const product = await this.prisma.product.findUnique({
-        where: { id: item.productId },
-        select: { esControlado: true },
-      });
-      if (!product?.esControlado) continue;
-
-      const last = await this.prisma.controlledSubstanceLedgerEntry.findFirst({
-        where: { establishmentId, productId: item.productId },
-        orderBy: { fecha: 'desc' },
-        select: { saldo: true },
-      });
-      const saldo = (last?.saldo ?? new Prisma.Decimal(0)).minus(item.cantidad);
-
-      await this.prisma.controlledSubstanceLedgerEntry.create({
-        data: {
-          establishmentId,
-          productId: item.productId,
-          movementType: ControlledLedgerMovementType.SALIDA,
-          cantidad: item.cantidad,
-          saldo,
-          referencia: reference,
-          userId: userId ?? null,
-        },
-      });
-    }
-  }
-
   async listApprovers(establishmentId: string, excludeUserId?: string) {
     return this.prisma.user.findMany({
       where: {

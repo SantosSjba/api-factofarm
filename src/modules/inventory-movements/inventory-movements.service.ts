@@ -28,6 +28,7 @@ import {
   dayBoundsInTimeZone,
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
+import { recordControlledMovement } from '../pharmaceutical/controlled-ledger.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import * as XLSX from 'xlsx';
@@ -988,18 +989,21 @@ export class InventoryMovementsService {
     const amount = input.delta.abs();
 
     const run = async (tx: Prisma.TransactionClient) => {
-      await tx.inventoryInboundMovement.create({
-        data: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-          transferReasonId: transferReason.id,
-          movementType: input.movementType ?? InventoryMovementType.AJUSTE,
-          cantidad: isInbound ? amount : amount.negated(),
-          codigoLote: input.lotCode,
-          comentario: input.reason,
-          userId: input.userId,
-        },
-      });
+      await recordControlledMovement(
+        tx,
+        await tx.inventoryInboundMovement.create({
+          data: {
+            productId: input.productId,
+            warehouseId: input.warehouseId,
+            transferReasonId: transferReason.id,
+            movementType: input.movementType ?? InventoryMovementType.AJUSTE,
+            cantidad: isInbound ? amount : amount.negated(),
+            codigoLote: input.lotCode,
+            comentario: input.reason,
+            userId: input.userId,
+          },
+        }),
+      );
 
       if (input.lotCode) {
         const lot = await tx.productLotStock.findFirst({
@@ -1140,22 +1144,25 @@ export class InventoryMovementsService {
       const unitCost =
         dto.unitCost != null ? new Prisma.Decimal(dto.unitCost) : null;
 
-      await tx.inventoryInboundMovement.create({
-        data: {
-          productId: product.id,
-          warehouseId: warehouse.id,
-          transferReasonId: transferReason.id,
-          movementType: InventoryMovementType.INGRESO,
-          cantidad: amount,
-          costoUnitario: unitCost,
-          codigoLote,
-          fechaVencimiento,
-          fechaRegistro,
-          referencia: dto.reference || null,
-          comentario: dto.comment || null,
-          userId: actorId ?? null,
-        },
-      });
+      await recordControlledMovement(
+        tx,
+        await tx.inventoryInboundMovement.create({
+          data: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+            transferReasonId: transferReason.id,
+            movementType: InventoryMovementType.INGRESO,
+            cantidad: amount,
+            costoUnitario: unitCost,
+            codigoLote,
+            fechaVencimiento,
+            fechaRegistro,
+            referencia: dto.reference || null,
+            comentario: dto.comment || null,
+            userId: actorId ?? null,
+          },
+        }),
+      );
 
       if (codigoLote) {
         const existingLot = await tx.productLotStock.findFirst({
@@ -1618,35 +1625,41 @@ export class InventoryMovementsService {
 
     const run = async (tx: Prisma.TransactionClient) => {
       if (input.lines.length === 0) {
-        await tx.inventoryInboundMovement.create({
-          data: {
-            productId: input.productId,
-            warehouseId: input.warehouseId,
-            transferReasonId: input.transferReasonId,
-            movementType: InventoryMovementType.SALIDA,
-            cantidad: total.negated(),
-            fechaRegistro: input.fechaRegistro,
-            referencia: input.reference,
-            comentario: input.comment,
-            userId: input.userId,
-          },
-        });
-      } else {
-        for (const line of input.lines) {
+        await recordControlledMovement(
+          tx,
           await tx.inventoryInboundMovement.create({
             data: {
               productId: input.productId,
               warehouseId: input.warehouseId,
               transferReasonId: input.transferReasonId,
               movementType: InventoryMovementType.SALIDA,
-              cantidad: line.cantidad.negated(),
-              codigoLote: line.codigoLote,
+              cantidad: total.negated(),
               fechaRegistro: input.fechaRegistro,
               referencia: input.reference,
               comentario: input.comment,
               userId: input.userId,
             },
-          });
+          }),
+        );
+      } else {
+        for (const line of input.lines) {
+          await recordControlledMovement(
+            tx,
+            await tx.inventoryInboundMovement.create({
+              data: {
+                productId: input.productId,
+                warehouseId: input.warehouseId,
+                transferReasonId: input.transferReasonId,
+                movementType: InventoryMovementType.SALIDA,
+                cantidad: line.cantidad.negated(),
+                codigoLote: line.codigoLote,
+                fechaRegistro: input.fechaRegistro,
+                referencia: input.reference,
+                comentario: input.comment,
+                userId: input.userId,
+              },
+            }),
+          );
 
           const lotUpdated = await tx.productLotStock.updateMany({
             where: {

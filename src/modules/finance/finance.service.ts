@@ -184,9 +184,59 @@ export class FinanceService {
       select: {
         cantidad: true,
         totalLinea: true,
-        product: { select: { id: true, nombre: true, costoUnitario: true } },
+        id: true,
+        lotLines: { select: { codigoLote: true, cantidad: true } },
+        sale: { select: { warehouseId: true } },
+        product: {
+          select: {
+            id: true,
+            nombre: true,
+            costoUnitario: true,
+            precioUnitarioCompra: true,
+          },
+        },
       },
     });
+
+    // Costo histórico: el de los lotes que salieron en la venta (costo de compra del lote);
+    // sin lote, el costo del producto. Antes se usaba siempre el costo actual del producto.
+    const lotKeys = saleItems.flatMap((item) =>
+      item.lotLines.map((l) => ({
+        productId: item.product.id,
+        warehouseId: item.sale.warehouseId,
+        codigoLote: l.codigoLote,
+      })),
+    );
+    const lotCosts = lotKeys.length
+      ? await this.prisma.productLotStock.findMany({
+          where: { OR: lotKeys },
+          select: {
+            productId: true,
+            warehouseId: true,
+            codigoLote: true,
+            costoUnitario: true,
+          },
+        })
+      : [];
+    const returned = saleItems.length
+      ? await this.prisma.saleReturnItem.groupBy({
+          by: ['saleItemId'],
+          where: { saleItemId: { in: saleItems.map((i) => i.id) } },
+          _sum: { cantidad: true },
+        })
+      : [];
+    const returnedBySaleItem = new Map(
+      returned.map((r) => [
+        r.saleItemId,
+        r._sum.cantidad ?? new Prisma.Decimal(0),
+      ]),
+    );
+    const lotCost = new Map(
+      lotCosts.map((l) => [
+        `${l.productId}|${l.warehouseId}|${l.codigoLote}`,
+        l.costoUnitario,
+      ]),
+    );
 
     let ventaTotal = new Prisma.Decimal(0);
     let costoTotal = new Prisma.Decimal(0);
@@ -201,9 +251,33 @@ export class FinanceService {
     >();
 
     for (const item of saleItems) {
-      const venta = item.totalLinea;
-      const costoUnit = item.product.costoUnitario ?? new Prisma.Decimal(0);
-      const costo = costoUnit.times(item.cantidad);
+      if (item.cantidad.lte(0)) continue;
+      // Las recepciones actualizan el precio de compra, no `costoUnitario`: se usa como respaldo.
+      const productCost =
+        item.product.costoUnitario ??
+        item.product.precioUnitarioCompra ??
+        new Prisma.Decimal(0);
+      const costoBruto = item.lotLines.length
+        ? item.lotLines.reduce(
+            (acc, l) =>
+              acc.plus(
+                (
+                  lotCost.get(
+                    `${item.product.id}|${item.sale.warehouseId}|${l.codigoLote}`,
+                  ) ?? productCost
+                ).times(l.cantidad),
+              ),
+            new Prisma.Decimal(0),
+          )
+        : productCost.times(item.cantidad);
+      // Lo devuelto deja de ser venta: se descuenta en proporción de la cantidad.
+      const devuelto = returnedBySaleItem.get(item.id) ?? new Prisma.Decimal(0);
+      const factor = Prisma.Decimal.max(
+        item.cantidad.minus(devuelto).div(item.cantidad),
+        0,
+      );
+      const venta = item.totalLinea.times(factor);
+      const costo = costoBruto.times(factor);
       ventaTotal = ventaTotal.plus(venta);
       costoTotal = costoTotal.plus(costo);
 

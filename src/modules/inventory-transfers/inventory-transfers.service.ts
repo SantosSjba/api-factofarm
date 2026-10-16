@@ -15,6 +15,7 @@ import {
 } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
+import { recordControlledMovement } from '../pharmaceutical/controlled-ledger.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateInventoryTransferDto } from './dto/create-inventory-transfer.dto';
@@ -492,20 +493,23 @@ export class InventoryTransfersService {
       }
     }
 
-    await tx.inventoryInboundMovement.create({
-      data: {
-        productId: input.productId,
-        warehouseId: input.warehouseId,
-        transferReasonId: input.transferReasonId,
-        movementType: input.movementType,
-        cantidad: input.delta,
-        costoUnitario: input.unitCost,
-        codigoLote: input.lotCode,
-        fechaVencimiento: input.expirationDate,
-        referencia: input.reference,
-        userId: input.userId ?? null,
-      },
-    });
+    await recordControlledMovement(
+      tx,
+      await tx.inventoryInboundMovement.create({
+        data: {
+          productId: input.productId,
+          warehouseId: input.warehouseId,
+          transferReasonId: input.transferReasonId,
+          movementType: input.movementType,
+          cantidad: input.delta,
+          costoUnitario: input.unitCost,
+          codigoLote: input.lotCode,
+          fechaVencimiento: input.expirationDate,
+          referencia: input.reference,
+          userId: input.userId ?? null,
+        },
+      }),
+    );
 
     if (input.lotCode) {
       const lot = await tx.productLotStock.findFirst({

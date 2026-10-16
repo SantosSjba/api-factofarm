@@ -27,6 +27,7 @@ import {
   normalizePaymentMethod,
   registerCashFlow,
 } from '../cash-registers/cash-session.util';
+import { recordControlledMovement } from '../pharmaceutical/controlled-ledger.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   assertLotExpiryConsistent,
@@ -450,21 +451,24 @@ export class PurchasesService {
           );
         }
 
-        await tx.inventoryInboundMovement.create({
-          data: {
-            productId: line.productId,
-            warehouseId: po.warehouseId,
-            transferReasonId: transferReason.id,
-            movementType: InventoryMovementType.INGRESO,
-            cantidad: line.cantidad,
-            costoUnitario: line.costoUnitario,
-            codigoLote: line.codigoLote,
-            fechaVencimiento: line.fechaVencimiento,
-            referencia: `${po.numero ?? po.id} / ${grNumero}`,
-            comentario: dto.comentario?.trim() || null,
-            userId: receivedById,
-          },
-        });
+        await recordControlledMovement(
+          tx,
+          await tx.inventoryInboundMovement.create({
+            data: {
+              productId: line.productId,
+              warehouseId: po.warehouseId,
+              transferReasonId: transferReason.id,
+              movementType: InventoryMovementType.INGRESO,
+              cantidad: line.cantidad,
+              costoUnitario: line.costoUnitario,
+              codigoLote: line.codigoLote,
+              fechaVencimiento: line.fechaVencimiento,
+              referencia: `${po.numero ?? po.id} / ${grNumero}`,
+              comentario: dto.comentario?.trim() || null,
+              userId: receivedById,
+            },
+          }),
+        );
 
         if (line.codigoLote) {
           const existingLot = await tx.productLotStock.findFirst({
