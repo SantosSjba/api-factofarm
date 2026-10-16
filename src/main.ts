@@ -1,4 +1,3 @@
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -12,6 +11,7 @@ import { AppService } from './app.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { parseCorsOrigins } from './config/env.validation';
 import { initSentryIfConfigured } from './common/monitoring/sentry.util';
+import { createValidationPipe } from './common/validation/validation-pipe.factory';
 
 function localBrowserBase(port: number): string {
   return `http://localhost:${port}`;
@@ -31,14 +31,7 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: false },
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
 
   app.use(
     helmet({

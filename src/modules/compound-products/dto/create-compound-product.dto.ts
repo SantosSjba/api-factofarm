@@ -38,16 +38,19 @@ export class CreateCompoundProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   nombreSecundario?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   descripcion?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   modelo?: string;
 
   @ApiProperty()
@@ -80,11 +83,13 @@ export class CreateCompoundProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   codigoSunat?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   codigoInterno?: string;
 
   @ApiProperty({ minimum: 0 })

@@ -9,6 +9,11 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { captureSentryException } from '../monitoring/sentry.util';
+import {
+  mapPrismaError,
+  mapTransportError,
+  translateHttpMessage,
+} from './prisma-error.mapper';
 
 type ApiErrorBody = {
   code: string;
@@ -26,41 +31,69 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<{ url: string }>();
+    const request = ctx.getRequest<{
+      url: string;
+      method?: string;
+      id?: unknown;
+    }>();
+    const path = request.url.split('?')[0];
 
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let body: ApiErrorBody;
+    let mapped: ReturnType<typeof mapPrismaError> = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const raw = exceptionResponse as Record<string, unknown>;
+        const rawMessage =
+          typeof raw.message === 'string'
+            ? raw.message
+            : Array.isArray(raw.message)
+              ? raw.message.join('; ')
+              : exception.message;
         body = {
           statusCode: status,
           code:
             typeof raw.code === 'string'
               ? raw.code
               : this.codeFromStatus(status),
-          message:
-            typeof raw.message === 'string'
-              ? raw.message
-              : Array.isArray(raw.message)
-                ? raw.message.join('; ')
-                : exception.message,
+          message: translateHttpMessage(rawMessage),
           details: raw.details,
           timestamp: new Date().toISOString(),
-          path: request.url.split('?')[0],
+          path,
         };
       } else {
         body = {
           statusCode: status,
           code: this.codeFromStatus(status),
-          message: exception.message,
+          message: translateHttpMessage(exception.message),
           timestamp: new Date().toISOString(),
-          path: request.url.split('?')[0],
+          path,
         };
       }
+    } else if (
+      (mapped =
+        mapPrismaError(exception, request.method ?? '') ??
+        mapTransportError(exception))
+    ) {
+      status = mapped.status;
+      if (status >= 500) {
+        this.logger.error({
+          event: 'mapped_exception',
+          error: safeError(exception),
+          path,
+        });
+      }
+      body = {
+        statusCode: status,
+        code: mapped.code,
+        message: mapped.message,
+        details: mapped.details,
+        timestamp: new Date().toISOString(),
+        path,
+      };
     } else {
       const message =
         exception instanceof Error
@@ -69,17 +102,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error({
         event: 'unhandled_exception',
         error: safeError(exception),
-        path: request.url.split('?')[0],
+        path,
       });
+      const ref =
+        typeof request.id === 'string' && request.id
+          ? ` (referencia: ${request.id.slice(0, 8)})`
+          : '';
       body = {
         statusCode: status,
         code: 'INTERNAL_ERROR',
         message:
           process.env.NODE_ENV === 'production'
-            ? 'Error interno del servidor'
+            ? `Ocurrió un error inesperado al procesar la solicitud. Intente nuevamente; si persiste, contacte a soporte${ref}.`
             : message,
         timestamp: new Date().toISOString(),
-        path: request.url.split('?')[0],
+        path,
       };
     }
 

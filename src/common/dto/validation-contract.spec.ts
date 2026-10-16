@@ -1,5 +1,5 @@
 import { ExchangePanelHandoffDto } from '../../modules/auth/application/dto/exchange-panel-handoff.dto';
-import { ValidationPipe, type Type } from '@nestjs/common';
+import { type Type } from '@nestjs/common';
 import { ProductListQueryDto } from '../../modules/products/dto/product-list-query.dto';
 import { PromotionListQueryDto } from '../../modules/marketing/dto/marketing.dto';
 import { BankMovementListQueryDto } from '../../modules/finance/dto/finance.dto';
@@ -8,13 +8,9 @@ import {
   RequiredPeriodQueryDto,
   RequiredLotQueryDto,
 } from './required-report-query.dto';
+import { createValidationPipe } from '../validation/validation-pipe.factory';
 
-const pipe = new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-  transformOptions: { enableImplicitConversion: false },
-});
+const pipe = createValidationPipe();
 const validate = (
   metatype: Type<unknown>,
   value: unknown,

@@ -1,9 +1,10 @@
 import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
+import { createValidationPipe } from '../../src/common/validation/validation-pipe.factory';
 
 export async function createE2eApp(): Promise<INestApplication<App>> {
   const { Test } = await import('@nestjs/testing');
@@ -16,14 +17,7 @@ export async function createE2eApp(): Promise<INestApplication<App>> {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: false },
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
   await app.init();
 
   const document = SwaggerModule.createDocument(
