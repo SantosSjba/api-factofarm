@@ -1589,6 +1589,11 @@ export class SalesService {
               `El lote ${explicitLot} no corresponde a la venta del ítem`,
             );
           }
+          if (qty.greaterThan(soldLot.cantidad)) {
+            throw new BadRequestException(
+              `Del lote ${explicitLot} sólo se vendieron ${soldLot.cantidad.toString()} unidades; deje el lote vacío para repartir la devolución entre los lotes vendidos`,
+            );
+          }
           lotRestores.push({ lotCode: explicitLot, qty });
         } else {
           // Repone proporcionalmente desde los lotes vendidos (evita drift almacén/lote).

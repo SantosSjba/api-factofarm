@@ -149,6 +149,9 @@ export class InventoryTransfersService {
       select: { id: true, manejaLotes: true, nombre: true },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
+    // Se valida contra el stock del almacén origen al crear: antes el error aparecía recién al
+    // despachar, con la transferencia ya registrada.
+    const requested = new Map<string, Prisma.Decimal>();
     for (const item of dto.items) {
       const product = productById.get(item.productId);
       if (!product) throw new NotFoundException('Producto no encontrado');
@@ -156,6 +159,54 @@ export class InventoryTransfersService {
       if (product.manejaLotes && !lotCode) {
         throw new BadRequestException(
           `El producto ${product.nombre} maneja lotes: indique código de lote`,
+        );
+      }
+      if (!product.manejaLotes && lotCode) {
+        throw new BadRequestException(
+          `El producto ${product.nombre} no maneja lotes: quite el código de lote`,
+        );
+      }
+      const key = `${product.id}|${lotCode ?? ''}`;
+      requested.set(
+        key,
+        (requested.get(key) ?? new Prisma.Decimal(0)).plus(item.cantidad),
+      );
+    }
+    for (const [key, qty] of requested) {
+      const [productId, lotCode] = key.split('|');
+      const product = productById.get(productId)!;
+      const available = lotCode
+        ? (
+            await this.prisma.productLotStock.findFirst({
+              where: {
+                productId,
+                warehouseId: dto.fromWarehouseId,
+                codigoLote: lotCode,
+                deletedAt: null,
+              },
+              select: { stock: true },
+            })
+          )?.stock
+        : (
+            await this.prisma.productWarehouseStock.findUnique({
+              where: {
+                productId_warehouseId: {
+                  productId,
+                  warehouseId: dto.fromWarehouseId,
+                },
+              },
+              select: { cantidad: true },
+            })
+          )?.cantidad;
+      if (lotCode && available === undefined) {
+        throw new BadRequestException(
+          `El lote ${lotCode} de ${product.nombre} no existe en el almacén origen`,
+        );
+      }
+      const stock = available ?? new Prisma.Decimal(0);
+      if (stock.lessThan(qty)) {
+        throw new BadRequestException(
+          `Stock insuficiente de ${product.nombre}${lotCode ? ` (lote ${lotCode})` : ''} en el almacén origen: disponible ${stock.toString()}, solicitado ${qty.toString()}`,
         );
       }
     }

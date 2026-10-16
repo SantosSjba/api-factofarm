@@ -613,12 +613,7 @@ export class ProductsService {
       );
     }
 
-    if (dto.imagenArchivoId) {
-      const a = await this.prisma.archivo.findUnique({
-        where: { id: dto.imagenArchivoId },
-      });
-      if (!a) throw new BadRequestException('Archivo de imagen no válido');
-    }
+    await this.assertProductImage(dto.imagenArchivoId, tenantId);
 
     if (dto.tipoSistemaIscId) {
       const iscSystem = await this.prisma.productIscSystem.findFirst({
@@ -852,6 +847,73 @@ export class ProductsService {
     return this.findOne(created, actor);
   }
 
+  /**
+   * La imagen debe ser un archivo de imagen del mismo tenant y no estar ya asignada a otro
+   * producto (`imagenArchivoId` es único: sin esta validación la BD respondía con un error 500).
+   */
+  private async assertProductImage(
+    archivoId: string | null | undefined,
+    tenantId: string,
+    productId?: string,
+  ): Promise<void> {
+    if (!archivoId) return;
+    const archivo = await this.prisma.archivo.findUnique({
+      where: { id: archivoId },
+      select: { tenantId: true, mimeType: true },
+    });
+    if (!archivo || (archivo.tenantId && archivo.tenantId !== tenantId)) {
+      throw new BadRequestException(
+        'La imagen no existe o no pertenece a su empresa. Vuelva a subirla.',
+      );
+    }
+    if (!archivo.mimeType.startsWith('image/')) {
+      throw new BadRequestException(
+        'El archivo seleccionado no es una imagen (use JPG, PNG o WEBP).',
+      );
+    }
+    const owner = await this.prisma.product.findFirst({
+      where: {
+        imagenArchivoId: archivoId,
+        ...(productId ? { NOT: { id: productId } } : {}),
+      },
+      select: { nombre: true },
+    });
+    if (owner) {
+      throw new BadRequestException(
+        `La imagen ya está asignada al producto "${owner.nombre}". Suba una imagen nueva.`,
+      );
+    }
+  }
+
+  /**
+   * Al editar, el stock no se modifica desde el producto (kardex: ingresos, ajustes o
+   * traslados). Se tolera que un cliente reenvíe el stock actual sin cambios; sólo se
+   * rechaza si intenta cambiarlo, y antes de escribir nada.
+   */
+  private async assertStockUnchanged(
+    productId: string,
+    stocks: { warehouseId: string; cantidad: number }[] | undefined,
+  ): Promise<void> {
+    if (!stocks?.length) return;
+    const current = await this.prisma.productWarehouseStock.findMany({
+      where: { productId },
+      select: { warehouseId: true, cantidad: true },
+    });
+    const byWarehouse = new Map(
+      current.map((row) => [row.warehouseId, Number(row.cantidad)]),
+    );
+    const changed = stocks.some(
+      (s) =>
+        Math.abs((byWarehouse.get(s.warehouseId) ?? 0) - Number(s.cantidad)) >
+        1e-6,
+    );
+    if (changed) {
+      throw new BadRequestException(
+        'El stock no se puede modificar desde el producto; use ingresos, ajustes o transferencias de inventario.',
+      );
+    }
+  }
+
   async update(id: string, dto: CreateProductDto, actor?: JwtRequestUser) {
     const tenantId = this.requireTenant(actor);
     const exists = await this.prisma.product.findFirst({
@@ -937,12 +999,8 @@ export class ProductsService {
       );
     }
 
-    if (dto.imagenArchivoId) {
-      const a = await this.prisma.archivo.findUnique({
-        where: { id: dto.imagenArchivoId },
-      });
-      if (!a) throw new BadRequestException('Archivo de imagen no válido');
-    }
+    await this.assertProductImage(dto.imagenArchivoId, tenantId, id);
+    await this.assertStockUnchanged(id, dto.warehouseStocks);
 
     if (dto.tipoSistemaIscId) {
       const iscSystem = await this.prisma.productIscSystem.findFirst({
@@ -1088,12 +1146,6 @@ export class ProductsService {
             },
           });
         }
-      }
-
-      if (dto.warehouseStocks !== undefined) {
-        throw new BadRequestException(
-          'El stock no se puede modificar desde el producto; use ingresos, ajustes o transferencias de inventario.',
-        );
       }
 
       if (dto.presentations) {

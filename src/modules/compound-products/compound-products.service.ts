@@ -14,6 +14,7 @@ import {
   tenantWhere,
 } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
+import { assertTenantImageFile } from '../../common/utils/assert-image-file.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
@@ -168,6 +169,7 @@ export class CompoundProductsService {
   async create(dto: CreateCompoundProductDto, actor?: JwtRequestUser) {
     const tenantId = this.requireTenant(actor);
     await this.validateReferences(dto, tenantId);
+    await this.assertCompoundImage(dto.imagenArchivoId, tenantId);
     const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException(
@@ -214,6 +216,7 @@ export class CompoundProductsService {
       throw new NotFoundException('Producto compuesto no encontrado');
 
     await this.validateReferences(dto, tenantId);
+    await this.assertCompoundImage(dto.imagenArchivoId, tenantId, id);
     const normalizedItems = await this.normalizeItems(dto.items ?? [], actor);
     if (!normalizedItems.length) {
       throw new BadRequestException(
@@ -587,6 +590,28 @@ export class CompoundProductsService {
       brandId: dto.brandId || null,
       imagenArchivoId: dto.imagenArchivoId || null,
     };
+  }
+
+  /** Imagen del mismo tenant y no asignada a otro compuesto (`imagenArchivoId` es único). */
+  private async assertCompoundImage(
+    archivoId: string | null | undefined,
+    tenantId: string,
+    compoundId?: string,
+  ): Promise<void> {
+    if (!archivoId) return;
+    await assertTenantImageFile(this.prisma, archivoId, tenantId);
+    const owner = await this.prisma.compoundProduct.findFirst({
+      where: {
+        imagenArchivoId: archivoId,
+        ...(compoundId ? { NOT: { id: compoundId } } : {}),
+      },
+      select: { nombre: true },
+    });
+    if (owner) {
+      throw new BadRequestException(
+        `La imagen ya está asignada al conjunto "${owner.nombre}". Suba una imagen nueva.`,
+      );
+    }
   }
 
   private async recalculateCompoundTotal(compoundProductId: string) {

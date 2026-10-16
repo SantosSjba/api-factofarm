@@ -51,6 +51,7 @@ import {
   type LotAllocationLine,
 } from './inventory-lot-allocation.service';
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
+import { assertLotExpiryConsistent, resolveInboundLot } from './lot-rules.util';
 
 const ADJUST_OUT_CODE = 'OUT_AJUSTE_DIFERENCIA';
 const ADJUST_IN_CODE = 'INGRESO_OTROS';
@@ -60,6 +61,15 @@ const serialAvailableStates: ProductSerialStatus[] = [
   ProductSerialStatus.DISPONIBLE,
   ProductSerialStatus.RESERVADO,
 ];
+
+/** Motivos de salida con los que se puede retirar un lote vencido. */
+const EXPIRED_LOT_WITHDRAWAL_REASONS = new Set([
+  'OUT_RETIRO',
+  'OUT_MERMAS',
+  'OUT_DESMEDROS',
+  'OUT_DESTRUCCION',
+  'OUT_DEVOLUCION_PROVEEDOR',
+]);
 
 @Injectable()
 export class InventoryMovementsService {
@@ -621,10 +631,45 @@ export class InventoryMovementsService {
     });
     if (!warehouse) throw new NotFoundException('Almacén no encontrado');
 
+    // Con control de lotes el ajuste se hace por lote: ajustar sólo el total del almacén
+    // descuadraba el stock por lote (y la salida FEFO) frente al stock general.
+    const product = await this.prisma.product.findFirst({
+      where: { id: dto.productId, deletedAt: null },
+      select: { nombre: true, manejaLotes: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    const lotCode = dto.lotCode?.trim() || undefined;
+    if (product.manejaLotes && !lotCode) {
+      throw new BadRequestException(
+        `El producto ${product.nombre} maneja lotes: indique el lote a ajustar`,
+      );
+    }
+    if (!product.manejaLotes && lotCode) {
+      throw new BadRequestException(
+        `El producto ${product.nombre} no maneja lotes: ajuste sin indicar lote`,
+      );
+    }
+    if (lotCode) {
+      const lot = await this.prisma.productLotStock.findFirst({
+        where: {
+          productId: dto.productId,
+          warehouseId: dto.warehouseId,
+          codigoLote: lotCode,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!lot) {
+        throw new BadRequestException(
+          `El lote ${lotCode} no existe en este almacén: regístrelo con un ingreso indicando su vencimiento`,
+        );
+      }
+    }
+
     const systemQty = await this.resolveSystemQuantity(
       dto.productId,
       dto.warehouseId,
-      dto.lotCode,
+      lotCode,
     );
     const counted = new Prisma.Decimal(dto.countedQuantity);
     const delta = counted.minus(systemQty);
@@ -638,7 +683,7 @@ export class InventoryMovementsService {
         data: {
           productId: dto.productId,
           warehouseId: dto.warehouseId,
-          codigoLote: dto.lotCode?.trim() || null,
+          codigoLote: lotCode ?? null,
           cantidadAjuste: delta,
           motivo: dto.reason.trim(),
           requestedById: actorId,
@@ -657,7 +702,7 @@ export class InventoryMovementsService {
     await this.executeAdjustmentDelta({
       productId: dto.productId,
       warehouseId: dto.warehouseId,
-      lotCode: dto.lotCode?.trim() || null,
+      lotCode: lotCode ?? null,
       delta,
       reason: dto.reason.trim(),
       userId: actorId,
@@ -670,7 +715,7 @@ export class InventoryMovementsService {
       diff: {
         productId: dto.productId,
         warehouseId: dto.warehouseId,
-        lotCode: dto.lotCode?.trim() || null,
+        lotCode: lotCode ?? null,
         delta: delta.toString(),
         reason: dto.reason.trim(),
       },
@@ -1029,7 +1074,7 @@ export class InventoryMovementsService {
     const [product, warehouse, transferReason] = await Promise.all([
       this.prisma.product.findFirst({
         where: { id: dto.productId, deletedAt: null },
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, manejaLotes: true },
       }),
       this.prisma.warehouse.findFirst({
         where: { id: dto.warehouseId, deletedAt: null },
@@ -1051,17 +1096,23 @@ export class InventoryMovementsService {
     );
 
     const amount = new Prisma.Decimal(dto.quantity);
-    const fechaVencimiento = dto.expirationDate
-      ? new Date(dto.expirationDate)
-      : null;
+    const { codigoLote, fechaVencimiento } = resolveInboundLot(
+      product,
+      dto.lotCode,
+      dto.expirationDate,
+    );
+    await assertLotExpiryConsistent(
+      this.prisma,
+      product.id,
+      product.nombre,
+      codigoLote,
+      fechaVencimiento,
+    );
     const fechaRegistro = dto.registeredAt
       ? new Date(dto.registeredAt)
       : new Date();
     if (Number.isNaN(fechaRegistro.getTime())) {
       throw new BadRequestException('Fecha de registro inválida');
-    }
-    if (fechaVencimiento && Number.isNaN(fechaVencimiento.getTime())) {
-      throw new BadRequestException('Fecha de vencimiento inválida');
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -1076,7 +1127,7 @@ export class InventoryMovementsService {
           movementType: InventoryMovementType.INGRESO,
           cantidad: amount,
           costoUnitario: unitCost,
-          codigoLote: dto.lotCode || null,
+          codigoLote,
           fechaVencimiento,
           fechaRegistro,
           referencia: dto.reference || null,
@@ -1085,12 +1136,12 @@ export class InventoryMovementsService {
         },
       });
 
-      if (dto.lotCode) {
+      if (codigoLote) {
         const existingLot = await tx.productLotStock.findFirst({
           where: {
             productId: product.id,
             warehouseId: warehouse.id,
-            codigoLote: dto.lotCode,
+            codigoLote,
             deletedAt: null,
           },
           select: { id: true, stock: true },
@@ -1109,7 +1160,7 @@ export class InventoryMovementsService {
             data: {
               productId: product.id,
               warehouseId: warehouse.id,
-              codigoLote: dto.lotCode,
+              codigoLote,
               stock: amount,
               costoUnitario: unitCost,
               fechaVencimiento,
@@ -1142,7 +1193,7 @@ export class InventoryMovementsService {
         productId: product.id,
         warehouseId: warehouse.id,
         quantity: amount.toString(),
-        lotCode: dto.lotCode || null,
+        lotCode: codigoLote,
       },
     });
 
@@ -1331,7 +1382,7 @@ export class InventoryMovementsService {
             activo: true,
             codigo: { startsWith: 'OUT_' },
           },
-          select: { id: true, nombre: true },
+          select: { id: true, nombre: true, codigo: true },
         }),
         this.prisma.productWarehouseStock.findUnique({
           where: {
@@ -1386,11 +1437,15 @@ export class InventoryMovementsService {
             'No existe el lote indicado en el almacén seleccionado',
           );
         }
-        this.lotAllocation.assertLotSellable(
-          lot.fechaVencimiento,
-          policy.blockExpiredProductSales,
-          lot.codigoLote,
-        );
+        // Un lote vencido debe poder retirarse (DIGEMID: retiro y destrucción); sólo las
+        // salidas que entregan el producto a terceros bloquean lotes vencidos.
+        if (!EXPIRED_LOT_WITHDRAWAL_REASONS.has(transferReason.codigo)) {
+          this.lotAllocation.assertLotSellable(
+            lot.fechaVencimiento,
+            policy.blockExpiredProductSales,
+            lot.codigoLote,
+          );
+        }
         if (lot.stock.lessThan(amount)) {
           throw new BadRequestException(
             'Stock insuficiente en el lote indicado',

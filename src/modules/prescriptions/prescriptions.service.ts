@@ -196,6 +196,12 @@ export class PrescriptionsService {
     ) {
       throw new BadRequestException('No repita productos en la receta');
     }
+    // Tolerancia de 5 min por desfase de reloj entre el equipo y el servidor.
+    if (new Date(dto.fechaEmision).getTime() > Date.now() + 5 * 60_000) {
+      throw new BadRequestException(
+        'La fecha de emisión de la receta no puede ser futura',
+      );
+    }
     if (
       dto.validUntil &&
       new Date(dto.validUntil) < new Date(dto.fechaEmision)
@@ -229,42 +235,48 @@ export class PrescriptionsService {
       medicoNombre = `${medico.nombres} ${medico.apellidos}`;
       medicoCmp = medico.cmp;
     }
-
-    const numero = await this.resolveNumero(establishmentId);
+    // DIGEMID: la receta debe identificar al profesional prescriptor (nombre y colegiatura).
+    if (!medicoNombre || !medicoCmp) {
+      throw new BadRequestException(
+        'Indique el médico prescriptor (nombre y CMP): la receta no es válida sin él',
+      );
+    }
 
     const diagnosticoPlain = dto.diagnostico?.trim() || null;
     const notasPlain = dto.notas?.trim() || null;
     const encryptHealth = this.crypto.isEnabled();
 
-    const created = await this.prisma.prescription.create({
-      data: {
-        establishmentId,
-        numero,
-        fechaEmision: new Date(dto.fechaEmision),
-        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
-        customerId: dto.customerId,
-        medicoId: dto.medicoId ?? null,
-        medicoNombre,
-        medicoCmp,
-        diagnostico: encryptHealth ? null : diagnosticoPlain,
-        notas: encryptHealth ? null : notasPlain,
-        diagnosticoCipher: encryptHealth
-          ? this.crypto.encrypt(diagnosticoPlain)
-          : null,
-        notasCipher: encryptHealth ? this.crypto.encrypt(notasPlain) : null,
-        imagenArchivoId: dto.imagenArchivoId ?? null,
-        registeredById: actor.sub,
-        items: {
-          create: dto.items.map((item) => ({
-            productId: item.productId,
-            dosis: item.dosis?.trim() || null,
-            cantidadPrescrita: new Prisma.Decimal(item.cantidadPrescrita),
-            indicaciones: item.indicaciones?.trim() || null,
-          })),
+    const created = await this.createWithNumero(establishmentId, (numero) =>
+      this.prisma.prescription.create({
+        data: {
+          establishmentId,
+          numero,
+          fechaEmision: new Date(dto.fechaEmision),
+          validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
+          customerId: dto.customerId,
+          medicoId: dto.medicoId ?? null,
+          medicoNombre,
+          medicoCmp,
+          diagnostico: encryptHealth ? null : diagnosticoPlain,
+          notas: encryptHealth ? null : notasPlain,
+          diagnosticoCipher: encryptHealth
+            ? this.crypto.encrypt(diagnosticoPlain)
+            : null,
+          notasCipher: encryptHealth ? this.crypto.encrypt(notasPlain) : null,
+          imagenArchivoId: dto.imagenArchivoId ?? null,
+          registeredById: actor.sub,
+          items: {
+            create: dto.items.map((item) => ({
+              productId: item.productId,
+              dosis: item.dosis?.trim() || null,
+              cantidadPrescrita: new Prisma.Decimal(item.cantidadPrescrita),
+              indicaciones: item.indicaciones?.trim() || null,
+            })),
+          },
         },
-      },
-      select: { id: true },
-    });
+        select: { id: true },
+      }),
+    );
 
     await this.audit.log({
       userId: actor.sub,
@@ -287,7 +299,7 @@ export class PrescriptionsService {
     });
     if (!prescription) throw new NotFoundException('Receta no encontrada');
 
-    await this.assertArchivoInTenant(actor, imagenArchivoId);
+    await this.assertArchivoInTenant(actor, imagenArchivoId, id);
 
     await this.prisma.prescription.update({
       where: { id },
@@ -308,17 +320,60 @@ export class PrescriptionsService {
   private async assertArchivoInTenant(
     actor: JwtRequestUser,
     archivoId: string,
+    prescriptionId?: string,
   ) {
     const archivo = await this.prisma.archivo.findUnique({
       where: { id: archivoId },
-      select: { id: true, tenantId: true },
+      select: { id: true, tenantId: true, mimeType: true },
     });
     if (!archivo) throw new NotFoundException('Archivo no encontrado');
     if (!archivo.tenantId) {
-      if (isPlatformAdmin(actor.role)) return;
-      throw new ForbiddenException('Archivo sin tenant asignado');
+      if (!isPlatformAdmin(actor.role)) {
+        throw new ForbiddenException('Archivo sin tenant asignado');
+      }
+    } else {
+      assertTenantAccess(actorFromJwt(actor), archivo.tenantId);
     }
-    assertTenantAccess(actorFromJwt(actor), archivo.tenantId);
+    if (
+      !archivo.mimeType.startsWith('image/') &&
+      archivo.mimeType !== 'application/pdf'
+    ) {
+      throw new BadRequestException(
+        'La receta adjunta debe ser una imagen (JPG, PNG, WEBP) o un PDF',
+      );
+    }
+    // `imagenArchivoId` es único: sin esto la BD respondía con un conflicto genérico.
+    const owner = await this.prisma.prescription.findFirst({
+      where: {
+        imagenArchivoId: archivoId,
+        ...(prescriptionId ? { NOT: { id: prescriptionId } } : {}),
+      },
+      select: { numero: true },
+    });
+    if (owner) {
+      throw new BadRequestException(
+        `El archivo ya está adjunto a la receta ${owner.numero}. Suba el archivo nuevamente.`,
+      );
+    }
+  }
+
+  /** Reintenta si otra receta tomó el mismo correlativo al mismo tiempo (único por local). */
+  private async createWithNumero<T>(
+    establishmentId: string,
+    create: (numero: string) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const numero = await this.resolveNumero(establishmentId);
+      try {
+        return await create(numero);
+      } catch (err) {
+        const retry =
+          attempt < 2 &&
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002';
+        if (!retry) throw err;
+      }
+    }
   }
 
   async validateForSale(

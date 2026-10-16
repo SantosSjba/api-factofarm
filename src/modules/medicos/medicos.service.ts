@@ -57,16 +57,34 @@ export class MedicosService {
   }
 
   async create(dto: CreateMedicoDto, actorId?: string) {
+    const cmp = dto.cmp.trim();
+    const data = {
+      nombres: dto.nombres.trim(),
+      apellidos: dto.apellidos.trim(),
+      especialidad: dto.especialidad?.trim() || null,
+    };
+    // El CMP es único también entre médicos dados de baja: se reactiva el registro en vez de
+    // responder "ya existe" sobre un médico que el usuario no ve en la lista.
+    const existing = await this.prisma.medico.findUnique({
+      where: { cmp },
+      select: { id: true, nombres: true, apellidos: true, deletedAt: true },
+    });
+    if (existing && !existing.deletedAt) {
+      throw new ConflictException(
+        `Ya existe un médico con el CMP ${cmp}: ${existing.apellidos}, ${existing.nombres}.`,
+      );
+    }
     try {
-      const created = await this.prisma.medico.create({
-        data: {
-          cmp: dto.cmp.trim(),
-          nombres: dto.nombres.trim(),
-          apellidos: dto.apellidos.trim(),
-          especialidad: dto.especialidad?.trim() || null,
-        },
-        select: selectRow,
-      });
+      const created = existing
+        ? await this.prisma.medico.update({
+            where: { id: existing.id },
+            data: { ...data, activo: true, deletedAt: null },
+            select: selectRow,
+          })
+        : await this.prisma.medico.create({
+            data: { cmp, ...data },
+            select: selectRow,
+          });
       await this.audit.log({
         userId: actorId,
         action: 'CREATE',

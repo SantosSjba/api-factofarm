@@ -1,5 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, QuotationStatus } from '../../generated/prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  DiscountType,
+  Prisma,
+  QuotationStatus,
+} from '../../generated/prisma/client';
 import {
   buildPaginatedResult,
   paginationArgs,
@@ -115,6 +123,7 @@ export class QuotationsService {
       const product = await this.prisma.product.findFirst({
         where: { id: line.productId, deletedAt: null },
         select: {
+          nombre: true,
           precioUnitarioVenta: true,
           incluyeIgvVenta: true,
           saleTaxAffectation: { select: { codigo: true } },
@@ -123,10 +132,31 @@ export class QuotationsService {
       if (!product)
         throw new NotFoundException(`Producto ${line.productId} no encontrado`);
 
-      const unitPrice = line.unitPrice
-        ? new Prisma.Decimal(line.unitPrice)
-        : product.precioUnitarioVenta;
+      // `!= null`: un precio 0 (bonificación) es válido y no debe reemplazarse por el de lista.
+      const unitPrice =
+        line.unitPrice != null
+          ? new Prisma.Decimal(line.unitPrice)
+          : product.precioUnitarioVenta;
       const qty = new Prisma.Decimal(line.quantity);
+      if (line.discountType && line.discountValue) {
+        const gross = unitPrice.times(qty);
+        if (
+          line.discountType === DiscountType.PORCENTAJE &&
+          line.discountValue > 100
+        ) {
+          throw new BadRequestException(
+            `El descuento de ${product.nombre} no puede superar el 100%`,
+          );
+        }
+        if (
+          line.discountType !== DiscountType.PORCENTAJE &&
+          new Prisma.Decimal(line.discountValue).greaterThan(gross)
+        ) {
+          throw new BadRequestException(
+            `El descuento de ${product.nombre} (${line.discountValue}) supera el importe de la línea (${gross.toFixed(2)})`,
+          );
+        }
+      }
       const totals = computeSaleLineTotals({
         unitPrice,
         quantity: qty,
@@ -178,10 +208,20 @@ export class QuotationsService {
 
   async markSent(id: string, establishmentId: string) {
     await this.ensure(id, establishmentId);
-    await this.prisma.quotation.update({
-      where: { id },
+    // Sólo un borrador pasa a enviada: antes una cotización convertida, rechazada o vencida
+    // volvía a "Enviada" y podía reutilizarse.
+    const updated = await this.prisma.quotation.updateMany({
+      where: {
+        id,
+        estado: { in: [QuotationStatus.BORRADOR, QuotationStatus.ENVIADA] },
+      },
       data: { estado: QuotationStatus.ENVIADA },
     });
+    if (updated.count !== 1) {
+      throw new BadRequestException(
+        'Sólo se puede enviar una cotización en borrador',
+      );
+    }
     return { ok: true };
   }
 }

@@ -1,6 +1,7 @@
 import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import { scalarText } from '../../common/utils/scalar-text.util';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -177,6 +178,7 @@ export class CustomersService {
     if (!tenantId) {
       throw new ForbiddenException('Debe operar dentro de un cliente');
     }
+    await this.assertCustomerRefs(dto, tenantId);
     try {
       const created = await this.prisma.customer.create({
         data: { ...this.toCreateInput(dto), tenantId },
@@ -203,7 +205,27 @@ export class CustomersService {
   }
 
   async update(id: string, dto: UpdateCustomerDto, actor?: JwtRequestUser) {
-    await this.ensureCustomer(id, actor);
+    const tenantId = await this.ensureCustomer(id, actor);
+    // Sólo se validan las referencias que cambian: un tipo/zona dado de baja después no debe
+    // impedir editar otros datos del cliente.
+    const current = await this.prisma.customer.findUniqueOrThrow({
+      where: { id },
+      select: { customerTypeId: true, zoneId: true, vendedorAsignadoId: true },
+    });
+    await this.assertCustomerRefs(
+      {
+        customerTypeId:
+          dto.customerTypeId !== current.customerTypeId
+            ? dto.customerTypeId
+            : undefined,
+        zoneId: dto.zoneId !== current.zoneId ? dto.zoneId : undefined,
+        vendedorAsignadoId:
+          dto.vendedorAsignadoId !== current.vendedorAsignadoId
+            ? dto.vendedorAsignadoId
+            : undefined,
+      },
+      tenantId,
+    );
     const data: Prisma.CustomerUncheckedUpdateInput = this.toUpdateInput(dto);
     try {
       await this.prisma.customer.update({ where: { id }, data });
@@ -799,10 +821,12 @@ export class CustomersService {
   private toUpdateInput(
     dto: UpdateCustomerDto,
   ): Prisma.CustomerUncheckedUpdateInput {
+    // Un campo presente en el body es intención del usuario: si llega vacío se limpia (null).
+    // Antes `norm('')` devolvía undefined y Prisma lo ignoraba, así que nunca se podía borrar.
     const data: Prisma.CustomerUncheckedUpdateInput = {};
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim().toUpperCase();
     if (dto.nombreComercial !== undefined)
-      data.nombreComercial = this.norm(dto.nombreComercial);
+      data.nombreComercial = this.norm(dto.nombreComercial) ?? null;
     if (dto.tipoDocumento !== undefined) data.tipoDocumento = dto.tipoDocumento;
     if (dto.numeroDocumento !== undefined)
       data.numeroDocumento = dto.numeroDocumento.trim();
@@ -816,21 +840,23 @@ export class CustomersService {
           : null;
     }
     if (dto.codigoInterno !== undefined)
-      data.codigoInterno = this.norm(dto.codigoInterno);
+      data.codigoInterno = this.norm(dto.codigoInterno) ?? null;
     if (dto.codigoBarra !== undefined)
-      data.codigoBarra = this.norm(dto.codigoBarra);
+      data.codigoBarra = this.norm(dto.codigoBarra) ?? null;
     if (dto.observaciones !== undefined)
-      data.observaciones = this.norm(dto.observaciones);
-    if (dto.sitioWeb !== undefined) data.sitioWeb = this.norm(dto.sitioWeb);
+      data.observaciones = this.norm(dto.observaciones) ?? null;
+    if (dto.sitioWeb !== undefined)
+      data.sitioWeb = this.norm(dto.sitioWeb) ?? null;
     if (dto.contactoNombre !== undefined)
-      data.contactoNombre = this.norm(dto.contactoNombre);
+      data.contactoNombre = this.norm(dto.contactoNombre) ?? null;
     if (dto.contactoTelefono !== undefined)
-      data.contactoTelefono = this.norm(dto.contactoTelefono);
-    if (dto.telefono !== undefined) data.telefono = this.norm(dto.telefono);
+      data.contactoTelefono = this.norm(dto.contactoTelefono) ?? null;
+    if (dto.telefono !== undefined)
+      data.telefono = this.norm(dto.telefono) ?? null;
     if (dto.correoElectronico !== undefined)
-      data.correoElectronico = this.normLower(dto.correoElectronico);
+      data.correoElectronico = this.normLower(dto.correoElectronico) ?? null;
     if (dto.correosOpcionales !== undefined)
-      data.correosOpcionales = this.norm(dto.correosOpcionales);
+      data.correosOpcionales = this.norm(dto.correosOpcionales) ?? null;
     if (dto.puntosAcumulados !== undefined)
       data.puntosAcumulados = dto.puntosAcumulados;
     if (dto.activo !== undefined) data.activo = dto.activo;
@@ -870,7 +896,7 @@ export class CustomersService {
   private async ensureCustomer(
     id: string,
     actor?: JwtRequestUser,
-  ): Promise<void> {
+  ): Promise<string> {
     const row = await this.prisma.customer.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, tenantId: true },
@@ -878,6 +904,52 @@ export class CustomersService {
     if (!row) throw new NotFoundException('Cliente no encontrado');
     if (actor) {
       assertTenantAccess(actorFromJwt(actor), row.tenantId);
+    }
+    return row.tenantId;
+  }
+
+  /** Tipo de cliente, zona y vendedor deben pertenecer a la misma empresa del cliente. */
+  private async assertCustomerRefs(
+    dto: Pick<
+      CreateCustomerDto,
+      'customerTypeId' | 'zoneId' | 'vendedorAsignadoId'
+    >,
+    tenantId: string,
+  ): Promise<void> {
+    const [type, zone, seller] = await Promise.all([
+      dto.customerTypeId
+        ? this.prisma.customerType.findFirst({
+            where: { id: dto.customerTypeId, tenantId, deletedAt: null },
+            select: { id: true },
+          })
+        : true,
+      dto.zoneId
+        ? this.prisma.customerZone.findFirst({
+            where: { id: dto.zoneId, tenantId, deletedAt: null },
+            select: { id: true },
+          })
+        : true,
+      dto.vendedorAsignadoId
+        ? this.prisma.user.findFirst({
+            where: { id: dto.vendedorAsignadoId, tenantId, deletedAt: null },
+            select: { id: true },
+          })
+        : true,
+    ]);
+    if (!type) {
+      throw new BadRequestException(
+        'El tipo de cliente seleccionado no existe o fue eliminado.',
+      );
+    }
+    if (!zone) {
+      throw new BadRequestException(
+        'La zona seleccionada no existe o fue eliminada.',
+      );
+    }
+    if (!seller) {
+      throw new BadRequestException(
+        'El vendedor asignado no existe o no pertenece a su empresa.',
+      );
     }
   }
 

@@ -23,6 +23,10 @@ import {
 } from '../../common/utils/timezone.util';
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  assertLotExpiryConsistent,
+  resolveInboundLot,
+} from '../inventory-movements/lot-rules.util';
 import { RealtimeService } from '../realtime/realtime.service';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import {
@@ -341,12 +345,18 @@ export class PurchasesService {
       const product = productById.get(poItem.productId);
       if (!product)
         throw new BadRequestException('Producto de la orden no disponible');
-      const codigoLote = line.lotCode?.trim() || null;
-      if (product?.manejaLotes && qty.greaterThan(0) && !codigoLote) {
-        throw new BadRequestException(
-          `El producto ${product.nombre} maneja lotes: indique código de lote`,
-        );
-      }
+      const { codigoLote, fechaVencimiento } = resolveInboundLot(
+        product,
+        line.lotCode,
+        line.expirationDate,
+      );
+      await assertLotExpiryConsistent(
+        this.prisma,
+        product.id,
+        product.nombre,
+        codigoLote,
+        fechaVencimiento,
+      );
       const cost =
         line.unitCost != null
           ? new Prisma.Decimal(line.unitCost)
@@ -367,9 +377,7 @@ export class PurchasesService {
         productId: poItem.productId,
         cantidad: qty,
         codigoLote,
-        fechaVencimiento: line.expirationDate
-          ? new Date(line.expirationDate)
-          : null,
+        fechaVencimiento,
         costoUnitario: cost,
         poItem,
       });
@@ -640,6 +648,11 @@ export class PurchasesService {
     if (monto.lessThanOrEqualTo(0)) {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
+    if (monto.greaterThan(ap.saldo)) {
+      throw new BadRequestException(
+        `El pago (${monto.toFixed(2)}) supera el saldo pendiente (${ap.saldo.toFixed(2)})`,
+      );
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.accountPayablePayment.create({
@@ -705,6 +718,58 @@ export class PurchasesService {
     await this.scope.assertSupplierInTenant(actor, dto.supplierId);
     await this.assertSupplierEnabled(dto.supplierId);
     const monto = new Prisma.Decimal(dto.monto);
+    const numero = dto.numero?.trim().toUpperCase() || null;
+
+    // Validaciones antes de escribir: la cuenta y la orden deben ser del mismo proveedor y
+    // local (antes una NC de un proveedor podía rebajar la deuda con otro).
+    if (dto.accountPayableId) {
+      const ap = await this.prisma.accountPayable.findFirst({
+        where: { id: dto.accountPayableId, establishmentId, deletedAt: null },
+        select: { supplierId: true, estado: true, saldo: true },
+      });
+      if (!ap) throw new NotFoundException('Cuenta por pagar no encontrada');
+      if (ap.supplierId !== dto.supplierId) {
+        throw new BadRequestException(
+          'La cuenta por pagar seleccionada pertenece a otro proveedor',
+        );
+      }
+      if (
+        ap.estado === AccountPayableStatus.PAGADA ||
+        ap.estado === AccountPayableStatus.ANULADA
+      ) {
+        throw new BadRequestException(
+          'La cuenta por pagar ya está cerrada (pagada o anulada): no se le puede aplicar la nota de crédito',
+        );
+      }
+      if (monto.greaterThan(ap.saldo)) {
+        throw new BadRequestException(
+          `La nota de crédito (${monto.toFixed(2)}) supera el saldo pendiente de la cuenta (${ap.saldo.toFixed(2)})`,
+        );
+      }
+    }
+    if (dto.purchaseOrderId) {
+      const po = await this.prisma.purchaseOrder.findFirst({
+        where: { id: dto.purchaseOrderId, establishmentId, deletedAt: null },
+        select: { supplierId: true },
+      });
+      if (!po) throw new NotFoundException('Orden de compra no encontrada');
+      if (po.supplierId !== dto.supplierId) {
+        throw new BadRequestException(
+          'La orden de compra seleccionada pertenece a otro proveedor',
+        );
+      }
+    }
+    if (numero) {
+      const dup = await this.prisma.supplierCreditNote.findFirst({
+        where: { supplierId: dto.supplierId, numero },
+        select: { id: true },
+      });
+      if (dup) {
+        throw new BadRequestException(
+          `La nota de crédito ${numero} de este proveedor ya fue registrada`,
+        );
+      }
+    }
 
     const created = await this.prisma.$transaction(async (tx) => {
       const nc = await tx.supplierCreditNote.create({
@@ -713,7 +778,7 @@ export class PurchasesService {
           supplierId: dto.supplierId,
           accountPayableId: dto.accountPayableId ?? null,
           purchaseOrderId: dto.purchaseOrderId ?? null,
-          numero: dto.numero?.trim() || null,
+          numero,
           monto,
           motivo: dto.motivo.trim(),
           estado: SupplierCreditNoteStatus.APLICADA,
@@ -722,23 +787,38 @@ export class PurchasesService {
       });
 
       if (dto.accountPayableId) {
-        const ap = await tx.accountPayable.findFirst({
-          where: { id: dto.accountPayableId, establishmentId, deletedAt: null },
-        });
-        if (!ap) throw new NotFoundException('Cuenta por pagar no encontrada');
-        const newSaldo = Prisma.Decimal.max(
-          ap.saldo.minus(monto),
-          new Prisma.Decimal(0),
-        );
-        const newPagado = ap.montoPagado.plus(
-          Prisma.Decimal.min(monto, ap.saldo),
-        );
-        await tx.accountPayable.update({
-          where: { id: ap.id },
+        // Descuento atómico: si un pago concurrente bajó el saldo, se rechaza en vez de dejarlo negativo.
+        const applied = await tx.accountPayable.updateMany({
+          where: {
+            id: dto.accountPayableId,
+            establishmentId,
+            deletedAt: null,
+            saldo: { gte: monto },
+            estado: {
+              notIn: [
+                AccountPayableStatus.PAGADA,
+                AccountPayableStatus.ANULADA,
+              ],
+            },
+          },
           data: {
-            saldo: newSaldo,
-            montoPagado: newPagado,
-            estado: newSaldo.isZero()
+            saldo: { decrement: monto },
+            montoPagado: { increment: monto },
+          },
+        });
+        if (applied.count !== 1) {
+          throw new BadRequestException(
+            'La nota de crédito supera el saldo pendiente o la cuenta ya está cerrada',
+          );
+        }
+        const apAfter = await tx.accountPayable.findUniqueOrThrow({
+          where: { id: dto.accountPayableId },
+          select: { saldo: true },
+        });
+        await tx.accountPayable.update({
+          where: { id: dto.accountPayableId },
+          data: {
+            estado: apAfter.saldo.lessThanOrEqualTo(0)
               ? AccountPayableStatus.PAGADA
               : AccountPayableStatus.PARCIAL,
           },

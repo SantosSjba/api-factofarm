@@ -110,6 +110,11 @@ export class AccountsReceivableService {
     if (monto.lessThanOrEqualTo(0)) {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
+    if (monto.greaterThan(ar.saldo)) {
+      throw new BadRequestException(
+        `El pago (${monto.toFixed(2)}) supera el saldo pendiente (${ar.saldo.toFixed(2)})`,
+      );
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.accountReceivablePayment.create({

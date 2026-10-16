@@ -12,6 +12,7 @@ import {
   tenantWhere,
 } from '../../common/scoping/tenant-scope.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
+import { assertTenantImageFile } from '../../common/utils/assert-image-file.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { ServiceListQueryDto } from './dto/service-list-query.dto';
@@ -47,6 +48,17 @@ const selectServiceList = {
   brandId: true,
   productLocationId: true,
   habilitado: true,
+  generico: true,
+  necesitaRecetaMedica: true,
+  incluyeIscVenta: true,
+  incluyeIscCompra: true,
+  sujetoDetraccion: true,
+  sePuedeCanjearPorPuntos: true,
+  imagenArchivoId: true,
+  attributes: {
+    select: { attributeTypeId: true, descripcion: true },
+    orderBy: { id: 'asc' },
+  },
   unit: { select: { id: true, codigo: true, nombre: true } },
   brand: { select: { id: true, nombre: true } },
   currency: { select: { id: true, codigo: true, nombre: true } },
@@ -220,6 +232,7 @@ export class ServicesService {
     const tenantId = this.requireTenant(actor);
     const unitId = await this.resolveServiceUnitId(dto.unitId);
     await this.validateReferences(dto, tenantId);
+    await this.assertServiceImage(dto.imagenArchivoId, tenantId);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const service = await tx.service.create({
@@ -254,6 +267,7 @@ export class ServicesService {
       dto.unitId ?? current.unitId,
     );
     await this.validateReferences(dto, tenantId);
+    await this.assertServiceImage(dto.imagenArchivoId, tenantId, id);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.service.update({
@@ -489,6 +503,31 @@ export class ServicesService {
       productLocationId: dto.productLocationId || null,
       imagenArchivoId: dto.imagenArchivoId || null,
     };
+  }
+
+  /**
+   * La imagen debe ser del mismo tenant y no estar asignada a otro
+   * servicio (`imagenArchivoId` es único: sin esta validación la BD respondía con un error 500).
+   */
+  private async assertServiceImage(
+    archivoId: string | null | undefined,
+    tenantId: string,
+    serviceId?: string,
+  ): Promise<void> {
+    if (!archivoId) return;
+    await assertTenantImageFile(this.prisma, archivoId, tenantId);
+    const owner = await this.prisma.service.findFirst({
+      where: {
+        imagenArchivoId: archivoId,
+        ...(serviceId ? { NOT: { id: serviceId } } : {}),
+      },
+      select: { nombre: true },
+    });
+    if (owner) {
+      throw new BadRequestException(
+        `La imagen ya está asignada al servicio "${owner.nombre}". Suba una imagen nueva.`,
+      );
+    }
   }
 
   private async resolveServiceUnitId(unitId?: string): Promise<string> {
