@@ -81,7 +81,11 @@ export class TenantsController {
   }
 
   @Post('leads/:id/convert')
-  @RequirePermissions('tenants.write', 'nav.platform_clientes')
+  @RequirePermissions(
+    'tenants.write',
+    'nav.platform_clientes',
+    'nav.platform_leads',
+  )
   @ApiOperation({
     summary: 'Convertir lead en cliente y aprovisionar acceso inicial',
   })

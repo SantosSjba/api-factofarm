@@ -11,6 +11,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { SeriesListQueryDto } from './dto/series-list-query.dto';
 import { UpdateSeriesStatusDto } from './dto/update-series-status.dto';
@@ -19,6 +20,7 @@ import { Body } from '@nestjs/common';
 
 @ApiTags('Series')
 @Controller('series')
+@RequirePermissions('nav.series')
 export class SeriesController {
   constructor(private readonly seriesService: SeriesService) {}
 

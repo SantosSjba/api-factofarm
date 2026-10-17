@@ -50,7 +50,13 @@ export class CategoriesController {
   }
 
   @Post()
-  @RequirePermissions('categories.write')
+  @RequirePermissions(
+    'categories.write',
+    // Alta rápida desde los formularios de producto, servicio y pack.
+    'nav.productos',
+    'nav.servicios',
+    'nav.conjuntos_packs',
+  )
   @ApiOperation({ summary: 'Crear categoría' })
   @ApiBody({ type: CreateCategoryDto })
   create(@Body() dto: CreateCategoryDto, @CurrentUser() actor: JwtRequestUser) {

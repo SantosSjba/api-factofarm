@@ -1,6 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PermissionsService } from './application/permissions.service';
 
 @ApiTags('permissions')
@@ -35,10 +37,10 @@ export class PermissionsController {
   @ApiOperation({
     summary: 'Árboles de permisos del menú lateral (Fase 0 + Fase 1)',
     description:
-      'Requiere users.read/write o tenants.read / nav.platform_clientes.',
+      'Requiere users.read/write o tenants.read / nav.platform_clientes. Devuelve solo los módulos que el actor puede asignar.',
   })
-  menuTrees() {
-    return this.permissionsService.menuTrees();
+  menuTrees(@CurrentUser() actor: JwtRequestUser) {
+    return this.permissionsService.menuTreesFor(actor);
   }
 
   @Get('role-templates')

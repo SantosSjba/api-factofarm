@@ -62,7 +62,7 @@ export class SalesController {
   }
 
   @Get('pos-catalog')
-  @RequirePermissions('sales.read', 'nav.punto_venta')
+  @RequirePermissions('sales.read', 'nav.punto_venta', 'nav.ordenes_pedido')
   @ApiOperation({
     summary: 'Catálogo rápido POS (búsqueda por nombre/código/barras)',
   })

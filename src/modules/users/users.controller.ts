@@ -40,7 +40,8 @@ export class UsersController {
   }
 
   @Get()
-  @RequirePermissions('users.read')
+  // Gestión de personal y órdenes de pedido eligen colaboradores de esta lista.
+  @RequirePermissions('users.read', 'staff.read', 'delivery.write')
   @ApiOperation({ summary: 'Listar usuarios (paginado)' })
   findAll(
     @Query() query: UserListQueryDto,

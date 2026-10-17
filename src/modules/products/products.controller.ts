@@ -88,7 +88,7 @@ export class ProductsController {
   }
 
   @Post('catalogs/product-locations')
-  @RequirePermissions('products.write')
+  @RequirePermissions('products.write', 'nav.servicios')
   @ApiOperation({ summary: 'Crear ubicaci?n de producto por establecimiento' })
   @ApiBody({ type: CreateProductLocationDto })
   async createLocation(
@@ -343,7 +343,7 @@ export class ProductsController {
   }
 
   @Post('import')
-  @RequirePermissions('products.write')
+  @RequirePermissions('products.write', 'nav.importar_precios')
   @ApiOperation({
     summary:
       'Importar productos (productos, lista de precios, actualizar precios)',
@@ -377,7 +377,7 @@ export class ProductsController {
   }
 
   @Get('import/template')
-  @RequirePermissions('products.write')
+  @RequirePermissions('products.write', 'nav.importar_precios')
   @ApiOperation({ summary: 'Descargar plantilla de importaci?n por modo' })
   downloadImportTemplate(
     @Query('mode') mode: ImportProductsDto['mode'],

@@ -176,7 +176,11 @@ export class EstablishmentsController {
   }
 
   @Get(':id/series')
-  @RequirePermissions('establishments.read', 'nav.establecimientos')
+  @RequirePermissions(
+    'establishments.read',
+    'nav.establecimientos',
+    'users.write',
+  )
   @ApiOperation({ summary: 'Listar series de un establecimiento' })
   @ApiParam({ name: 'id', format: 'uuid' })
   listSeries(

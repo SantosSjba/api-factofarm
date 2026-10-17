@@ -68,7 +68,7 @@ export class CustomersController {
   }
 
   @Get('catalogs/document-types')
-  @RequirePermissions('customers.read')
+  @RequirePermissions('customers.read', 'suppliers.read')
   listDocumentTypes() {
     return this.customersService.getDocumentTypes();
   }
@@ -86,13 +86,13 @@ export class CustomersController {
   }
 
   @Get('zones')
-  @RequirePermissions('customers.read')
+  @RequirePermissions('customers.read', 'nav.zonas')
   listZones(@CurrentUser() actor: JwtRequestUser) {
     return this.customersService.listZones(actor);
   }
 
   @Post('zones')
-  @RequirePermissions('customers.write')
+  @RequirePermissions('customers.write', 'nav.zonas')
   createZone(
     @Body() dto: CreateCustomerZoneDto,
     @CurrentUser() actor: JwtRequestUser,
@@ -101,7 +101,7 @@ export class CustomersController {
   }
 
   @Patch('zones/:id')
-  @RequirePermissions('customers.write')
+  @RequirePermissions('customers.write', 'nav.zonas')
   updateZone(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCustomerZoneDto,
@@ -111,7 +111,7 @@ export class CustomersController {
   }
 
   @Delete('zones/:id')
-  @RequirePermissions('customers.write')
+  @RequirePermissions('customers.write', 'nav.zonas')
   removeZone(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,

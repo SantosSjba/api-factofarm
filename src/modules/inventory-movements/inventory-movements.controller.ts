@@ -166,6 +166,7 @@ export class InventoryMovementsController {
   @Post('sales/allocation-preview')
   @RequirePermissions(
     'inventory.read',
+    'sales.write',
     'nav.inventario_movimientos',
     'nav.lotes',
   )
@@ -180,7 +181,7 @@ export class InventoryMovementsController {
   }
 
   @Post('sales/dispatch')
-  @RequirePermissions('inventory.adjust')
+  @RequirePermissions('inventory.adjust', 'nav.salida_venta_lotes')
   @ApiOperation({
     summary: 'Despachar stock de venta con trazabilidad por lote',
     description:
@@ -194,7 +195,13 @@ export class InventoryMovementsController {
   }
 
   @Get('catalogs/warehouses')
-  @RequirePermissions('inventory.read', 'sales.read', 'nav.punto_venta')
+  @RequirePermissions(
+    'inventory.read',
+    'sales.read',
+    'purchases.read',
+    'delivery.read',
+    'nav.punto_venta',
+  )
   @ApiOperation({ summary: 'Listar almacenes para importación de inventario' })
   listWarehouses(@CurrentUser() actor: JwtRequestUser) {
     return this.service.listWarehouses(actor);

@@ -10,10 +10,16 @@ import * as bcrypt from 'bcrypt';
 import { UserRole } from '../../../generated/prisma/client';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
-import { expandUserPermissionCodes } from '../../../common/permissions/nav-permission-expansion';
+import {
+  expandUserPermissionCodes,
+  isNavPermissionCode,
+} from '../../../common/permissions/nav-permission-expansion';
 import { PermissionsCacheService } from '../../../common/permissions/permissions-cache.service';
 import { getDefaultNavCodesForRole } from '../../../common/permissions/role-permission-templates';
-import { isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import {
+  hasChainScope,
+  isPlatformAdmin,
+} from '../../../common/permissions/role-policy.util';
 import { validatePasswordPolicy } from '../../../common/validators/password-policy';
 import {
   assertTenantAccess,
@@ -72,6 +78,8 @@ export class UsersService {
       );
     }
 
+    this.assertCanAssignRole(dto.role, actor);
+
     const tenantId = await this.resolveTenantIdForCreate(dto, actor);
     if (tenantId) {
       const tenant = await this.tenants.findOne(tenantId);
@@ -91,6 +99,7 @@ export class UsersService {
       permissionCodes: this.resolvePermissionCodes(
         dto.permissionCodes,
         dto.role,
+        actor,
       ),
     };
 
@@ -152,6 +161,7 @@ export class UsersService {
     if (!current) throw new NotFoundException('Usuario no encontrado');
     if (actor) {
       this.assertUserTenantAccess(current, actor);
+      this.assertCanManageUser(current, actor);
     }
 
     if (dto.email && dto.email.toLowerCase().trim() !== current.email) {
@@ -181,6 +191,16 @@ export class UsersService {
         'Solo plataforma puede asignar super administrador',
       );
     }
+    if (dto.role !== undefined && dto.role !== current.role) {
+      this.assertNotSelfAccessChange(current, actor);
+      this.assertCanAssignRole(dto.role, actor);
+    }
+    if (
+      dto.permissionCodes !== undefined &&
+      this.navSetChanged(dto.permissionCodes, current.permissionCodes)
+    ) {
+      this.assertNotSelfAccessChange(current, actor);
+    }
     const patch: UpdateUserInput = {};
     if (dto.nombre !== undefined) patch.nombre = dto.nombre.trim();
     if (dto.email !== undefined) patch.email = dto.email.toLowerCase().trim();
@@ -204,9 +224,16 @@ export class UsersService {
       patch.permissionCodes = this.normalizePermissionCodes(
         dto.permissionCodes,
         role,
+        actor,
+        current.permissionCodes,
       );
     } else if (dto.role !== undefined && dto.role !== current.role) {
-      patch.permissionCodes = this.resolvePermissionCodes(undefined, role);
+      patch.permissionCodes = this.resolvePermissionCodes(
+        undefined,
+        role,
+        actor,
+        current.permissionCodes,
+      );
     }
 
     const updated = await this.users.update(id, patch);
@@ -231,11 +258,17 @@ export class UsersService {
     if (!current) throw new NotFoundException('Usuario no encontrado');
     if (actor) {
       this.assertUserTenantAccess(current, actor);
+      this.assertCanManageUser(current, actor);
+    }
+    if (this.navSetChanged(permissionCodes, current.permissionCodes)) {
+      this.assertNotSelfAccessChange(current, actor);
     }
 
     const normalized = this.normalizePermissionCodes(
       permissionCodes,
       current.role,
+      actor,
+      current.permissionCodes,
     );
     if (!normalized?.length) {
       throw new BadRequestException('Debe indicar al menos un permiso');
@@ -258,6 +291,7 @@ export class UsersService {
     if (!current) throw new NotFoundException('Usuario no encontrado');
     if (actor) {
       this.assertUserTenantAccess(current, actor);
+      this.assertCanManageUser(current, actor);
     }
     await this.integrity.assertCanDeleteUser(id, actor?.sub);
     await this.users.delete(id);
@@ -284,23 +318,100 @@ export class UsersService {
     }
   }
 
+  /** Solo administradores (cadena/plataforma) pueden gestionar o asignar roles administrativos. */
+  private assertCanAssignRole(role: UserRole, actor?: JwtRequestUser): void {
+    if (!actor || hasChainScope(actor.role)) return;
+    if (hasChainScope(role)) {
+      throw new ForbiddenException(
+        'Solo un administrador puede asignar roles de administración',
+      );
+    }
+  }
+
+  /** Lectura permitida; modificar a un administrador exige ser administrador. */
+  private assertCanManageUser(
+    user: UserSnapshot,
+    actor?: JwtRequestUser,
+  ): void {
+    if (!actor || hasChainScope(actor.role)) return;
+    if (hasChainScope(user.role)) {
+      throw new ForbiddenException(
+        'Solo un administrador puede modificar a otro administrador',
+      );
+    }
+  }
+
+  /** Evita que un usuario se otorgue más acceso a sí mismo (rol o permisos). */
+  private assertNotSelfAccessChange(
+    user: UserSnapshot,
+    actor?: JwtRequestUser,
+  ): void {
+    if (!actor || hasChainScope(actor.role)) return;
+    if (actor.sub === user.id) {
+      throw new ForbiddenException(
+        'No puede modificar su propio rol ni sus propios permisos',
+      );
+    }
+  }
+
+  private navSetChanged(requested: string[], current: string[]): boolean {
+    const a = new Set(
+      requested.map((c) => c.trim()).filter(isNavPermissionCode),
+    );
+    const b = new Set(current.filter(isNavPermissionCode));
+    return a.size !== b.size || [...a].some((c) => !b.has(c));
+  }
+
+  /**
+   * Solo acepta ítems de menú (`nav.*`); los permisos técnicos se derivan siempre en el servidor.
+   * Un gestor sin alcance de cadena solo puede otorgar o quitar los módulos que él mismo tiene;
+   * los demás módulos del usuario editado se conservan tal como estaban.
+   */
+  private scopeNavCodes(
+    codes: string[],
+    role: UserRole,
+    actor?: JwtRequestUser,
+    currentCodes: string[] = [],
+  ): string[] {
+    const allowPlatform = role === UserRole.SUPER_ADMIN;
+    const nav = codes.filter(
+      (c) =>
+        isNavPermissionCode(c) &&
+        (allowPlatform || !c.startsWith('nav.platform_')),
+    );
+    if (!actor || hasChainScope(actor.role)) return nav;
+    const actorNav = new Set(actor.permissionCodes.filter(isNavPermissionCode));
+    const kept = currentCodes.filter(
+      (c) => isNavPermissionCode(c) && !actorNav.has(c),
+    );
+    return [...new Set([...nav.filter((c) => actorNav.has(c)), ...kept])];
+  }
+
   private resolvePermissionCodes(
     codes: string[] | undefined,
     role: UserRole,
+    actor?: JwtRequestUser,
+    currentCodes?: string[],
   ): string[] {
     const navCodes =
       codes && codes.length > 0 ? codes : getDefaultNavCodesForRole(role);
-    return expandUserPermissionCodes(navCodes, role);
+    return expandUserPermissionCodes(
+      this.scopeNavCodes(navCodes, role, actor, currentCodes),
+      role,
+    );
   }
 
   private normalizePermissionCodes(
     codes: string[] | undefined,
     role: UserRole,
+    actor?: JwtRequestUser,
+    currentCodes?: string[],
   ): string[] | undefined {
     if (codes === undefined) return undefined;
     const trimmed = codes.map((c) => c.trim()).filter(Boolean);
-    if (trimmed.length === 0) return [];
-    return expandUserPermissionCodes(trimmed, role);
+    const scoped = this.scopeNavCodes(trimmed, role, actor, currentCodes);
+    if (scoped.length === 0) return [];
+    return expandUserPermissionCodes(scoped, role);
   }
 
   private resolveTenantFilter(

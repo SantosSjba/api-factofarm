@@ -80,6 +80,7 @@ export class BillingController {
     'billing.write',
     'nav.comprobante_electronico',
     'nav.punto_venta',
+    'nav.notas_venta',
   )
   @ApiOperation({ summary: 'Emitir CPE desde venta (manual)' })
   async emitFromSale(

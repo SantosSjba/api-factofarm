@@ -23,6 +23,7 @@ import {
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CompoundProductsService } from './compound-products.service';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
@@ -32,6 +33,7 @@ import { ImportCompoundProductsDto } from './dto/import-compound-products.dto';
 @ApiTags('CompoundProducts')
 @ApiBearerAuth()
 @Controller('compound-products')
+@RequirePermissions('nav.conjuntos_packs')
 export class CompoundProductsController {
   constructor(private readonly service: CompoundProductsService) {}
 

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { ServiceListQueryDto } from './dto/service-list-query.dto';
@@ -20,6 +21,7 @@ import { ServicesService } from './services.service';
 @ApiTags('services')
 @ApiBearerAuth()
 @Controller('services')
+@RequirePermissions('nav.servicios')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 

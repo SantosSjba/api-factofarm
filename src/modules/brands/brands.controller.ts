@@ -41,7 +41,13 @@ export class BrandsController {
   }
 
   @Post()
-  @RequirePermissions('brands.write')
+  @RequirePermissions(
+    'brands.write',
+    // Alta rápida desde los formularios de producto, servicio y pack.
+    'nav.productos',
+    'nav.servicios',
+    'nav.conjuntos_packs',
+  )
   @ApiOperation({ summary: 'Crear marca' })
   @ApiBody({ type: CreateBrandDto })
   create(@Body() dto: CreateBrandDto, @CurrentUser() actor: JwtRequestUser) {
