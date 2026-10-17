@@ -25,6 +25,26 @@ export async function cashOnHand(
   return agg._sum.monto ?? new Prisma.Decimal(0);
 }
 
+/** Efectivo esperado de varias sesiones en una sola consulta (para listados). */
+export async function expectedCashBySession(
+  db: Pick<Prisma.TransactionClient, 'cashMovement'>,
+  cashSessionIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (!cashSessionIds.length) return new Map();
+  const rows = await db.cashMovement.groupBy({
+    by: ['cashSessionId'],
+    where: {
+      cashSessionId: { in: cashSessionIds },
+      metodoPago: PaymentMethod.EFECTIVO,
+      tipo: { not: CashMovementType.CIERRE },
+    },
+    _sum: { monto: true },
+  });
+  return new Map(
+    rows.map((r) => [r.cashSessionId, r._sum.monto ?? new Prisma.Decimal(0)]),
+  );
+}
+
 /**
  * Normaliza el medio de pago de un cobro/pago manual (texto libre heredado) al catálogo.
  * Devuelve null si no corresponde a un medio conocido.

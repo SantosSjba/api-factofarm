@@ -51,6 +51,14 @@ const RBAC: RbacRow[] = [
   { code: 'sales.void', description: 'Anular ventas' },
   { code: 'cash.open', description: 'Apertura de caja y movimientos' },
   { code: 'cash.close', description: 'Cierre de caja y arqueo' },
+  {
+    code: 'cash.sessions.read_all',
+    description: 'Consultar sesiones de caja de todos los cajeros del establecimiento',
+  },
+  {
+    code: 'cash.close.force',
+    description: 'Cierre forzado (con arqueo y motivo) de cajas abiertas por otros usuarios',
+  },
   { code: 'purchases.read', description: 'Consultar órdenes de compra, AP y reportes' },
   { code: 'purchases.write', description: 'Crear OC, pagos y notas de crédito proveedor' },
   { code: 'purchases.receive', description: 'Recepción de mercadería contra OC' },
@@ -165,6 +173,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     children: [
       { code: 'nav.punto_venta', label: 'Punto de Venta', sortOrder: 1 },
       { code: 'nav.caja_chica_pos', label: 'Caja Chica POS', sortOrder: 2 },
+      { code: 'nav.historial_cajas', label: 'Historial y supervisión de cajas', sortOrder: 3 },
     ],
   },
   {

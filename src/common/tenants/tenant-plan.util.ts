@@ -37,6 +37,7 @@ const BOTICA_MODULES: readonly string[] = [
   'nav.recepcion_mercaderia',
   'nav.punto_venta',
   'nav.caja_chica_pos',
+  'nav.historial_cajas',
   'nav.notas_venta',
   'nav.cotizaciones',
   'nav.inventario_movimientos',

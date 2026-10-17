@@ -76,6 +76,7 @@ const ROLE_NAV_TEMPLATES: Partial<Record<UserRole, readonly string[]>> = {
   ],
   [UserRole.GERENTE_SUCURSAL]: [
     ...POS_NAV,
+    'nav.historial_cajas',
     ...CLIENTES_NAV,
     'nav.productos',
     ...INVENTARIO_NAV,

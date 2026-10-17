@@ -53,6 +53,7 @@ model User {
   adjustmentsRequested InventoryPendingAdjustment[] @relation("AdjustmentRequestedBy")
   adjustmentsApproved  InventoryPendingAdjustment[] @relation("AdjustmentApprovedBy")
   cashSessions         CashSession[]
+  cashSessionsClosed   CashSession[] @relation("CashSessionClosedBy")
   salesAsSeller        Sale[]                     @relation("SaleSeller")
   salesControlledApproved Sale[]                @relation("SaleControlledApprovedBy")
   salesVoided          Sale[]                     @relation("SaleVoidedBy")

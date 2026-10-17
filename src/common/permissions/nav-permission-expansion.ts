@@ -82,6 +82,12 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
     'customers.read',
   ],
   'nav.caja_chica_pos': ['cash.open', 'cash.close', 'sales.read'],
+  // Supervisión: ver las cajas de todos los cajeros y cerrar (forzado) las que quedaron abiertas.
+  'nav.historial_cajas': [
+    'cash.sessions.read_all',
+    'cash.close.force',
+    'cash.close',
+  ],
   'nav.notas_venta': ['sales.read'],
   'nav.anulaciones': ['sales.read', 'sales.void'],
   'nav.cotizaciones': ['sales.read', 'sales.write'],

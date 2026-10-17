@@ -98,15 +98,22 @@ model CashSession {
   notasCierre        String?           @db.VarChar(500)
   openedAt           DateTime          @default(now())
   closedAt           DateTime?
+  /// Usuario que ejecutó el cierre (el cajero o un supervisor en cierre forzado)
+  closedById          String?
+  /// Cierre hecho por un supervisor sobre la caja de otro usuario
+  cierreForzado       Boolean           @default(false)
+  motivoCierreForzado String?           @db.VarChar(500)
 
   cashRegister CashRegister   @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
   user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  closedBy     User?          @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   movements    CashMovement[]
   sales        Sale[]
 
   @@index([cashRegisterId])
   @@index([userId])
   @@index([estado])
+  @@index([openedAt])
 }
 
 model CashMovement {
