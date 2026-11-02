@@ -13,6 +13,9 @@ import {
 } from '../../common/utils/timezone.util';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { expectedCashBySession } from '../cash-registers/cash-session.util';
+
+import { PAYMENT_LABELS } from './dashboard.labels';
 
 export type SalesTrendPoint = {
   date: string;
@@ -380,15 +383,16 @@ export class DashboardService {
     const timeZone = await this.resolveActorTimeZone(actor);
     const { start: startOfDay } = dayBoundsInTimeZone(new Date(), timeZone);
 
-    const [mySales, openSession] = await Promise.all([
+    const mySalesToday: Prisma.SaleWhereInput = {
+      establishmentId,
+      sellerId: actor.sub,
+      deletedAt: null,
+      estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
+      createdAt: { gte: startOfDay },
+    };
+    const [mySales, openSession, payments, voided] = await Promise.all([
       this.prisma.sale.aggregate({
-        where: {
-          establishmentId,
-          sellerId: actor.sub,
-          deletedAt: null,
-          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
-          createdAt: { gte: startOfDay },
-        },
+        where: mySalesToday,
         _sum: { total: true },
         _count: true,
       }),
@@ -398,19 +402,44 @@ export class DashboardService {
           userId: actor.sub,
           cashRegister: { establishmentId },
         },
-        select: { id: true, openedAt: true, montoApertura: true },
+        select: { id: true, openedAt: true, montoApertura: true, cashRegister: { select: { nombre: true } } },
+      }),
+      this.prisma.payment.groupBy({
+        by: ['metodo'],
+        where: { sale: mySalesToday },
+        _sum: { monto: true },
+        _count: true,
+      }),
+      this.prisma.sale.count({
+        where: { ...mySalesToday, estado: 'ANULADA' },
       }),
     ]);
+    const expected = openSession
+      ? (await expectedCashBySession(this.prisma, [openSession.id])).get(openSession.id)
+      : undefined;
+    const total = mySales._sum.total ?? new Prisma.Decimal(0);
 
     return {
-      ventasHoy: (mySales._sum.total ?? new Prisma.Decimal(0)).toString(),
+      ventasHoy: total.toString(),
       ventasHoyCount: mySales._count,
+      ticketPromedio: mySales._count ? total.div(mySales._count).toFixed(2) : '0.00',
+      anuladasHoy: voided,
+      pagosHoy: payments
+        .map((p) => ({
+          key: p.metodo,
+          label: PAYMENT_LABELS[p.metodo] ?? p.metodo,
+          total: (p._sum.monto ?? new Prisma.Decimal(0)).toFixed(2),
+          count: p._count,
+        }))
+        .sort((a, b) => Number(b.total) - Number(a.total)),
       cajaAbierta: !!openSession,
       sesionCaja: openSession
         ? {
             id: openSession.id,
+            caja: openSession.cashRegister.nombre,
             openedAt: openSession.openedAt.toISOString(),
             montoApertura: openSession.montoApertura.toString(),
+            efectivoEsperado: (expected ?? openSession.montoApertura).toFixed(2),
           }
         : null,
     };

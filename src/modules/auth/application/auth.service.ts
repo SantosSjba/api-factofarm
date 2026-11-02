@@ -86,6 +86,7 @@ export class AuthService {
       include: {
         permissions: { include: { permission: true } },
         tenant: { select: authTenantSelect },
+        profile: { select: { fotoArchivoId: true, fotoUrl: true } },
       },
     });
 
@@ -142,6 +143,7 @@ export class AuthService {
           include: {
             permissions: { include: { permission: true } },
             tenant: { select: authTenantSelect },
+            profile: { select: { fotoArchivoId: true, fotoUrl: true } },
           },
         },
       },
@@ -318,6 +320,7 @@ export class AuthService {
       include: {
         permissions: { include: { permission: true } },
         tenant: { select: authTenantSelect },
+        profile: { select: { fotoArchivoId: true, fotoUrl: true } },
       },
     });
     if (!user) {
@@ -541,6 +544,7 @@ export class AuthService {
       include: {
         permissions: { include: { permission: true } },
         tenant: { select: authTenantSelect },
+        profile: { select: { fotoArchivoId: true, fotoUrl: true } },
       },
     });
     if (!refreshed) {
@@ -883,6 +887,7 @@ export class AuthService {
       establecimientoId: string;
       tenant?: AuthTenantSnapshot | null;
       permissions: { permission: { code: string } }[];
+      profile?: { fotoArchivoId: string | null; fotoUrl: string | null } | null;
     },
     logoUrl: string | null = null,
     timeZone = DEFAULT_TIME_ZONE,
@@ -898,6 +903,9 @@ export class AuthService {
       establecimientoId: user.establecimientoId,
       permissionCodes: this.resolvePermissionCodes(user),
       logoUrl,
+      fotoUrl: user.profile?.fotoArchivoId
+        ? `/api/v1/files/${user.profile.fotoArchivoId}`
+        : (user.profile?.fotoUrl ?? null),
       timeZone,
     };
   }

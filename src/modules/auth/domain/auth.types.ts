@@ -27,6 +27,8 @@ export type AuthUserView = {
   supportSession?: boolean;
   /** Logo del establecimiento activo (`/api/v1/files/:id`), si existe. */
   logoUrl?: string | null;
+  /** Foto de perfil (`/api/v1/files/:id`); null → el cliente muestra las iniciales. */
+  fotoUrl?: string | null;
   /** Zona horaria IANA del establecimiento activo (default America/Lima). */
   timeZone: string;
 };

@@ -8,6 +8,7 @@ import { PrismaFileRepository } from './infrastructure/prisma-file.repository';
 import { LocalDiskFileStorage } from './infrastructure/local-disk-file.storage';
 import { S3MinioFileStorage } from './infrastructure/s3-minio-file.storage';
 import { FilesController } from './files.controller';
+import { ProfilePhotoController } from './profile-photo.controller';
 import { FilesService } from './application/files.service';
 
 function createFileStorage(config: ConfigService): IFileStorage {
@@ -22,7 +23,7 @@ function createFileStorage(config: ConfigService): IFileStorage {
 
 @Module({
   imports: [AuthModule, ConfigModule],
-  controllers: [FilesController],
+  controllers: [FilesController, ProfilePhotoController],
   providers: [
     FilesService,
     {

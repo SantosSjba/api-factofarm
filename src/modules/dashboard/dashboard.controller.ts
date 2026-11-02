@@ -1,15 +1,36 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { DashboardService } from './dashboard.service';
+import { DashboardOverviewService } from './dashboard-overview.service';
 
 @ApiTags('dashboard')
 @ApiBearerAuth()
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboard: DashboardService) {}
+  constructor(
+    private readonly dashboard: DashboardService,
+    private readonly overview: DashboardOverviewService,
+  ) {}
+
+  @Get('overview')
+  @RequirePermissions('nav.dashboard_admin')
+  @ApiOperation({
+    summary: 'Resumen del cliente: ventas, medios de pago, comprobantes, horas, productos, caja, inventario y finanzas',
+  })
+  @ApiQuery({ name: 'days', required: false, enum: [1, 7, 30, 90] })
+  getOverview(@Query('days') days: string | undefined, @CurrentUser() actor: JwtRequestUser) {
+    return this.overview.getTenantOverview(actor, Number(days));
+  }
+
+  @Get('platform/overview')
+  @RequirePermissions('tenants.read', 'nav.platform_dashboard')
+  @ApiOperation({ summary: 'Actividad comercial de todos los clientes SaaS (últimos 30 días)' })
+  getPlatformOverview(@CurrentUser() actor: JwtRequestUser) {
+    return this.overview.getPlatformOverview(actor);
+  }
 
   @Get('stats')
   @RequirePermissions('nav.dashboard_admin')
