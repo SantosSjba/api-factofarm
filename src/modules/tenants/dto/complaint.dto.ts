@@ -1,8 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ComplaintStatus } from '../../../generated/prisma/client';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
-export class ComplaintListQueryDto {
+export class ComplaintListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -12,14 +13,6 @@ export class ComplaintListQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  page?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  pageSize?: number;
 }
 
 export class UpdateComplaintDto {

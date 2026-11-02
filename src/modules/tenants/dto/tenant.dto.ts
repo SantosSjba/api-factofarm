@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TenantPlan } from '../../../generated/prisma/client';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import {
   IsArray,
   IsBoolean,
@@ -141,7 +142,7 @@ export class UpdateTenantDto {
   applyPlanDefaults?: boolean;
 }
 
-export class TenantListQueryDto {
+export class TenantListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -156,14 +157,6 @@ export class TenantListQueryDto {
   @IsOptional()
   @IsString()
   plan?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  page?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  pageSize?: number;
 }
 
 export class ProvisionTenantDto {
