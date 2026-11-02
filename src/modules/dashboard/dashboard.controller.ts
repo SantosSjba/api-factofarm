@@ -5,6 +5,7 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { DashboardService } from './dashboard.service';
 import { DashboardOverviewService } from './dashboard-overview.service';
+import { DashboardAlertsService } from './dashboard-alerts.service';
 
 @ApiTags('dashboard')
 @ApiBearerAuth()
@@ -13,7 +14,15 @@ export class DashboardController {
   constructor(
     private readonly dashboard: DashboardService,
     private readonly overview: DashboardOverviewService,
+    private readonly alertsService: DashboardAlertsService,
   ) {}
+
+  /** Sin permiso específico: cada alerta se filtra por los permisos del usuario. */
+  @Get('alerts')
+  @ApiOperation({ summary: 'Notificaciones de la campana (alertas operativas según rol y permisos)' })
+  getAlerts(@CurrentUser() actor: JwtRequestUser) {
+    return this.alertsService.getAlerts(actor);
+  }
 
   @Get('overview')
   @RequirePermissions('nav.dashboard_admin')
