@@ -139,7 +139,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     sortOrder: 4,
     children: [
       { code: 'nav.productos', label: 'Productos', sortOrder: 1 },
-      { code: 'nav.precios_regulados', label: 'Precios regulados DIGEMED', sortOrder: 2 },
+      { code: 'nav.precios_regulados', label: 'Precios regulados DIGEMID', sortOrder: 2 },
       { code: 'nav.conjuntos_packs', label: 'Conjuntos/Packs/Promociones', sortOrder: 3 },
       { code: 'nav.servicios', label: 'Servicios', sortOrder: 3 },
       { code: 'nav.categorias', label: 'Categorías', sortOrder: 4 },
