@@ -31,6 +31,7 @@ import { CreateEstablishmentSeriesDto } from '../dto/create-establishment-series
 import { CreateEstablishmentDto } from '../dto/create-establishment.dto';
 import { UpdateEstablishmentDto } from '../dto/update-establishment.dto';
 import { UpdatePharmacyProfileDto } from '../dto/update-pharmacy-profile.dto';
+import { UpdatePosSettingsDto } from '../dto/update-pos-settings.dto';
 
 const DOCUMENT_LABELS: Record<DocumentSeriesType, string> = {
   FACTURA_ELECTRONICA: 'FACTURA ELECTRONICA',
@@ -158,6 +159,9 @@ const selectEstablishment = {
   blockSalesAboveRegulatedPrice: true,
   posYapeNumero: true,
   posPlinNumero: true,
+  posRequirePrescription: true,
+  posRequireControlledApproval: true,
+  posPaymentReferenceMethods: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.EstablishmentSelect;
@@ -527,6 +531,9 @@ export class EstablishmentsService {
       blockSalesAboveRegulatedPrice: dto.blockSalesAboveRegulatedPrice ?? false,
       posYapeNumero: this.normPaymentPhone(dto.posYapeNumero),
       posPlinNumero: this.normPaymentPhone(dto.posPlinNumero),
+      posRequirePrescription: dto.posRequirePrescription,
+      posRequireControlledApproval: dto.posRequireControlledApproval,
+      posPaymentReferenceMethods: dto.posPaymentReferenceMethods,
     };
   }
 
@@ -601,6 +608,15 @@ export class EstablishmentsService {
     if (dto.posPlinNumero !== undefined) {
       data.posPlinNumero = this.normPaymentPhone(dto.posPlinNumero);
     }
+    if (dto.posRequirePrescription !== undefined) {
+      data.posRequirePrescription = dto.posRequirePrescription;
+    }
+    if (dto.posRequireControlledApproval !== undefined) {
+      data.posRequireControlledApproval = dto.posRequireControlledApproval;
+    }
+    if (dto.posPaymentReferenceMethods !== undefined) {
+      data.posPaymentReferenceMethods = dto.posPaymentReferenceMethods;
+    }
 
     return data;
   }
@@ -614,10 +630,27 @@ export class EstablishmentsService {
         nombre: true,
         posYapeNumero: true,
         posPlinNumero: true,
+        posRequirePrescription: true,
+        posRequireControlledApproval: true,
+        posPaymentReferenceMethods: true,
       },
     });
     if (!row) throw new NotFoundException('Establecimiento no encontrado');
     return row;
+  }
+
+  /** Activa/desactiva validaciones del POS del establecimiento activo. */
+  async updatePosSettings(
+    establishmentId: string,
+    dto: UpdatePosSettingsDto,
+    actor: JwtRequestUser,
+  ) {
+    await this.ensureEstablishment(establishmentId, actor);
+    await this.prisma.establishment.update({
+      where: { id: establishmentId },
+      data: this.mapEstablishmentUpdateInput(dto),
+    });
+    return this.getPosPaymentSettings(establishmentId, actor);
   }
 
   /** Perfil comercial + fiscal del establecimiento activo del usuario. */

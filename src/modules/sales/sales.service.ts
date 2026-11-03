@@ -599,7 +599,13 @@ export class SalesService {
 
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: actor.establecimientoId, deletedAt: null },
-      select: { id: true, tenantId: true },
+      select: {
+        id: true,
+        tenantId: true,
+        posRequirePrescription: true,
+        posRequireControlledApproval: true,
+        posPaymentReferenceMethods: true,
+      },
     });
     if (!establishment)
       throw new NotFoundException('Establecimiento no encontrado');
@@ -705,9 +711,13 @@ export class SalesService {
       pricedItems.map((item) => item.productId),
       dto.controlledApprovedById,
       dto.controlledDigitalSignature,
+      establishment.posRequireControlledApproval,
     );
 
-    const requiresRx = pricedItems.some((item) => item.necesitaRecetaMedica);
+    // El local puede desactivar la exigencia de receta (Establecimientos → POS).
+    const requiresRx =
+      establishment.posRequirePrescription &&
+      pricedItems.some((item) => item.necesitaRecetaMedica);
     if (dto.prescriptionId) {
       await this.prescriptions.validateForSale(
         dto.prescriptionId,
@@ -724,7 +734,7 @@ export class SalesService {
       );
     } else if (requiresRx && !dto.prescriptionValidated) {
       throw new BadRequestException(
-        'La venta incluye productos con receta obligatoria. Seleccione una receta o valide manualmente.',
+        'La venta incluye productos con receta obligatoria. Seleccione una receta, valide manualmente, quite la marca de receta del producto o desactive la exigencia de receta del local.',
       );
     } else if (requiresRx && (dto.prescriptionNote?.trim().length ?? 0) < 3) {
       // Validación manual: debe quedar registro de la receta vista (N°/médico/CMP).
@@ -794,7 +804,11 @@ export class SalesService {
       ? copagoPaciente
       : total;
     if (amountToCollect.greaterThan(0)) {
-      validateSalePayments(dto.payments, amountToCollect);
+      validateSalePayments(
+        dto.payments,
+        amountToCollect,
+        establishment.posPaymentReferenceMethods,
+      );
     } else if (!dto.payments.length) {
       dto.payments = [{ metodo: PaymentMethod.EFECTIVO, monto: 0 }];
     }
@@ -2252,6 +2266,7 @@ export class SalesService {
     productIds: string[],
     controlledApprovedById?: string,
     controlledDigitalSignature?: string,
+    approvalRequired = true,
   ) {
     const controlledCount = await this.prisma.product.count({
       where: { id: { in: productIds }, esControlado: true, deletedAt: null },
@@ -2259,8 +2274,10 @@ export class SalesService {
     if (controlledCount === 0) return null;
 
     if (!controlledApprovedById) {
+      // El local puede desactivar el autorizador (Establecimientos → POS).
+      if (!approvalRequired) return null;
       throw new BadRequestException(
-        'La venta incluye medicamentos controlados. Se requiere aprobación del farmacéutico titular.',
+        'La venta incluye medicamentos controlados. Se requiere aprobación del farmacéutico titular, o desactive esta exigencia en Establecimientos → Validaciones del POS.',
       );
     }
     if (controlledApprovedById === actor.sub) {

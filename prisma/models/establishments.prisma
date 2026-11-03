@@ -63,6 +63,12 @@ model Establishment {
   posYapeNumero   String? @db.VarChar(20)
   /// Número celular Plin del local (solo referencia para cajero / cliente)
   posPlinNumero   String? @db.VarChar(20)
+  /// Exigir receta (seleccionada o validada manualmente) al vender productos marcados con receta
+  posRequirePrescription Boolean @default(true)
+  /// Exigir farmacéutico autorizador al vender medicamentos controlados
+  posRequireControlledApproval Boolean @default(true)
+  /// Medios de pago que exigen código / N° de operación en caja
+  posPaymentReferenceMethods PaymentMethod[] @default([YAPE, PLIN, TARJETA, TRANSFERENCIA])
   /// WhatsApp del local para avisos delivery (wa.me)
   deliveryWhatsappNumero String? @db.VarChar(20)
   /// Slug público para portal de pedidos web (/public/delivery/{slug})

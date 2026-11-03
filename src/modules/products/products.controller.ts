@@ -32,6 +32,7 @@ import { ImportProductsDto } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
 import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
+import { UpdateProductPrescriptionDto } from './dto/update-product-prescription.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { SetProductEquivalentsDto } from './dto/set-product-equivalents.dto';
 import { UpsertProductSupplierDto } from './dto/upsert-product-supplier.dto';
@@ -288,6 +289,17 @@ export class ProductsController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.productsService.updateBarcode(id, dto, actor);
+  }
+
+  @Patch(':id/prescription')
+  @RequirePermissions('products.write')
+  @ApiOperation({ summary: 'Marcar o desmarcar si el producto exige receta' })
+  updatePrescription(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductPrescriptionDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.productsService.updatePrescription(id, dto, actor);
   }
 
   @Post('export')

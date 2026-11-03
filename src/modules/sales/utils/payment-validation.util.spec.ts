@@ -24,6 +24,26 @@ describe('validateSalePayments', () => {
     ).toThrow(BadRequestException);
   });
 
+  it('acepta yape sin código si el local lo configuró como opcional', () => {
+    expect(() =>
+      validateSalePayments(
+        [{ metodo: PaymentMethod.YAPE, monto: 50 }],
+        new Prisma.Decimal(50),
+        [PaymentMethod.TARJETA],
+      ),
+    ).not.toThrow();
+  });
+
+  it('sigue exigiendo código en los medios que el local mantiene obligatorios', () => {
+    expect(() =>
+      validateSalePayments(
+        [{ metodo: PaymentMethod.TARJETA, monto: 50 }],
+        new Prisma.Decimal(50),
+        [PaymentMethod.TARJETA],
+      ),
+    ).toThrow(BadRequestException);
+  });
+
   it('rechaza método MIXTO en línea de pago', () => {
     expect(() =>
       validateSalePayments(

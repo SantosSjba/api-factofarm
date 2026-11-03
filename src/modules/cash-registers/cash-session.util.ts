@@ -59,11 +59,28 @@ export function normalizePaymentMethod(
     : null;
 }
 
+/** Medios que el local configuró como obligatorios de código de operación. */
+export async function paymentReferenceMethodsFor(
+  db: Pick<Prisma.TransactionClient, 'establishment'>,
+  establishmentId: string,
+): Promise<PaymentMethod[] | undefined> {
+  const row = await db.establishment.findFirst({
+    where: { id: establishmentId },
+    select: { posPaymentReferenceMethods: true },
+  });
+  return row?.posPaymentReferenceMethods;
+}
+
 export function assertPaymentReference(
   metodo: PaymentMethod | null,
   referencia: string | null | undefined,
+  required?: readonly PaymentMethod[],
 ): void {
-  if (metodo && paymentRequiresReference(metodo) && !referencia?.trim()) {
+  if (
+    metodo &&
+    paymentRequiresReference(metodo, required) &&
+    !referencia?.trim()
+  ) {
     throw new BadRequestException(
       `Ingrese el código o N° de operación para el pago con ${metodo}`,
     );

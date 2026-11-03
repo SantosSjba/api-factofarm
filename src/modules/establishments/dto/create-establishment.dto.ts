@@ -1,8 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayUnique,
   Equals,
+  IsArray,
   IsBoolean,
+  IsIn,
   IsEmail,
   IsEnum,
   IsNumber,
@@ -17,7 +20,9 @@ import {
 import {
   InventoryLotAllocationMethod,
   InventoryValuationMethod,
+  PaymentMethod,
 } from '../../../generated/prisma/client';
+import { CONFIGURABLE_REFERENCE_METHODS } from '../../sales/utils/payment-validation.util';
 
 export class CreateEstablishmentDto {
   @ApiProperty({ example: 'Oficina Principal', maxLength: 200 })
@@ -244,4 +249,37 @@ export class CreateEstablishmentDto {
     message: 'Número Plin inválido (use solo dígitos, 9 a 15)',
   })
   posPlinNumero?: string;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Exigir receta (seleccionada o validada manualmente) al vender productos con receta',
+  })
+  @IsOptional()
+  @IsBoolean()
+  posRequirePrescription?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Exigir farmacéutico autorizador al vender medicamentos controlados',
+  })
+  @IsOptional()
+  @IsBoolean()
+  posRequireControlledApproval?: boolean;
+
+  @ApiPropertyOptional({
+    isArray: true,
+    enum: CONFIGURABLE_REFERENCE_METHODS,
+    description: 'Medios de pago que exigen código / N° de operación en caja',
+    example: ['YAPE', 'PLIN', 'TARJETA', 'TRANSFERENCIA'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(CONFIGURABLE_REFERENCE_METHODS, {
+    each: true,
+    message: 'Medio de pago no válido para exigir código de operación',
+  })
+  posPaymentReferenceMethods?: PaymentMethod[];
 }

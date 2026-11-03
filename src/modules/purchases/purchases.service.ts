@@ -24,6 +24,7 @@ import {
 import { EstablishmentScopeService } from '../../common/scoping/establishment-scope.service';
 import {
   assertPaymentReference,
+  paymentReferenceMethodsFor,
   normalizePaymentMethod,
   registerCashFlow,
 } from '../cash-registers/cash-session.util';
@@ -671,7 +672,11 @@ export class PurchasesService {
         'Medio de pago no válido (use efectivo, Yape, Plin, tarjeta o transferencia)',
       );
     }
-    assertPaymentReference(metodo, dto.referencia);
+    assertPaymentReference(
+      metodo,
+      dto.referencia,
+      await paymentReferenceMethodsFor(this.prisma, establishmentId),
+    );
 
     const result = await this.prisma.$transaction(async (tx) => {
       if (metodo === PaymentMethod.EFECTIVO) {

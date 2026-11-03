@@ -1,12 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '../../../generated/prisma/client';
 
-export const PAYMENT_METHODS_REQUIRING_REFERENCE: PaymentMethod[] = [
+/** Medios que pueden exigir código de operación (y lo exigen por defecto). */
+export const CONFIGURABLE_REFERENCE_METHODS: PaymentMethod[] = [
   PaymentMethod.YAPE,
   PaymentMethod.PLIN,
   PaymentMethod.TARJETA,
   PaymentMethod.TRANSFERENCIA,
 ];
+
+export const PAYMENT_METHODS_REQUIRING_REFERENCE = CONFIGURABLE_REFERENCE_METHODS;
 
 export const INVALID_SPLIT_PAYMENT_METHODS: PaymentMethod[] = [
   PaymentMethod.MIXTO,
@@ -18,13 +21,21 @@ export type SalePaymentInput = {
   referencia?: string | null;
 };
 
-export function paymentRequiresReference(metodo: PaymentMethod): boolean {
-  return PAYMENT_METHODS_REQUIRING_REFERENCE.includes(metodo);
+/**
+ * `required` es la lista configurada en el establecimiento
+ * (`posPaymentReferenceMethods`); sin ella se usa la regla por defecto.
+ */
+export function paymentRequiresReference(
+  metodo: PaymentMethod,
+  required: readonly PaymentMethod[] = PAYMENT_METHODS_REQUIRING_REFERENCE,
+): boolean {
+  return required.includes(metodo);
 }
 
 export function validateSalePayments(
   payments: SalePaymentInput[],
   saleTotal: Prisma.Decimal,
+  requiredReferenceMethods?: readonly PaymentMethod[],
 ): void {
   if (!payments.length) {
     throw new BadRequestException('Debe registrar al menos un pago');
@@ -37,7 +48,7 @@ export function validateSalePayments(
       );
     }
     if (
-      paymentRequiresReference(payment.metodo) &&
+      paymentRequiresReference(payment.metodo, requiredReferenceMethods) &&
       !payment.referencia?.trim()
     ) {
       throw new BadRequestException(

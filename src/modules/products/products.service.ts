@@ -35,6 +35,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { ProductImportMode } from './dto/import-products.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
 import { UpdateProductBarcodeDto } from './dto/update-product-barcode.dto';
+import { UpdateProductPrescriptionDto } from './dto/update-product-prescription.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 import { ProductPriceHistoryService } from './product-price-history.service';
@@ -1294,6 +1295,27 @@ export class ProductsService {
     await this.audit.log({
       userId: actor?.sub,
       action: 'UPDATE_BARCODE',
+      entity: 'Product',
+      entityId: id,
+      diff: dto,
+    });
+    return updated;
+  }
+
+  async updatePrescription(
+    id: string,
+    dto: UpdateProductPrescriptionDto,
+    actor?: JwtRequestUser,
+  ) {
+    await this.findOne(id, actor);
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { necesitaRecetaMedica: dto.necesitaRecetaMedica },
+      select: selectProductList,
+    });
+    await this.audit.log({
+      userId: actor?.sub,
+      action: 'UPDATE_PRESCRIPTION',
       entity: 'Product',
       entityId: id,
       diff: dto,

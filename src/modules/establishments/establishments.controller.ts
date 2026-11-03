@@ -25,6 +25,7 @@ import { CreateEstablishmentDto } from './dto/create-establishment.dto';
 import { EstablishmentListQueryDto } from './dto/establishment-list-query.dto';
 import { UpdateEstablishmentDto } from './dto/update-establishment.dto';
 import { UpdatePharmacyProfileDto } from './dto/update-pharmacy-profile.dto';
+import { UpdatePosSettingsDto } from './dto/update-pos-settings.dto';
 import { EstablishmentsService } from './application/establishments.service';
 
 @ApiTags('establishments')
@@ -97,6 +98,23 @@ export class EstablishmentsController {
   posPaymentSettings(@CurrentUser() actor: JwtRequestUser) {
     return this.establishmentsService.getPosPaymentSettings(
       actor.establecimientoId,
+      actor,
+    );
+  }
+
+  @Patch('pos-settings')
+  @RequirePermissions('establishments.write', 'nav.establecimientos')
+  @ApiOperation({
+    summary:
+      'Activar/desactivar validaciones del POS (receta, código de operación)',
+  })
+  updatePosSettings(
+    @Body() dto: UpdatePosSettingsDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.establishmentsService.updatePosSettings(
+      actor.establecimientoId,
+      dto,
       actor,
     );
   }
