@@ -2605,11 +2605,41 @@ export class ProductsService {
             precioDefecto: true,
           },
         },
+        manejaLotes: true,
+        // Lotes con stock, los que vencen primero arriba (FEFO).
+        lotStocks: {
+          where: {
+            deletedAt: null,
+            stock: { gt: 0 },
+            warehouse: {
+              deletedAt: null,
+              ...(tenantId
+                ? { establishment: { tenantId, deletedAt: null } }
+                : {}),
+            },
+          },
+          orderBy: [{ fechaVencimiento: { sort: 'asc', nulls: 'last' } }, { codigoLote: 'asc' }],
+          select: {
+            id: true,
+            codigoLote: true,
+            stock: true,
+            fechaVencimiento: true,
+            warehouse: { select: { nombre: true } },
+          },
+        },
       },
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
     return {
+      manejaLotes: product.manejaLotes,
+      lots: product.lotStocks.map((l) => ({
+        id: l.id,
+        codigoLote: l.codigoLote,
+        almacen: l.warehouse.nombre,
+        stock: l.stock.toString(),
+        fechaVencimiento: l.fechaVencimiento?.toISOString() ?? null,
+      })),
       stockByLocation: product.warehouseStocks.map((s) => ({
         warehouseId: s.warehouse.id,
         ubicacion: `${s.warehouse.nombre} · ${s.warehouse.establishment.nombre}`,
