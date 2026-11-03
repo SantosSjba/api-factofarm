@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -153,9 +154,9 @@ export class MedicosService {
       ...(search
         ? {
             OR: [
-              { cmp: { contains: search, mode: 'insensitive' } },
-              { nombres: { contains: search, mode: 'insensitive' } },
-              { apellidos: { contains: search, mode: 'insensitive' } },
+              { cmp: textSearchFilter(search) },
+              { nombres: textSearchFilter(search) },
+              { apellidos: textSearchFilter(search) },
             ],
           }
         : {}),

@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { RequiredLotQueryDto } from '../../common/dto/required-report-query.dto';
 import {
   Body,
@@ -246,8 +247,8 @@ export class PharmaceuticalController {
         ...(q
           ? {
               OR: [
-                { codigo: { contains: q, mode: 'insensitive' } },
-                { descripcion: { contains: q, mode: 'insensitive' } },
+                { codigo: textSearchFilter(q) },
+                { descripcion: textSearchFilter(q) },
               ],
             }
           : {}),

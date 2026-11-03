@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { safeError } from '../../common/logging/http-logger.config';
 import { scalarText } from '../../common/utils/scalar-text.util';
 import {
@@ -134,10 +135,7 @@ export class SalesService {
                 ...(query.paymentMetodo ? { metodo: query.paymentMetodo } : {}),
                 ...(query.paymentReferencia?.trim()
                   ? {
-                      referencia: {
-                        contains: query.paymentReferencia.trim(),
-                        mode: 'insensitive' as const,
-                      },
+                      referencia: textSearchFilter(query.paymentReferencia.trim()),
                     }
                   : {}),
               },
@@ -1965,9 +1963,9 @@ export class SalesService {
         ...(term
           ? {
               OR: [
-                { nombre: { contains: term, mode: 'insensitive' } },
-                { codigoInterno: { contains: term, mode: 'insensitive' } },
-                { codigoBarra: { contains: term, mode: 'insensitive' } },
+                { nombre: textSearchFilter(term) },
+                { codigoInterno: textSearchFilter(term) },
+                { codigoBarra: textSearchFilter(term) },
               ],
             }
           : {}),
@@ -2053,8 +2051,8 @@ export class SalesService {
         ...(term
           ? {
               OR: [
-                { nombre: { contains: term, mode: 'insensitive' } },
-                { codigoInterno: { contains: term, mode: 'insensitive' } },
+                { nombre: textSearchFilter(term) },
+                { codigoInterno: textSearchFilter(term) },
               ],
             }
           : {}),

@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -133,8 +134,8 @@ export class UnitsService {
       ...(search
         ? {
             OR: [
-              { nombre: { contains: search, mode: 'insensitive' } },
-              { codigo: { contains: search, mode: 'insensitive' } },
+              { nombre: textSearchFilter(search) },
+              { codigo: textSearchFilter(search) },
             ],
           }
         : {}),

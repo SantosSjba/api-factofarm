@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -78,12 +79,12 @@ export class SuppliersService {
     if (search) {
       if (field === 'all' || field === 'razonSocial') {
         searchable.push({
-          razonSocial: { contains: search, mode: 'insensitive' },
+          razonSocial: textSearchFilter(search),
         });
       }
       if (field === 'all' || field === 'numeroDocumento') {
         searchable.push({
-          numeroDocumento: { contains: search, mode: 'insensitive' },
+          numeroDocumento: textSearchFilter(search),
         });
       }
     }

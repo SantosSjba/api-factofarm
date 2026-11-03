@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Query,
@@ -65,6 +66,16 @@ export class InventoryMovementsController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.listLots(query, actor);
+  }
+
+  @Patch('lots/:id/expiry')
+  @RequirePermissions('inventory.write')
+  updateLotExpiry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('fechaVencimiento') expiry: unknown,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.updateLotExpiry(id, expiry, actor);
   }
 
   @Get('kardex')

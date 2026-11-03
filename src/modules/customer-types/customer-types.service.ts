@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -159,7 +160,7 @@ export class CustomerTypesService {
     const field = filters?.field?.trim().toLowerCase();
 
     const searchableFields: Prisma.CustomerTypeWhereInput[] = [
-      { descripcion: { contains: search, mode: 'insensitive' } },
+      { descripcion: textSearchFilter(search ?? '') },
     ];
 
     return {

@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, PromotionType } from '../../generated/prisma/client';
 import {
@@ -31,8 +32,8 @@ export class PromotionsService {
       ...(search
         ? {
             OR: [
-              { codigo: { contains: search, mode: 'insensitive' } },
-              { nombre: { contains: search, mode: 'insensitive' } },
+              { codigo: textSearchFilter(search) },
+              { nombre: textSearchFilter(search) },
             ],
           }
         : {}),

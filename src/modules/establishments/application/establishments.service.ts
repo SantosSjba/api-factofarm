@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../../common/utils/text-search-filter';
 import {
   BadRequestException,
   ConflictException,
@@ -205,10 +206,10 @@ export class EstablishmentsService {
       ...(search
         ? {
             OR: [
-              { nombre: { contains: search, mode: 'insensitive' } },
-              { codigo: { contains: search, mode: 'insensitive' } },
-              { direccionFiscal: { contains: search, mode: 'insensitive' } },
-              { direccionComercial: { contains: search, mode: 'insensitive' } },
+              { nombre: textSearchFilter(search) },
+              { codigo: textSearchFilter(search) },
+              { direccionFiscal: textSearchFilter(search) },
+              { direccionComercial: textSearchFilter(search) },
             ],
           }
         : {}),

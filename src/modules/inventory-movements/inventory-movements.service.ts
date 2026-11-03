@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   writeWorkbookBuffer,
   parseSpreadsheetDate,
@@ -96,19 +97,19 @@ export class InventoryMovementsService {
     if (search) {
       if (field === 'all' || field === 'producto') {
         or.push({
-          product: { nombre: { contains: search, mode: 'insensitive' } },
+          product: { nombre: textSearchFilter(search) },
         });
       }
       if (field === 'all' || field === 'marca') {
         or.push({
           product: {
-            brand: { nombre: { contains: search, mode: 'insensitive' } },
+            brand: { nombre: textSearchFilter(search) },
           },
         });
       }
       if (field === 'all' || field === 'almacen') {
         or.push({
-          warehouse: { nombre: { contains: search, mode: 'insensitive' } },
+          warehouse: { nombre: textSearchFilter(search) },
         });
       }
     }
@@ -262,7 +263,7 @@ export class InventoryMovementsService {
         warehouseId: query.warehouseId,
         deletedAt: null,
         ...(search
-          ? { codigoLote: { contains: search, mode: 'insensitive' } }
+          ? { codigoLote: textSearchFilter(search) }
           : {}),
         ...(mode === 'OUTBOUND'
           ? { stock: { gt: new Prisma.Decimal(0) } }
@@ -303,15 +304,15 @@ export class InventoryMovementsService {
     if (search) {
       if (field === 'all' || field === 'producto') {
         or.push({
-          product: { nombre: { contains: search, mode: 'insensitive' } },
+          product: { nombre: textSearchFilter(search) },
         });
       }
       if (field === 'all' || field === 'lote') {
-        or.push({ codigoLote: { contains: search, mode: 'insensitive' } });
+        or.push({ codigoLote: textSearchFilter(search) });
       }
       if (field === 'all' || field === 'almacen') {
         or.push({
-          warehouse: { nombre: { contains: search, mode: 'insensitive' } },
+          warehouse: { nombre: textSearchFilter(search) },
         });
       }
     }
@@ -384,6 +385,36 @@ export class InventoryMovementsService {
       page,
       pageSize,
     );
+  }
+
+  async updateLotExpiry(id: string, expiry: unknown, actor: JwtRequestUser) {
+    if (typeof expiry !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+      throw new BadRequestException('Ingresa una fecha de vencimiento válida');
+    }
+    const date = new Date(expiry);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== expiry) {
+      throw new BadRequestException('Ingresa una fecha de vencimiento válida');
+    }
+
+    const establishmentId = await this.scope.resolve(actor);
+    const result = await this.prisma.productLotStock.updateMany({
+      where: {
+        id,
+        deletedAt: null,
+        product: { deletedAt: null },
+        warehouse: { deletedAt: null, establishmentId },
+      },
+      data: { fechaVencimiento: date },
+    });
+    if (!result.count) throw new NotFoundException('Lote no encontrado');
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'UPDATE',
+      entity: 'ProductLotStock',
+      entityId: id,
+      diff: { fechaVencimiento: expiry },
+    });
+    return { fechaVencimiento: date.toISOString() };
   }
 
   async kardex(query: KardexQueryDto, actor: JwtRequestUser) {

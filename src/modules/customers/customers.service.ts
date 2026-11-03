@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import { scalarText } from '../../common/utils/scalar-text.util';
 import {
@@ -111,16 +112,16 @@ export class CustomersService {
     const searchable: Prisma.CustomerWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'nombre') {
-        searchable.push({ nombre: { contains: search, mode: 'insensitive' } });
+        searchable.push({ nombre: textSearchFilter(search) });
       }
       if (field === 'all' || field === 'numeroDocumento') {
         searchable.push({
-          numeroDocumento: { contains: search, mode: 'insensitive' },
+          numeroDocumento: textSearchFilter(search),
         });
       }
       if (field === 'all' || field === 'codigoInterno') {
         searchable.push({
-          codigoInterno: { contains: search, mode: 'insensitive' },
+          codigoInterno: textSearchFilter(search),
         });
       }
     }

@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../../common/utils/text-search-filter';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../../generated/prisma/client';
 import {
@@ -105,8 +106,8 @@ export class PrismaUserRepository implements IUserRepository {
       ...(search
         ? {
             OR: [
-              { nombre: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
+              { nombre: textSearchFilter(search) },
+              { email: textSearchFilter(search) },
             ],
           }
         : {}),

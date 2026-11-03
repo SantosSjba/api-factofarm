@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../../common/utils/text-search-filter';
 import {
   BadRequestException,
   Injectable,
@@ -25,8 +26,8 @@ export class RegulatedPriceService {
         ...(q
           ? {
               OR: [
-                { nombre: { contains: q, mode: 'insensitive' } },
-                { codigoDigemid: { contains: q, mode: 'insensitive' } },
+                { nombre: textSearchFilter(q) },
+                { codigoDigemid: textSearchFilter(q) },
               ],
             }
           : {}),

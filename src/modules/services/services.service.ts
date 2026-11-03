@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   BadRequestException,
   ForbiddenException,
@@ -90,26 +91,26 @@ export class ServicesService {
     const searchable: Prisma.ServiceWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'nombre') {
-        searchable.push({ nombre: { contains: search, mode: 'insensitive' } });
+        searchable.push({ nombre: textSearchFilter(search) });
       }
       if (field === 'all' || field === 'codigoInterno') {
         searchable.push({
-          codigoInterno: { contains: search, mode: 'insensitive' },
+          codigoInterno: textSearchFilter(search),
         });
       }
       if (field === 'all' || field === 'codigoBarra') {
         searchable.push({
-          codigoBarra: { contains: search, mode: 'insensitive' },
+          codigoBarra: textSearchFilter(search),
         });
       }
       if (field === 'all' || field === 'codigoBusqueda') {
         searchable.push({
-          codigoBusqueda: { contains: search, mode: 'insensitive' },
+          codigoBusqueda: textSearchFilter(search),
         });
       }
       if (field === 'all' || field === 'descripcion') {
         searchable.push({
-          descripcion: { contains: search, mode: 'insensitive' },
+          descripcion: textSearchFilter(search),
         });
       }
     }

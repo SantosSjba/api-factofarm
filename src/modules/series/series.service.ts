@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import {
   BadRequestException,
@@ -52,11 +53,11 @@ export class SeriesService {
     const or: Prisma.ProductSerialWhereInput[] = [];
     if (search) {
       if (field === 'all' || field === 'serie') {
-        or.push({ serie: { contains: search, mode: 'insensitive' } });
+        or.push({ serie: textSearchFilter(search) });
       }
       if (field === 'all' || field === 'producto') {
         or.push({
-          product: { nombre: { contains: search, mode: 'insensitive' } },
+          product: { nombre: textSearchFilter(search) },
         });
       }
       if (field === 'all' || field === 'estado') {

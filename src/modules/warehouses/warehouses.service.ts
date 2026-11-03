@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -51,10 +52,10 @@ export class WarehousesService {
       ...(search
         ? {
             OR: [
-              { nombre: { contains: search, mode: 'insensitive' } },
+              { nombre: textSearchFilter(search) },
               {
                 establishment: {
-                  nombre: { contains: search, mode: 'insensitive' },
+                  nombre: textSearchFilter(search),
                 },
               },
             ],

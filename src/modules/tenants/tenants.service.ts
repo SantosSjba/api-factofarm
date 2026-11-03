@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   BadRequestException,
   ConflictException,
@@ -97,10 +98,10 @@ export class TenantsService {
       ...(search
         ? {
             OR: [
-              { nombre: { contains: search, mode: 'insensitive' } },
-              { slug: { contains: search, mode: 'insensitive' } },
-              { ruc: { contains: search } },
-              { contactEmail: { contains: search, mode: 'insensitive' } },
+              { nombre: textSearchFilter(search) },
+              { slug: textSearchFilter(search) },
+              { ruc: textSearchFilter(search) },
+              { contactEmail: textSearchFilter(search) },
             ],
           }
         : {}),

@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -200,7 +201,7 @@ export class CategoriesService {
     const field = filters?.field?.trim().toLowerCase();
 
     const searchableFields: Prisma.CategoryWhereInput[] = [
-      { nombre: { contains: search, mode: 'insensitive' } },
+      { nombre: textSearchFilter(search ?? '') },
     ];
 
     return {

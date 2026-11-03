@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -484,7 +485,7 @@ export class ShippingGuidesService {
     return {
       deletedAt: null,
       OR: fields.map((field) => ({
-        [field]: { contains: term, mode: 'insensitive' as const },
+        [field]: textSearchFilter(term),
       })),
     };
   }

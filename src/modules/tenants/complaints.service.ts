@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ComplaintStatus, Prisma } from '../../generated/prisma/client';
 import {
@@ -56,11 +57,11 @@ export class ComplaintsService {
       ...(search
         ? {
             OR: [
-              { numeroRegistro: { contains: search, mode: 'insensitive' } },
-              { nombresApellidos: { contains: search, mode: 'insensitive' } },
-              { documentoIdentidad: { contains: search } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { telefono: { contains: search } },
+              { numeroRegistro: textSearchFilter(search) },
+              { nombresApellidos: textSearchFilter(search) },
+              { documentoIdentidad: textSearchFilter(search) },
+              { email: textSearchFilter(search) },
+              { telefono: textSearchFilter(search) },
             ],
           }
         : {}),

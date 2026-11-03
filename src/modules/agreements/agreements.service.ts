@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   BadRequestException,
   Injectable,
@@ -46,10 +47,10 @@ export class AgreementsService {
         ? {
             OR: [
               {
-                codigo: { contains: query.search.trim(), mode: 'insensitive' },
+                codigo: textSearchFilter(query.search.trim()),
               },
               {
-                nombre: { contains: query.search.trim(), mode: 'insensitive' },
+                nombre: textSearchFilter(query.search.trim()),
               },
             ],
           }

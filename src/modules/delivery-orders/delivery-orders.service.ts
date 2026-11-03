@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   BadRequestException,
   Injectable,
@@ -61,9 +62,9 @@ export class DeliveryOrdersService {
       ...(search
         ? {
             OR: [
-              { numero: { contains: search, mode: 'insensitive' } },
-              { clienteNombre: { contains: search, mode: 'insensitive' } },
-              { clienteTelefono: { contains: search, mode: 'insensitive' } },
+              { numero: textSearchFilter(search) },
+              { clienteNombre: textSearchFilter(search) },
+              { clienteTelefono: textSearchFilter(search) },
             ],
           }
         : {}),

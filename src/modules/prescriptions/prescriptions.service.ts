@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   BadRequestException,
   ForbiddenException,
@@ -45,20 +46,14 @@ export class PrescriptionsService {
         ? {
             OR: [
               {
-                numero: { contains: query.search.trim(), mode: 'insensitive' },
+                numero: textSearchFilter(query.search.trim()),
               },
               {
-                medicoNombre: {
-                  contains: query.search.trim(),
-                  mode: 'insensitive',
-                },
+                medicoNombre: textSearchFilter(query.search.trim()),
               },
               {
                 customer: {
-                  nombre: {
-                    contains: query.search.trim(),
-                    mode: 'insensitive',
-                  },
+                  nombre: textSearchFilter(query.search.trim()),
                 },
               },
             ],

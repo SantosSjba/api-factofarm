@@ -1,3 +1,4 @@
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   ConflictException,
   Injectable,
@@ -134,7 +135,7 @@ export class AdministrationRoutesService {
     const search = filters?.search?.trim();
     return {
       deletedAt: null,
-      ...(search ? { nombre: { contains: search, mode: 'insensitive' } } : {}),
+      ...(search ? { nombre: textSearchFilter(search) } : {}),
     };
   }
 
