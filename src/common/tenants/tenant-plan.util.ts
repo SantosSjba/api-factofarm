@@ -17,14 +17,29 @@ const TENANT_NAV_CODES = MENU_NAV_LEAF_CODES.filter(
   (code) => !PLATFORM_NAV.has(code),
 );
 
+/**
+ * Lo esencial para operar una botica de un local: vender y anular, facturar cuando
+ * se configure el OSE, controlar stock y vencimientos, comprar, cobrar/pagar y cumplir
+ * con DIGEMID. Quedan fuera los módulos de cadena (traslados), guías, retenciones,
+ * contabilidad avanzada y hospital.
+ */
 const BOTICA_MODULES: readonly string[] = [
   'nav.dashboard_admin',
+  // Usuarios y local
   'nav.usuarios',
   'nav.establecimientos',
   'nav.auditoria',
+  'nav.gestion_personal',
+  'nav.farmaceutico_titular',
+  'nav.lpdp',
+  // Clientes
   'nav.clientes_list',
   'nav.tipo_clientes',
+  // Catálogo
   'nav.productos',
+  'nav.precios_regulados',
+  'nav.conjuntos_packs',
+  'nav.servicios',
   'nav.categorias',
   'nav.marcas',
   'nav.laboratorios',
@@ -32,18 +47,47 @@ const BOTICA_MODULES: readonly string[] = [
   'nav.formas_farmaceuticas',
   'nav.principios_activos',
   'nav.vias_administracion',
+  'nav.importar_precios',
+  // Compras
   'nav.proveedores',
   'nav.ordenes_compra',
   'nav.recepcion_mercaderia',
+  'nav.reporte_compras_sugerido',
+  'nav.comparativo_precios',
+  // Ventas y caja
   'nav.punto_venta',
   'nav.caja_chica_pos',
   'nav.historial_cajas',
   'nav.notas_venta',
+  'nav.anulaciones',
   'nav.cotizaciones',
+  'nav.promociones',
+  'nav.comprobante_electronico',
+  'nav.resumenes',
+  'nav.series',
+  // Inventario
   'nav.inventario_movimientos',
+  'nav.devolucion_retiro',
   'nav.lotes',
+  'nav.salida_venta_lotes',
   'nav.reporte_kardex',
   'nav.reporte_inventario',
+  'nav.kardex_valorizado',
+  'nav.cadena_frio',
+  // Reportes y finanzas básicas
+  'nav.reportes_panel',
+  'nav.ingresos_egresos_medio_pago',
+  'nav.finanzas_movimientos',
+  'nav.cuentas_cobrar',
+  'nav.cuentas_pagar',
+  'nav.pagos',
+  // Cumplimiento sanitario
+  'nav.recetas',
+  'nav.medicos',
+  'nav.cie_10',
+  'nav.reporte_digemid',
+  'nav.reporte_psicotropicos',
+  'nav.recepcion_productos_farmaceuticos',
 ];
 
 const FARMACIA_PRO_MODULES: readonly string[] = [
@@ -91,7 +135,7 @@ export function modulesForPlan(plan: TenantPlan): string[] {
     case TenantPlan.CADENA:
       return [...TENANT_NAV_CODES];
     case TenantPlan.FARMACIA_PRO:
-      return [...FARMACIA_PRO_MODULES];
+      return [...new Set(FARMACIA_PRO_MODULES)];
     case TenantPlan.CUSTOM:
       return [...TENANT_NAV_CODES];
     case TenantPlan.BOTICA:

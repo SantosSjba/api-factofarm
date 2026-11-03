@@ -90,7 +90,27 @@ async function main() {
     );
     plan.push({ table, d: depth.get(table) ?? 0, rows: Number(n) });
   }
-  plan.sort((a, b) => b.d - a.d || a.table.localeCompare(b.table));
+  // Orden topológico por FK reales: una tabla se borra antes que las tablas a las que referencia
+  // (la profundidad del recorrido no basta: una tabla puede colgar de dos padres a distinta altura).
+  const tables = new Set(plan.map((p) => p.table));
+  const parentsOf = new Map<string, Set<string>>();
+  for (const fk of fks) {
+    if (fk.child === fk.parent || !tables.has(fk.child) || !tables.has(fk.parent)) continue;
+    if (fk.action === 'n' || fk.action === 'd') continue;
+    parentsOf.set(fk.child, (parentsOf.get(fk.child) ?? new Set()).add(fk.parent));
+  }
+  const ordered: string[] = [];
+  const remaining = new Set(tables);
+  while (remaining.size) {
+    // Hojas: tablas de las que ninguna otra pendiente depende.
+    const leaves = [...remaining].filter((t) => ![...remaining].some((o) => parentsOf.get(o)?.has(t)));
+    const batch = leaves.length ? leaves : [...remaining].sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0)).slice(0, 1);
+    for (const t of batch.sort()) {
+      ordered.push(t);
+      remaining.delete(t);
+    }
+  }
+  plan.sort((a, b) => ordered.indexOf(a.table) - ordered.indexOf(b.table));
 
   // Huella de los clientes conservados (filas por tabla con tenantId directo + ventas/productos).
   const snapshot = async (db: Prisma.TransactionClient | PrismaClient) => {

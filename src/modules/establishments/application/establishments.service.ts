@@ -438,9 +438,22 @@ export class EstablishmentsService {
     }
   }
 
+  /**
+   * Crea la serie por defecto solo para los tipos de comprobante que aún no tienen ninguna.
+   * Si un tipo ya tiene serie (p. ej. NOTA_VENTA T001 migrada), no se agrega otra: la venta
+   * usa la primera serie en orden alfabético y una "NV01" nueva reiniciaría la numeración.
+   */
   private async ensureDefaultSeries(establishmentId: string) {
+    const existing = await this.prisma.establishmentSeries.findMany({
+      where: { establishmentId },
+      select: { documentType: true },
+      distinct: ['documentType'],
+    });
+    const covered = new Set(existing.map((s) => s.documentType));
+    const missing = DEFAULT_SERIES.filter((s) => !covered.has(s.documentType));
+    if (!missing.length) return;
     await this.prisma.establishmentSeries.createMany({
-      data: DEFAULT_SERIES.map((s) => ({
+      data: missing.map((s) => ({
         establishmentId,
         documentType: s.documentType,
         numero: s.numero,

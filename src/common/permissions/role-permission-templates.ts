@@ -40,8 +40,9 @@ const CONTABILIDAD_NAV = [
 ] as const;
 
 const ROLE_NAV_TEMPLATES: Partial<Record<UserRole, readonly string[]>> = {
-  [UserRole.CAJERO]: [...POS_NAV, 'nav.clientes_list'],
-  [UserRole.VENDEDOR]: [...POS_NAV, 'nav.clientes_list'],
+  // Notas de venta: buscar sus ventas para reimprimir o pedir anulación.
+  [UserRole.CAJERO]: [...POS_NAV, 'nav.clientes_list', 'nav.notas_venta'],
+  [UserRole.VENDEDOR]: [...POS_NAV, 'nav.clientes_list', 'nav.notas_venta'],
   [UserRole.TECNICO_FARMACEUTICO]: [
     ...POS_NAV,
     'nav.clientes_list',

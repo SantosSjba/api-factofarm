@@ -29,6 +29,8 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
     'customers.read',
     'customers.write',
     'customers.delete',
+    // El listado y el alta rápida filtran / asignan el tipo de cliente.
+    'customer-types.read',
   ],
   'nav.tipo_clientes': ['customer-types.read', 'customer-types.write'],
   'nav.productos': [
