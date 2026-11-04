@@ -15,6 +15,7 @@ import {
 } from '../../common/dto/pagination.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { buildPaymentsByMethod } from './payments-by-method.util';
 import {
   dateRangeBoundsInTimeZone,
   formatDateYmdInTimeZone,
@@ -697,104 +698,90 @@ export class FinanceService {
   ) {
     const { from, to } = await this.parseRange(establishmentId, query);
 
-    const salePayments = await this.prisma.payment.findMany({
-      where: {
-        sale: {
-          establishmentId,
-          deletedAt: null,
-          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
-          createdAt: { gte: from, lt: to },
-        },
-      },
-      select: { metodo: true, monto: true },
+    const [salePayments, saleReturns, arPayments, apPayments, cashMovements] =
+      await Promise.all([
+        this.prisma.payment.findMany({
+          where: {
+            sale: {
+              establishmentId,
+              deletedAt: null,
+              estado: { not: SaleStatus.ANULADA },
+              createdAt: { gte: from, lt: to },
+            },
+          },
+          select: { metodo: true, monto: true },
+        }),
+        this.prisma.saleReturn.findMany({
+          where: {
+            createdAt: { gte: from, lt: to },
+            sale: {
+              establishmentId,
+              deletedAt: null,
+              estado: { not: SaleStatus.ANULADA },
+            },
+          },
+          select: {
+            totalDevuelto: true,
+            sale: {
+              select: {
+                total: true,
+                payments: { select: { metodo: true, monto: true } },
+              },
+            },
+          },
+        }),
+        this.prisma.accountReceivablePayment.findMany({
+          where: {
+            pagadoAt: { gte: from, lt: to },
+            accountReceivable: { establishmentId, deletedAt: null },
+          },
+          select: { metodoPago: true, monto: true, pagadoAt: true },
+        }),
+        this.prisma.accountPayablePayment.findMany({
+          where: {
+            fechaPago: { gte: from, lt: to },
+            accountPayable: { establishmentId, deletedAt: null },
+          },
+          select: { metodo: true, monto: true, fechaPago: true, createdAt: true },
+        }),
+        this.prisma.cashMovement.findMany({
+          where: {
+            createdAt: { gte: from, lt: to },
+            tipo: { in: ['INGRESO', 'EGRESO'] },
+            cashSession: { cashRegister: { establishmentId } },
+          },
+          select: {
+            id: true,
+            tipo: true,
+            metodoPago: true,
+            monto: true,
+            saleId: true,
+            createdAt: true,
+          },
+        }),
+      ]);
+
+    const report = buildPaymentsByMethod({
+      salePayments,
+      saleReturns: saleReturns.map((r) => ({
+        totalDevuelto: r.totalDevuelto,
+        saleTotal: r.sale.total,
+        payments: r.sale.payments,
+      })),
+      arPayments: arPayments.map((p) => ({
+        metodo: p.metodoPago,
+        monto: p.monto,
+        at: p.pagadoAt,
+      })),
+      apPayments: apPayments.map((p) => ({
+        metodo: p.metodo,
+        monto: p.monto,
+        at: p.createdAt,
+      })),
+      cashMovements,
     });
 
-    const arPayments = await this.prisma.accountReceivablePayment.findMany({
-      where: {
-        pagadoAt: { gte: from, lt: to },
-        accountReceivable: { establishmentId, deletedAt: null },
-      },
-      select: { metodoPago: true, monto: true },
-    });
-
-    const apPayments = await this.prisma.accountPayablePayment.findMany({
-      where: {
-        fechaPago: { gte: from, lt: to },
-        accountPayable: { establishmentId, deletedAt: null },
-      },
-      select: { metodo: true, monto: true },
-    });
-
-    const cashMovements = await this.prisma.cashMovement.findMany({
-      where: {
-        createdAt: { gte: from, lt: to },
-        cashSession: { cashRegister: { establishmentId } },
-      },
-      select: { tipo: true, metodoPago: true, monto: true },
-    });
-
-    type Bucket = {
-      ingresos: Prisma.Decimal;
-      egresos: Prisma.Decimal;
-      count: number;
-    };
-    const byMethod = new Map<string, Bucket>();
-
-    const add = (
-      metodo: string | null | undefined,
-      ingreso: Prisma.Decimal,
-      egreso: Prisma.Decimal,
-    ) => {
-      const key = metodo?.trim() || 'SIN_ESPECIFICAR';
-      const prev = byMethod.get(key) ?? {
-        ingresos: new Prisma.Decimal(0),
-        egresos: new Prisma.Decimal(0),
-        count: 0,
-      };
-      prev.ingresos = prev.ingresos.plus(ingreso);
-      prev.egresos = prev.egresos.plus(egreso);
-      prev.count += 1;
-      byMethod.set(key, prev);
-    };
-
-    for (const p of salePayments) add(p.metodo, p.monto, new Prisma.Decimal(0));
-    for (const p of arPayments)
-      add(p.metodoPago, p.monto, new Prisma.Decimal(0));
-    for (const p of apPayments) add(p.metodo, new Prisma.Decimal(0), p.monto);
-    for (const m of cashMovements) {
-      const metodo = m.metodoPago ?? 'EFECTIVO';
-      if (m.monto.greaterThanOrEqualTo(0))
-        add(metodo, m.monto, new Prisma.Decimal(0));
-      else add(metodo, new Prisma.Decimal(0), m.monto.abs());
-    }
-
-    const methods = [...byMethod.entries()]
-      .map(([metodo, bucket]) => ({
-        metodo,
-        ingresos: bucket.ingresos.toString(),
-        egresos: bucket.egresos.toString(),
-        neto: bucket.ingresos.minus(bucket.egresos).toString(),
-        transacciones: bucket.count,
-      }))
-      .sort((a, b) => Number.parseFloat(b.neto) - Number.parseFloat(a.neto));
-
-    const totalIngresos = methods.reduce(
-      (acc, row) => acc.plus(new Prisma.Decimal(row.ingresos)),
-      new Prisma.Decimal(0),
-    );
-    const totalEgresos = methods.reduce(
-      (acc, row) => acc.plus(new Prisma.Decimal(row.egresos)),
-      new Prisma.Decimal(0),
-    );
-
-    return {
-      from: from.toISOString(),
-      to: to.toISOString(),
-      totalIngresos: totalIngresos.toString(),
-      totalEgresos: totalEgresos.toString(),
-      neto: totalIngresos.minus(totalEgresos).toString(),
-      methods,
-    };
+    return { from: from.toISOString(), to: to.toISOString(), ...report };
   }
 
   async getRecentPayments(
