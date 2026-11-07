@@ -30,8 +30,15 @@ export class DashboardController {
     summary: 'Resumen del cliente: ventas, medios de pago, comprobantes, horas, productos, caja, inventario y finanzas',
   })
   @ApiQuery({ name: 'days', required: false, enum: [1, 7, 30, 90] })
-  getOverview(@Query('days') days: string | undefined, @CurrentUser() actor: JwtRequestUser) {
-    return this.overview.getTenantOverview(actor, Number(days));
+  @ApiQuery({ name: 'from', required: false, description: 'Día o inicio del rango (AAAA-MM-DD). Tiene prioridad sobre days.' })
+  @ApiQuery({ name: 'to', required: false, description: 'Fin del rango (AAAA-MM-DD). Si falta, se usa solo el día «from».' })
+  getOverview(
+    @Query('days') days: string | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.overview.getTenantOverview(actor, Number(days), from, to);
   }
 
   @Get('platform/overview')

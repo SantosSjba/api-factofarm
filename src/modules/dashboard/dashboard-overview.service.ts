@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma, SaleStatus } from '../../generated/prisma/client';
 import {
   actorFromJwt,
@@ -6,6 +6,7 @@ import {
 } from '../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
 import {
+  dateRangeBoundsInTimeZone,
   dayBoundsInTimeZone,
   formatDateYmdInTimeZone,
   formatHourInTimeZone,
@@ -33,18 +34,24 @@ export type Breakdown = { key: string; label: string; total: string; count: numb
 export class DashboardOverviewService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getTenantOverview(actor: JwtRequestUser, daysInput?: number) {
+  /**
+   * Resumen del periodo: los últimos `days` días hasta hoy o, si llegan `from`/`to` (YYYY-MM-DD),
+   * ese día o rango en la zona horaria de la sede. Se compara con el periodo anterior de igual duración.
+   */
+  async getTenantOverview(actor: JwtRequestUser, daysInput?: number, fromInput?: string, toInput?: string) {
     const scope = actorFromJwt(actor);
     if (isPlatformAdmin(scope.role)) {
       throw new ForbiddenException('Use la consola de plataforma (/platform/dashboard)');
     }
     const tenantId = requireTenantId(scope);
-    const days = clampDays(daysInput);
     const timeZone = await this.actorTimeZone(actor);
     const now = new Date();
     const today = dayBoundsInTimeZone(now, timeZone);
     const yesterdayStart = new Date(today.start.getTime() - DAY_MS);
-    const periodStart = new Date(today.start.getTime() - (days - 1) * DAY_MS);
+    const custom = resolveCustomRange(fromInput, toInput, timeZone, formatDateYmdInTimeZone(now, timeZone));
+    const days = custom ? custom.days : clampDays(daysInput);
+    const periodStart = custom ? custom.start : new Date(today.start.getTime() - (days - 1) * DAY_MS);
+    const periodEnd = custom ? custom.end : today.end;
     const prevStart = new Date(periodStart.getTime() - days * DAY_MS);
     const saleScope: Prisma.SaleWhereInput = { deletedAt: null, establishment: { tenantId } };
     // Independientes de las ventas: se lanzan ya para no sumar latencia.
@@ -57,21 +64,21 @@ export class DashboardOverviewService {
     const [periodSales, prevAgg, todayAgg, yesterdayAgg, voided, paymentRows, itemRows, newCustomers] =
       await Promise.all([
         this.prisma.sale.findMany({
-          where: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: today.end } },
+          where: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: periodEnd } },
           select: { id: true, total: true, createdAt: true, documentType: true, sellerId: true },
         }),
         this.sumSales({ ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: prevStart, lt: periodStart } }),
         this.sumSales({ ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: today.start, lt: today.end } }),
         this.sumSales({ ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: yesterdayStart, lt: today.start } }),
-        this.sumSales({ ...saleScope, estado: 'ANULADA', createdAt: { gte: periodStart, lt: today.end } }),
+        this.sumSales({ ...saleScope, estado: 'ANULADA', createdAt: { gte: periodStart, lt: periodEnd } }),
         this.prisma.payment.groupBy({
           by: ['metodo'],
-          where: { sale: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: today.end } } },
+          where: { sale: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: periodEnd } } },
           _sum: { monto: true },
           _count: true,
         }),
         this.prisma.saleItem.findMany({
-          where: { sale: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: today.end } } },
+          where: { sale: { ...saleScope, estado: { in: VALID_SALE }, createdAt: { gte: periodStart, lt: periodEnd } } },
           select: {
             productId: true,
             cantidad: true,
@@ -79,7 +86,7 @@ export class DashboardOverviewService {
             product: { select: { nombre: true, costoUnitario: true, precioUnitarioCompra: true } },
           },
         }),
-        this.prisma.customer.count({ where: { tenantId, deletedAt: null, createdAt: { gte: periodStart } } }),
+        this.prisma.customer.count({ where: { tenantId, deletedAt: null, createdAt: { gte: periodStart, lt: periodEnd } } }),
       ]);
 
     // Medios de pago, comprobantes, horas y vendedores.
@@ -133,6 +140,9 @@ export class DashboardOverviewService {
 
     return {
       days,
+      from: formatDateYmdInTimeZone(periodStart, timeZone),
+      to: formatDateYmdInTimeZone(new Date(periodEnd.getTime() - 1), timeZone),
+      custom: !!custom,
       timeZone,
       today: {
         total: money(todayAgg.total),
@@ -363,6 +373,30 @@ export class DashboardOverviewService {
   }
 }
 
+
+const MAX_RANGE_DAYS = 366;
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Día o rango elegido por el usuario; null si no se pidió. Un solo día: `from` sin `to`, o ambos iguales. */
+function resolveCustomRange(from: string | undefined, to: string | undefined, timeZone: string, todayYmd: string) {
+  const fromYmd = from?.trim();
+  const toYmd = to?.trim() || fromYmd;
+  if (!fromYmd) {
+    if (to?.trim()) throw new BadRequestException('Indica la fecha «Desde».');
+    return null;
+  }
+  if (!YMD.test(fromYmd) || !YMD.test(toYmd!) || Number.isNaN(Date.parse(fromYmd)) || Number.isNaN(Date.parse(toYmd!))) {
+    throw new BadRequestException('Las fechas deben tener el formato AAAA-MM-DD.');
+  }
+  if (fromYmd > toYmd!) throw new BadRequestException('La fecha «Desde» no puede ser posterior a «Hasta».');
+  if (fromYmd > todayYmd) throw new BadRequestException('No hay ventas en fechas futuras: elige un día hasta hoy.');
+  const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd!, timeZone);
+  const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
+  if (days > MAX_RANGE_DAYS) {
+    throw new BadRequestException(`El rango puede ser de hasta ${MAX_RANGE_DAYS} días.`);
+  }
+  return { start, end, days };
+}
 
 function clampDays(value?: number): number {
   const n = Number(value);
