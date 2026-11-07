@@ -103,6 +103,25 @@ export class CompoundProductsController {
     return this.service.remove(id, actor);
   }
 
+  @Post('export')
+  @ApiOperation({ summary: 'Exportar productos compuestos a Excel' })
+  async exportCompoundProducts(
+    @Query() query: CompoundProductListQueryDto,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() actor: JwtRequestUser,
+  ): Promise<StreamableFile> {
+    const buffer = await this.service.buildExportBuffer(query, actor);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent('conjuntos-export.xlsx')}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    return new StreamableFile(buffer);
+  }
+
   @Post('import')
   @ApiOperation({
     summary: 'Importar productos compuestos y detalle de productos compuestos',

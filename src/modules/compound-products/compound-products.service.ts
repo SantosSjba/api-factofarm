@@ -112,9 +112,11 @@ export class CompoundProductsService {
     });
   }
 
-  async list(query: CompoundProductListQueryDto, actor?: JwtRequestUser) {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 10;
+  /** Mismos filtros para el listado y la exportación. */
+  private buildListWhere(
+    query: CompoundProductListQueryDto,
+    actor?: JwtRequestUser,
+  ): Prisma.CompoundProductWhereInput {
     const search = query.search?.trim();
     const field = (query.field ?? 'nombre').trim();
 
@@ -131,11 +133,60 @@ export class CompoundProductsService {
       }
     }
 
-    const where: Prisma.CompoundProductWhereInput = {
+    return {
       deletedAt: null,
       ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(or.length ? { OR: or } : {}),
     };
+  }
+
+  async buildExportBuffer(
+    query: CompoundProductListQueryDto,
+    actor?: JwtRequestUser,
+  ) {
+    const rows = await this.prisma.compoundProduct.findMany({
+      where: this.buildListWhere(query, actor),
+      orderBy: { nombre: 'asc' },
+      include: {
+        unit: { select: { codigo: true } },
+        currency: { select: { codigo: true } },
+        category: { select: { nombre: true } },
+        brand: { select: { nombre: true } },
+        items: {
+          select: {
+            cantidad: true,
+            product: { select: { nombre: true } },
+          },
+        },
+      },
+    });
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(
+      rows.map((row) => ({
+        Nombre: row.nombre,
+        'Código Interno': row.codigoInterno ?? '',
+        Descripción: row.descripcion ?? '',
+        'Código Tipo de Unidad': row.unit.codigo,
+        'Código Tipo de Moneda': row.currency.codigo,
+        'Precio Unitario Venta': Number(row.precioUnitarioVenta),
+        'Incluye IGV': row.incluyeIgvVenta ? 'SI' : 'NO',
+        'Precio Unitario Compra': Number(row.precioUnitarioCompra),
+        'Valor por separado': Number(row.totalPrecioCompraReferencia),
+        Categoria: row.category?.nombre ?? '',
+        Marca: row.brand?.nombre ?? '',
+        Productos: row.items
+          .map((item) => `${Number(item.cantidad)} x ${item.product.nombre}`)
+          .join('; '),
+      })),
+    );
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Conjuntos');
+    return writeWorkbookBuffer(workbook);
+  }
+
+  async list(query: CompoundProductListQueryDto, actor?: JwtRequestUser) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const where = this.buildListWhere(query, actor);
 
     const [total, rows] = await Promise.all([
       this.prisma.compoundProduct.count({ where }),
