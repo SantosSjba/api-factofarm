@@ -14,6 +14,7 @@ import {
   InventoryMovementType,
   InventoryPendingAdjustmentStatus,
   Prisma,
+  ProductPriceField,
   ProductSerialStatus,
 } from '../../generated/prisma/client';
 import {
@@ -54,6 +55,9 @@ import {
 } from './inventory-lot-allocation.service';
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 import { assertLotExpiryConsistent, resolveInboundLot } from './lot-rules.util';
+import { RegulatedPriceService } from '../compliance/services/regulated-price.service';
+import { ProductPriceHistoryService } from '../products/product-price-history.service';
+import { hasChainScope } from '../../common/permissions/role-policy.util';
 
 const ADJUST_OUT_CODE = 'OUT_AJUSTE_DIFERENCIA';
 const ADJUST_IN_CODE = 'INGRESO_OTROS';
@@ -82,15 +86,28 @@ export class InventoryMovementsService {
     private readonly scope: EstablishmentScopeService,
     private readonly integrity: EntityIntegrityService,
     private readonly realtime: RealtimeService,
+    private readonly regulatedPrices: RegulatedPriceService,
+    private readonly priceHistory: ProductPriceHistoryService,
   ) {}
 
-  async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
-    const establishmentId = await this.scope.resolve(
-      actor,
-      query.establishmentId,
-    );
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 10;
+  /** Filtros del listado, compartidos con la exportación. */
+  private async buildListWhere(
+    query: InventoryMovementListQueryDto,
+    actor: JwtRequestUser,
+  ): Promise<Prisma.ProductWarehouseStockWhereInput> {
+    // Un almacén elegido en el filtro manda sobre la sede de la sesión: el catálogo de almacenes
+    // ofrece todos los del tenant.
+    let warehouseWhere: Prisma.WarehouseWhereInput;
+    if (query.warehouseId) {
+      await this.scope.assertWarehouseInTenant(actor, query.warehouseId);
+      warehouseWhere = { deletedAt: null, id: query.warehouseId };
+    } else {
+      const establishmentId = await this.scope.resolve(
+        actor,
+        query.establishmentId,
+      );
+      warehouseWhere = { deletedAt: null, establishmentId };
+    }
     const search = query.search?.trim();
     const field = query.field ?? 'producto';
     const or: Prisma.ProductWarehouseStockWhereInput[] = [];
@@ -98,6 +115,12 @@ export class InventoryMovementsService {
       if (field === 'all' || field === 'producto') {
         or.push({
           product: { nombre: textSearchFilter(search) },
+        });
+        or.push({
+          product: { codigoInterno: textSearchFilter(search) },
+        });
+        or.push({
+          product: { codigoBarra: textSearchFilter(search) },
         });
       }
       if (field === 'all' || field === 'marca') {
@@ -113,18 +136,20 @@ export class InventoryMovementsService {
         });
       }
     }
-    const where: Prisma.ProductWarehouseStockWhereInput = {
+    return {
       product: {
         deletedAt: null,
         ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       },
-      warehouse: {
-        deletedAt: null,
-        establishmentId,
-        ...(query.warehouseId ? { id: query.warehouseId } : {}),
-      },
+      warehouse: warehouseWhere,
       ...(or.length ? { OR: or } : {}),
     };
+  }
+
+  async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const where = await this.buildListWhere(query, actor);
 
     const [total, rows] = await Promise.all([
       this.prisma.productWarehouseStock.count({ where }),
@@ -144,6 +169,8 @@ export class InventoryMovementsService {
               id: true,
               nombre: true,
               codigoInterno: true,
+              manejaLotes: true,
+              stockMinimo: true,
               brand: { select: { nombre: true } },
             },
           },
@@ -166,13 +193,56 @@ export class InventoryMovementsService {
         codigoInterno: row.product.codigoInterno ?? null,
         marca: row.product.brand?.nombre ?? '—',
         almacen: row.warehouse.nombre,
+        warehouseId: row.warehouse.id,
         stock: row.cantidad.toString(),
+        stockMinimo: Number(row.product.stockMinimo ?? 0),
+        manejaLotes: row.product.manejaLotes,
       })),
       total,
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
+  }
+
+  async buildExportBuffer(
+    query: InventoryMovementListQueryDto,
+    actor: JwtRequestUser,
+  ) {
+    const rows = await this.prisma.productWarehouseStock.findMany({
+      where: await this.buildListWhere(query, actor),
+      orderBy: [
+        { product: { nombre: 'asc' } },
+        { warehouse: { nombre: 'asc' } },
+      ],
+      select: {
+        cantidad: true,
+        product: {
+          select: {
+            nombre: true,
+            codigoInterno: true,
+            manejaLotes: true,
+            stockMinimo: true,
+            brand: { select: { nombre: true } },
+          },
+        },
+        warehouse: { select: { nombre: true } },
+      },
+    });
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(
+      rows.map((row) => ({
+        'Código Interno': row.product.codigoInterno ?? '',
+        Producto: row.product.nombre,
+        Marca: row.product.brand?.nombre ?? '',
+        Almacén: row.warehouse.nombre,
+        Stock: Number(row.cantidad),
+        'Stock mínimo': Number(row.product.stockMinimo ?? 0),
+        'Maneja lotes': row.product.manejaLotes ? 'SI' : 'NO',
+      })),
+    );
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Inventario');
+    return writeWorkbookBuffer(workbook);
   }
 
   async listWarehouses(actor: JwtRequestUser) {
@@ -262,9 +332,7 @@ export class InventoryMovementsService {
         productId: query.productId,
         warehouseId: query.warehouseId,
         deletedAt: null,
-        ...(search
-          ? { codigoLote: textSearchFilter(search) }
-          : {}),
+        ...(search ? { codigoLote: textSearchFilter(search) } : {}),
         ...(mode === 'OUTBOUND'
           ? { stock: { gt: new Prisma.Decimal(0) } }
           : {}),
@@ -392,7 +460,10 @@ export class InventoryMovementsService {
       throw new BadRequestException('Ingresa una fecha de vencimiento válida');
     }
     const date = new Date(expiry);
-    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== expiry) {
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== expiry
+    ) {
       throw new BadRequestException('Ingresa una fecha de vencimiento válida');
     }
 
@@ -1119,6 +1190,67 @@ export class InventoryMovementsService {
     await this.prisma.$transaction(run);
   }
 
+  /** Solo quien puede editar productos cambia precios desde el ingreso. */
+  private canEditPrices(actor: JwtRequestUser): boolean {
+    return (
+      hasChainScope(actor.role) ||
+      (actor.permissionCodes ?? []).includes('products.write')
+    );
+  }
+
+  /**
+   * Precios que el ingreso muestra y permite corregir. El de venta es el que cobra la venta
+   * en ese almacén: el propio del almacén si existe, si no el general del producto.
+   */
+  async getInboundPricing(
+    productId: string,
+    warehouseId: string,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, warehouseId);
+    await this.scope.assertProductInTenant(actor, productId);
+    const [product, warehouse, warehousePrice] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: { id: productId, deletedAt: null },
+        select: {
+          tenantId: true,
+          precioUnitarioVenta: true,
+          precioUnitarioCompra: true,
+          codigoMedicamentoDigemid: true,
+        },
+      }),
+      this.prisma.warehouse.findFirst({
+        where: { id: warehouseId, deletedAt: null },
+        select: {
+          establishment: { select: { blockSalesAboveRegulatedPrice: true } },
+        },
+      }),
+      this.prisma.productWarehousePrice.findUnique({
+        where: { productId_warehouseId: { productId, warehouseId } },
+        select: { precio: true },
+      }),
+    ]);
+    if (!product) throw new NotFoundException('Producto no encontrado');
+    if (!warehouse) throw new NotFoundException('Almacén no encontrado');
+
+    const codigo = product.codigoMedicamentoDigemid?.trim();
+    const regulated = codigo
+      ? await this.regulatedPrices.findActiveRegulated(product.tenantId, codigo)
+      : null;
+
+    return {
+      precioCompra: product.precioUnitarioCompra?.toString() ?? null,
+      precioVenta: (
+        warehousePrice?.precio ?? product.precioUnitarioVenta
+      ).toString(),
+      precioVentaOrigen: warehousePrice ? 'ALMACEN' : 'GENERAL',
+      precioMaximoDigemid: regulated?.precioMaximo.toString() ?? null,
+      codigoDigemid: regulated ? codigo : null,
+      bloqueaSobreMaximo: warehouse.establishment.blockSalesAboveRegulatedPrice,
+      puedeEditarPrecios: this.canEditPrices(actor),
+    };
+  }
+
   async createInboundMovement(
     dto: CreateInboundMovementDto,
     actor: JwtRequestUser,
@@ -1171,9 +1303,37 @@ export class InventoryMovementsService {
       throw new BadRequestException('Fecha de registro inválida');
     }
 
+    const changesPrices = dto.purchasePrice != null || dto.salePrice != null;
+    if (changesPrices && !this.canEditPrices(actor)) {
+      throw new ForbiddenException(
+        'No tienes permiso para cambiar precios de productos. Registra el ingreso sin cambiar precios o pide el permiso de edición de productos.',
+      );
+    }
+    const newSalePrice =
+      dto.salePrice != null ? new Prisma.Decimal(dto.salePrice) : null;
+    const newPurchasePrice =
+      dto.purchasePrice != null ? new Prisma.Decimal(dto.purchasePrice) : null;
+    // Mismo control que en la venta: si la sede bloquea, no se acepta un precio sobre el máximo.
+    const priceCheck = newSalePrice
+      ? await this.regulatedPrices.checkSalePrices(warehouse.establishmentId, [
+          { productId: product.id, precioUnitario: newSalePrice },
+        ])
+      : { violations: [], blocked: false };
+
     await this.prisma.$transaction(async (tx) => {
       const unitCost =
         dto.unitCost != null ? new Prisma.Decimal(dto.unitCost) : null;
+
+      if (changesPrices) {
+        await this.applyInboundPrices(
+          tx,
+          product.id,
+          warehouse.id,
+          newPurchasePrice,
+          newSalePrice,
+          actorId,
+        );
+      }
 
       await recordControlledMovement(
         tx,
@@ -1253,6 +1413,10 @@ export class InventoryMovementsService {
         warehouseId: warehouse.id,
         quantity: amount.toString(),
         lotCode: codigoLote,
+        ...(newPurchasePrice
+          ? { purchasePrice: newPurchasePrice.toString() }
+          : {}),
+        ...(newSalePrice ? { salePrice: newSalePrice.toString() } : {}),
       },
     });
 
@@ -1261,10 +1425,74 @@ export class InventoryMovementsService {
       warehouse.id,
       product.id,
     );
+    const warning = priceCheck.violations[0];
     return {
       ok: true,
-      message: 'Ingreso registrado correctamente',
+      message: changesPrices
+        ? 'Ingreso registrado y precios actualizados'
+        : 'Ingreso registrado correctamente',
+      ...(warning
+        ? {
+            warning: `El precio de venta S/ ${warning.precioVenta} supera el máximo DIGEMID de S/ ${warning.precioMaximo}.`,
+          }
+        : {}),
     };
+  }
+
+  /** Actualiza los precios del producto y deja constancia en su historial de precios. */
+  private async applyInboundPrices(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    warehouseId: string,
+    purchasePrice: Prisma.Decimal | null,
+    salePrice: Prisma.Decimal | null,
+    actorId: string | undefined,
+  ) {
+    const current = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { precioUnitarioVenta: true, precioUnitarioCompra: true },
+    });
+    const warehousePrice = salePrice
+      ? await tx.productWarehousePrice.findUnique({
+          where: { productId_warehouseId: { productId, warehouseId } },
+          select: { id: true, precio: true },
+        })
+      : null;
+
+    const changes: Parameters<ProductPriceHistoryService['recordChanges']>[2] =
+      [];
+    const productData: Prisma.ProductUpdateInput = {};
+    if (purchasePrice) {
+      productData.precioUnitarioCompra = purchasePrice;
+      changes.push({
+        field: ProductPriceField.PRECIO_COMPRA,
+        previous: current.precioUnitarioCompra,
+        next: purchasePrice,
+      });
+    }
+    if (salePrice && warehousePrice) {
+      await tx.productWarehousePrice.update({
+        where: { id: warehousePrice.id },
+        data: { precio: salePrice },
+      });
+      changes.push({
+        field: ProductPriceField.PRECIO_ALMACEN,
+        warehouseId,
+        previous: warehousePrice.precio,
+        next: salePrice,
+      });
+    } else if (salePrice) {
+      productData.precioUnitarioVenta = salePrice;
+      changes.push({
+        field: ProductPriceField.PRECIO_VENTA,
+        previous: current.precioUnitarioVenta,
+        next: salePrice,
+      });
+    }
+    if (Object.keys(productData).length) {
+      await tx.product.update({ where: { id: productId }, data: productData });
+    }
+    await this.priceHistory.recordChanges(tx, productId, changes, actorId);
   }
 
   async listSaleAvailableLots(

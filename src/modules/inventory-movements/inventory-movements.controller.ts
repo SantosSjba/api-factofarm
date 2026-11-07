@@ -58,6 +58,26 @@ export class InventoryMovementsController {
     return this.service.list(query, actor);
   }
 
+  @Post('export')
+  @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
+  @ApiOperation({ summary: 'Exportar a Excel el inventario filtrado' })
+  async exportInventory(
+    @Query() query: InventoryMovementListQueryDto,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() actor: JwtRequestUser,
+  ): Promise<StreamableFile> {
+    const buffer = await this.service.buildExportBuffer(query, actor);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent('inventario-export.xlsx')}`,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    return new StreamableFile(buffer);
+  }
+
   @Get('lots')
   @RequirePermissions('inventory.read', 'nav.lotes')
   @ApiOperation({ summary: 'Listar lotes con stock' })
@@ -225,6 +245,20 @@ export class InventoryMovementsController {
   })
   listTransferReasons() {
     return this.service.listTransferReasons();
+  }
+
+  @Get('inbound-pricing')
+  @RequirePermissions('inventory.write', 'nav.inventario_movimientos')
+  @ApiOperation({
+    summary:
+      'Precios vigentes del producto en un almacén, para el ingreso de stock',
+  })
+  getInboundPricing(
+    @Query('productId', ParseUUIDPipe) productId: string,
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.getInboundPricing(productId, warehouseId, actor);
   }
 
   @Get('catalogs/output-reasons')

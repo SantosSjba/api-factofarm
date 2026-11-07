@@ -110,6 +110,28 @@ export class RegulatedPriceService {
     return { imported, total: rows.length };
   }
 
+  /** Precio máximo DIGEMID vigente para un código, o null si no está regulado. */
+  async findActiveRegulated(
+    tenantId: string,
+    codigoDigemid: string,
+    now: Date = new Date(),
+  ) {
+    return this.prisma.regulatedDrugPrice.findFirst({
+      where: {
+        tenantId,
+        codigoDigemid,
+        deletedAt: null,
+        activo: true,
+        OR: [
+          { vigenteDesde: null, vigenteHasta: null },
+          { vigenteDesde: { lte: now }, vigenteHasta: { gte: now } },
+          { vigenteDesde: { lte: now }, vigenteHasta: null },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
   async checkSalePrices(
     establishmentId: string,
     items: Array<{ productId: string; precioUnitario: Prisma.Decimal }>,
@@ -150,23 +172,11 @@ export class RegulatedPriceService {
       const codigo = product.codigoMedicamentoDigemid?.trim();
       if (!codigo) continue;
 
-      const regulated = await this.prisma.regulatedDrugPrice.findFirst({
-        where: {
-          tenantId: establishment.tenantId,
-          codigoDigemid: codigo,
-          deletedAt: null,
-          activo: true,
-          OR: [
-            { vigenteDesde: null, vigenteHasta: null },
-            {
-              vigenteDesde: { lte: now },
-              vigenteHasta: { gte: now },
-            },
-            { vigenteDesde: { lte: now }, vigenteHasta: null },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
+      const regulated = await this.findActiveRegulated(
+        establishment.tenantId,
+        codigo,
+        now,
+      );
       if (!regulated) continue;
 
       const max = new Prisma.Decimal(regulated.precioMaximo.toString());

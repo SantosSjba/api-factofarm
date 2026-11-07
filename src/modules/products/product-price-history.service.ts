@@ -400,6 +400,38 @@ export class ProductPriceHistoryService {
     });
   }
 
+  /**
+   * Registra cambios puntuales de precio hechos fuera del formulario de producto
+   * (por ejemplo, al ingresar stock). Ignora los que no cambian el valor.
+   */
+  async recordChanges(
+    tx: Tx,
+    productId: string,
+    changes: {
+      field: ProductPriceField;
+      warehouseId?: string;
+      previous: Prisma.Decimal | null;
+      next: Prisma.Decimal;
+    }[],
+    actorId?: string,
+  ) {
+    const entries: HistoryEntry[] = changes
+      .filter((c) => !this.decimalsEqual(c.previous, c.next))
+      .map((c) => ({
+        field: c.field,
+        warehouseId: c.warehouseId,
+        previousValue: c.previous,
+        newValue: c.next,
+      }));
+    await this.persist(
+      tx,
+      productId,
+      entries,
+      actorId,
+      ProductPriceChangeSource.MANUAL,
+    );
+  }
+
   private async persist(
     tx: Tx,
     productId: string,

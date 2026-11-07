@@ -63,4 +63,21 @@ export class CreateInboundMovementDto {
   )
   @MaxLength(120)
   reference?: string;
+
+  /** Nuevo precio de compra del producto. Si se omite, no cambia. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  purchasePrice?: number;
+
+  /**
+   * Nuevo precio de venta. Se aplica al precio del almacén si ese almacén tiene uno propio;
+   * si no, al precio general del producto. Si se omite, no cambia.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  salePrice?: number;
 }
