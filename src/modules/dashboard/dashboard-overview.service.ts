@@ -38,7 +38,13 @@ export class DashboardOverviewService {
    * Resumen del periodo: los últimos `days` días hasta hoy o, si llegan `from`/`to` (YYYY-MM-DD),
    * ese día o rango en la zona horaria de la sede. Se compara con el periodo anterior de igual duración.
    */
-  async getTenantOverview(actor: JwtRequestUser, daysInput?: number, fromInput?: string, toInput?: string) {
+  async getTenantOverview(
+    actor: JwtRequestUser,
+    daysInput?: number,
+    fromInput?: string,
+    toInput?: string,
+    userId?: string,
+  ) {
     const scope = actorFromJwt(actor);
     if (isPlatformAdmin(scope.role)) {
       throw new ForbiddenException('Use la consola de plataforma (/platform/dashboard)');
@@ -53,7 +59,28 @@ export class DashboardOverviewService {
     const periodStart = custom ? custom.start : new Date(today.start.getTime() - (days - 1) * DAY_MS);
     const periodEnd = custom ? custom.end : today.end;
     const prevStart = new Date(periodStart.getTime() - days * DAY_MS);
-    const saleScope: Prisma.SaleWhereInput = { deletedAt: null, establishment: { tenantId } };
+    // Con usuario: sus ventas como vendedor y los egresos de las cajas que abrió.
+    const users = await this.prisma.user.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: 'asc' },
+    });
+    const user = userId ? users.find((u) => u.id === userId) : undefined;
+    if (userId && !user) throw new BadRequestException('El usuario elegido no pertenece a tu empresa.');
+    const saleScope: Prisma.SaleWhereInput = {
+      deletedAt: null,
+      establishment: { tenantId },
+      ...(userId ? { sellerId: userId } : {}),
+    };
+    const expensesQuery = this.prisma.cashMovement.aggregate({
+      where: {
+        tipo: 'EGRESO',
+        createdAt: { gte: periodStart, lt: periodEnd },
+        cashSession: { cashRegister: { establishment: { tenantId } }, ...(userId ? { userId } : {}) },
+      },
+      _sum: { monto: true },
+      _count: true,
+    });
     // Independientes de las ventas: se lanzan ya para no sumar latencia.
     const sidePanels = Promise.all([
       this.openCash(tenantId),
@@ -82,6 +109,7 @@ export class DashboardOverviewService {
           select: {
             productId: true,
             cantidad: true,
+            precioUnitario: true,
             totalLinea: true,
             product: { select: { nombre: true, costoUnitario: true, precioUnitarioCompra: true } },
           },
@@ -119,8 +147,11 @@ export class DashboardOverviewService {
       (await this.prisma.user.findMany({ where: { id: { in: [...bySeller.keys()] } }, select: { id: true, nombre: true } })).map((u) => [u.id, u.nombre]),
     );
 
-    // Top productos y margen bruto estimado (solo líneas cuyo producto tiene costo).
+    // Top productos y costo de lo vendido (costo unitario actual del producto o su precio de compra).
+    // Costo mayor al precio cobrado: casi siempre es el precio del paquete en un producto que se vende
+    // por unidad. Se avisa para que lo corrijan; no se ajusta solo.
     const byProduct = new Map<string, { nombre: string; total: Prisma.Decimal; cantidad: Prisma.Decimal }>();
+    const suspects = new Map<string, { nombre: string; costo: Prisma.Decimal; precio: Prisma.Decimal; cantidad: Prisma.Decimal; exceso: Prisma.Decimal }>();
     let costed = ZERO();
     let cost = ZERO();
     for (const it of itemRows) {
@@ -132,17 +163,27 @@ export class DashboardOverviewService {
       if (unitCost && unitCost.greaterThan(0)) {
         costed = costed.plus(it.totalLinea);
         cost = cost.plus(unitCost.times(it.cantidad));
+        if (unitCost.greaterThan(it.precioUnitario)) {
+          const bad = suspects.get(it.productId) ?? { nombre: it.product.nombre, costo: unitCost, precio: it.precioUnitario, cantidad: ZERO(), exceso: ZERO() };
+          bad.cantidad = bad.cantidad.plus(it.cantidad);
+          bad.exceso = bad.exceso.plus(unitCost.times(it.cantidad).minus(it.totalLinea));
+          suspects.set(it.productId, bad);
+        }
       }
     }
     const itemsTotal = itemRows.reduce((a, it) => a.plus(it.totalLinea), ZERO());
 
-    const [cash, inventory, finance] = await sidePanels;
+    const [[cash, inventory, finance], expensesAgg] = await Promise.all([sidePanels, expensesQuery]);
+    const expenses = expensesAgg._sum.monto ?? ZERO();
 
     return {
       days,
       from: formatDateYmdInTimeZone(periodStart, timeZone),
       to: formatDateYmdInTimeZone(new Date(periodEnd.getTime() - 1), timeZone),
       custom: !!custom,
+      userId: user?.id ?? null,
+      userName: user?.nombre ?? null,
+      users,
       timeZone,
       today: {
         total: money(todayAgg.total),
@@ -164,7 +205,16 @@ export class DashboardOverviewService {
         grossMargin: money(costed.minus(cost)),
         grossMarginPct: costed.greaterThan(0) ? costed.minus(cost).div(costed).times(100).toFixed(1) : null,
         marginCoveragePct: itemsTotal.greaterThan(0) ? costed.div(itemsTotal).times(100).toFixed(0) : null,
+        // Resumen financiero: ganancia = ventas − costo; neto = ganancia − egresos de caja.
+        cost: money(cost),
+        profit: money(periodTotal.minus(cost)),
+        expenses: money(expenses),
+        expensesCount: expensesAgg._count,
+        net: money(periodTotal.minus(cost).minus(expenses)),
       },
+      costAboveSalePrice: [...suspects]
+        .map(([id, r]) => ({ id, nombre: r.nombre, costo: money(r.costo), precio: money(r.precio), cantidad: r.cantidad.toFixed(0), exceso: money(r.exceso) }))
+        .sort((a, b) => Number(b.exceso) - Number(a.exceso)),
       trend: [...byDay].map(([date, r]) => ({ date, label: `${date.slice(8, 10)}/${date.slice(5, 7)}`, total: money(r.total), count: r.count })),
       payments,
       documents: [...byDoc]
@@ -389,7 +439,9 @@ function resolveCustomRange(from: string | undefined, to: string | undefined, ti
     throw new BadRequestException('Las fechas deben tener el formato AAAA-MM-DD.');
   }
   if (fromYmd > toYmd!) throw new BadRequestException('La fecha «Desde» no puede ser posterior a «Hasta».');
-  if (fromYmd > todayYmd) throw new BadRequestException('No hay ventas en fechas futuras: elige un día hasta hoy.');
+  if (fromYmd > todayYmd || toYmd! > todayYmd) {
+    throw new BadRequestException('No hay ventas en fechas futuras: elige un día hasta hoy.');
+  }
   const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd!, timeZone);
   const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
   if (days > MAX_RANGE_DAYS) {

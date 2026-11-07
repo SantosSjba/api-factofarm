@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -32,13 +32,15 @@ export class DashboardController {
   @ApiQuery({ name: 'days', required: false, enum: [1, 7, 30, 90] })
   @ApiQuery({ name: 'from', required: false, description: 'Día o inicio del rango (AAAA-MM-DD). Tiene prioridad sobre days.' })
   @ApiQuery({ name: 'to', required: false, description: 'Fin del rango (AAAA-MM-DD). Si falta, se usa solo el día «from».' })
+  @ApiQuery({ name: 'userId', required: false, description: 'Solo las ventas de este vendedor y los egresos de sus cajas.' })
   getOverview(
     @Query('days') days: string | undefined,
     @Query('from') from: string | undefined,
     @Query('to') to: string | undefined,
+    @Query('userId', new ParseUUIDPipe({ optional: true })) userId: string | undefined,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.overview.getTenantOverview(actor, Number(days), from, to);
+    return this.overview.getTenantOverview(actor, Number(days), from, to, userId);
   }
 
   @Get('platform/overview')
