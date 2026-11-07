@@ -148,9 +148,11 @@ export class ProductsService {
     return requireTenantId(actorFromJwt(actor));
   }
 
-  async list(query: ProductListQueryDto, actor?: JwtRequestUser) {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 10;
+  /** Mismos filtros para el listado y la exportación. */
+  private buildListWhere(
+    query: ProductListQueryDto,
+    actor?: JwtRequestUser,
+  ): Prisma.ProductWhereInput {
     const search = query.search?.trim();
     const field = (query.field ?? 'nombre').trim();
 
@@ -181,7 +183,7 @@ export class ProductsService {
       }
     }
 
-    const where: Prisma.ProductWhereInput = {
+    return {
       deletedAt: null,
       ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       ...(searchable.length ? { OR: searchable } : {}),
@@ -195,6 +197,12 @@ export class ProductsService {
         ? { necesitaRecetaMedica: query.necesitaRecetaMedica }
         : {}),
     };
+  }
+
+  async list(query: ProductListQueryDto, actor?: JwtRequestUser) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const where = this.buildListWhere(query, actor);
 
     // Evita transacción para lecturas paginadas y reduce riesgo de P2028 (maxWait).
     const [total, rows] = await Promise.all([
@@ -1494,10 +1502,9 @@ export class ProductsService {
     return this.parseAndImportExcel(mode, file, actor, { dryRun: false });
   }
 
-  async buildExportBuffer(actor?: JwtRequestUser) {
-    const tenantFilter = actor ? tenantWhere(actorFromJwt(actor)) : {};
+  async buildExportBuffer(query: ProductListQueryDto, actor?: JwtRequestUser) {
     const rows = await this.prisma.product.findMany({
-      where: { deletedAt: null, ...tenantFilter },
+      where: this.buildListWhere(query, actor),
       orderBy: { nombre: 'asc' },
       include: {
         unit: { select: { codigo: true } },

@@ -306,10 +306,11 @@ export class ProductsController {
   @RequirePermissions('products.read')
   @ApiOperation({ summary: 'Exportar cat?logo de productos a Excel' })
   async exportProducts(
+    @Query() query: ProductListQueryDto,
     @Res({ passthrough: true }) res: Response,
     @CurrentUser() actor: JwtRequestUser,
   ): Promise<StreamableFile> {
-    const buffer = await this.productsService.buildExportBuffer(actor);
+    const buffer = await this.productsService.buildExportBuffer(query, actor);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent('productos-export.xlsx')}`,
