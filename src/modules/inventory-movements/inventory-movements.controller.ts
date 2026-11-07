@@ -35,6 +35,7 @@ import {
 import { InventoryLotListQueryDto } from './dto/inventory-lot-list-query.dto';
 import { InventoryMovementListQueryDto } from './dto/inventory-movement-list-query.dto';
 import { KardexQueryDto } from './dto/kardex-query.dto';
+import { WithdrawalProductSearchQueryDto } from './dto/withdrawal-product-search-query.dto';
 import { LotCodeSearchQueryDto } from './dto/lot-code-search-query.dto';
 import { CreateAdjustmentDto } from './dto/create-adjustment.dto';
 import { InventoryValuationReportQueryDto } from './dto/inventory-valuation-report-query.dto';
@@ -286,6 +287,40 @@ export class InventoryMovementsController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.createInboundMovement(dto, actor);
+  }
+
+  @Get('withdrawals/catalogs/reasons')
+  @RequirePermissions('inventory.read', 'nav.inventario_movimientos')
+  @ApiOperation({
+    summary: 'Motivos de salida manual (lo que sale sin venderse)',
+  })
+  listWithdrawalReasons() {
+    return this.service.listWithdrawalReasons();
+  }
+
+  @Get('withdrawals/catalogs/products')
+  @RequirePermissions('inventory.write', 'nav.inventario_movimientos')
+  @ApiOperation({
+    summary: 'Productos con stock en un almacén, para retirarlos',
+  })
+  searchWithdrawalProducts(
+    @Query() query: WithdrawalProductSearchQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.searchWithdrawalProducts(query, actor);
+  }
+
+  @Post('withdrawals')
+  @RequirePermissions('inventory.write', 'nav.inventario_movimientos')
+  @ApiOperation({
+    summary:
+      'Registrar una salida manual: devolución, retiro, merma, destrucción…',
+  })
+  createWithdrawal(
+    @Body() dto: CreateOutboundMovementDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.createWithdrawal(dto, actor);
   }
 
   @Post('outbound')

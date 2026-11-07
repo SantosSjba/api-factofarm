@@ -42,6 +42,7 @@ import { InventoryImportTemplateMode } from './dto/inventory-import-template-que
 import { LotCodeSearchQueryDto } from './dto/lot-code-search-query.dto';
 import { InventoryLotListQueryDto } from './dto/inventory-lot-list-query.dto';
 import { KardexQueryDto } from './dto/kardex-query.dto';
+import { WithdrawalProductSearchQueryDto } from './dto/withdrawal-product-search-query.dto';
 import { CreateAdjustmentDto } from './dto/create-adjustment.dto';
 import { InventoryValuationReportQueryDto } from './dto/inventory-valuation-report-query.dto';
 import { DispatchSaleStockDto } from './dto/dispatch-sale-stock.dto';
@@ -66,6 +67,27 @@ const SALE_OUT_CODE = 'OUT_VENTA_NACIONAL';
 const serialAvailableStates: ProductSerialStatus[] = [
   ProductSerialStatus.DISPONIBLE,
   ProductSerialStatus.RESERVADO,
+];
+
+/**
+ * Salidas manuales permitidas (botón «−» de Movimientos): todo lo que sale sin venderse.
+ * Quedan fuera las ventas, los ajustes y los traslados, que tienen su propio flujo.
+ */
+export const WITHDRAWAL_REASON_CODES = [
+  'OUT_DEVOLUCION_PROVEEDOR',
+  'OUT_DEVOLUCION_ENTREGADA',
+  'OUT_RETIRO',
+  'OUT_MERMAS',
+  'OUT_DESMEDROS',
+  'OUT_DESTRUCCION',
+  'OUT_ENTREGA_TRABAJADORES',
+  'OUT_CONVENIO_COLECTIVO',
+  'OUT_SUSTITUCION_SINIESTRADO',
+  'OUT_DONACION',
+  'OUT_MUESTRAS_MEDICAS',
+  'OUT_BONIFICACION',
+  'OUT_PUBLICIDAD',
+  'OUT_PREMIO',
 ];
 
 /** Motivos de salida con los que se puede retirar un lote vencido. */
@@ -1642,6 +1664,87 @@ export class InventoryMovementsService {
       message: 'Salida de venta registrada con trazabilidad por lote',
       asignacion: lines,
     };
+  }
+
+  listWithdrawalReasons() {
+    return this.prisma.inventoryTransferReason.findMany({
+      where: {
+        deletedAt: null,
+        activo: true,
+        codigo: { in: WITHDRAWAL_REASON_CODES },
+      },
+      orderBy: { nombre: 'asc' },
+      select: { id: true, codigo: true, nombre: true },
+    });
+  }
+
+  /** Solo se puede retirar lo que hay: productos con stock en el almacén elegido. */
+  async searchWithdrawalProducts(
+    query: WithdrawalProductSearchQueryDto,
+    actor: JwtRequestUser,
+  ) {
+    await this.scope.assertWarehouseInTenant(actor, query.warehouseId);
+    const search = query.search?.trim();
+    const rows = await this.prisma.productWarehouseStock.findMany({
+      where: {
+        warehouseId: query.warehouseId,
+        cantidad: { gt: 0 },
+        product: {
+          deletedAt: null,
+          ...(search
+            ? {
+                OR: [
+                  { nombre: textSearchFilter(search) },
+                  { codigoInterno: textSearchFilter(search) },
+                  { codigoBarra: textSearchFilter(search) },
+                ],
+              }
+            : {}),
+        },
+      },
+      orderBy: { product: { nombre: 'asc' } },
+      take: 20,
+      select: {
+        cantidad: true,
+        product: {
+          select: {
+            id: true,
+            nombre: true,
+            codigoInterno: true,
+            manejaLotes: true,
+          },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      productId: row.product.id,
+      producto: row.product.nombre,
+      codigoInterno: row.product.codigoInterno ?? null,
+      manejaLotes: row.product.manejaLotes,
+      stock: row.cantidad.toString(),
+    }));
+  }
+
+  /** Registra la salida solo si el motivo es de devolución o retiro. */
+  async createWithdrawal(
+    dto: CreateOutboundMovementDto,
+    actor: JwtRequestUser,
+  ) {
+    const reason = await this.prisma.inventoryTransferReason.findFirst({
+      where: {
+        id: dto.transferReasonId,
+        deletedAt: null,
+        activo: true,
+        codigo: { in: WITHDRAWAL_REASON_CODES },
+      },
+      select: { id: true },
+    });
+    if (!reason) {
+      throw new BadRequestException(
+        'Ese motivo no se registra como salida manual. Las ventas, los ajustes y los traslados tienen su propia pantalla.',
+      );
+    }
+    return this.createOutboundMovement(dto, actor);
   }
 
   async createOutboundMovement(
