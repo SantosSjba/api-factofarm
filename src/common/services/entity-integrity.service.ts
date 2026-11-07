@@ -529,15 +529,23 @@ export class EntityIntegrityService {
   async assertCanDeleteRegulatedPrice(id: string): Promise<void> {
     const row = await this.prisma.regulatedDrugPrice.findFirst({
       where: { id, deletedAt: null },
-      select: { codigoDigemid: true },
+      select: { codigoDigemid: true, tenantId: true },
     });
     if (!row?.codigoDigemid) return;
     const [products, services] = await Promise.all([
       this.prisma.product.count({
-        where: { codigoMedicamentoDigemid: row.codigoDigemid, deletedAt: null },
+        where: {
+          tenantId: row.tenantId,
+          codigoMedicamentoDigemid: row.codigoDigemid,
+          deletedAt: null,
+        },
       }),
       this.prisma.service.count({
-        where: { codigoMedicamentoDigemid: row.codigoDigemid, deletedAt: null },
+        where: {
+          tenantId: row.tenantId,
+          codigoMedicamentoDigemid: row.codigoDigemid,
+          deletedAt: null,
+        },
       }),
     ]);
     if (products + services > 0) {

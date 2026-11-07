@@ -228,8 +228,11 @@ export class ComplianceController {
     'nav.precios_regulados',
   )
   @ApiOperation({ summary: 'Catálogo precios regulados DIGEMED' })
-  listRegulated(@Query('search') search?: string) {
-    return this.regulated.list(search);
+  listRegulated(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('search') search?: string,
+  ) {
+    return this.regulated.list(actor, search);
   }
 
   @Post('regulated-prices')
@@ -243,7 +246,7 @@ export class ComplianceController {
     @Body() dto: UpsertRegulatedPriceDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.regulated.upsert(dto, actor.sub);
+    return this.regulated.upsert(dto, actor);
   }
 
   @Post('regulated-prices/import')
@@ -257,7 +260,7 @@ export class ComplianceController {
     @Body() dto: ImportRegulatedPricesDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.regulated.importBatch(dto.rows, actor.sub);
+    return this.regulated.importBatch(dto.rows, actor);
   }
 
   @Post('regulated-prices/:id/remove')
@@ -271,7 +274,7 @@ export class ComplianceController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.regulated.remove(id, actor.sub);
+    return this.regulated.remove(id, actor);
   }
 
   @Get('ple/:book')

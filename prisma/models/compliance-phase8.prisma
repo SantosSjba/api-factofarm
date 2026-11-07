@@ -80,6 +80,8 @@ model PharmacistLicense {
 /// Catálogo precios máximos regulados DIGEMED
 model RegulatedDrugPrice {
   id            String    @id @default(uuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   codigoDigemid String?   @db.VarChar(40)
   nombre        String    @db.VarChar(300)
   precioMaximo  Decimal   @db.Decimal(18, 4)
@@ -91,6 +93,7 @@ model RegulatedDrugPrice {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  @@index([tenantId, codigoDigemid])
   @@index([codigoDigemid])
   @@index([activo])
   @@index([deletedAt])

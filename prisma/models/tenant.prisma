@@ -45,6 +45,7 @@ model Tenant {
   updatedAt         DateTime     @updatedAt
 
   establishments Establishment[]
+  regulatedDrugPrices RegulatedDrugPrice[]
   users          User[]
   leads          TenantLead[]
   products       Product[]

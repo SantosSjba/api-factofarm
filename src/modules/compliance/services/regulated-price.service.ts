@@ -8,6 +8,12 @@ import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
+import {
+  actorFromJwt,
+  requireTenantId,
+  tenantWhere,
+} from '../../../common/scoping/tenant-scope.util';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
 
 @Injectable()
 export class RegulatedPriceService {
@@ -17,10 +23,12 @@ export class RegulatedPriceService {
     private readonly integrity: EntityIntegrityService,
   ) {}
 
-  async list(search?: string) {
+  /** Cada cliente administra su propio catálogo. */
+  async list(actor: JwtRequestUser, search?: string) {
     const q = search?.trim();
     return this.prisma.regulatedDrugPrice.findMany({
       where: {
+        ...tenantWhere(actorFromJwt(actor)),
         deletedAt: null,
         activo: true,
         ...(q
@@ -46,12 +54,13 @@ export class RegulatedPriceService {
       vigenteHasta?: string;
       fuente?: string;
     },
-    actorId?: string,
+    actor: JwtRequestUser,
   ) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     const codigo = dto.codigoDigemid?.trim() || null;
     const existing = codigo
       ? await this.prisma.regulatedDrugPrice.findFirst({
-          where: { codigoDigemid: codigo, deletedAt: null },
+          where: { tenantId, codigoDigemid: codigo, deletedAt: null },
         })
       : null;
 
@@ -70,10 +79,12 @@ export class RegulatedPriceService {
           where: { id: existing.id },
           data,
         })
-      : await this.prisma.regulatedDrugPrice.create({ data });
+      : await this.prisma.regulatedDrugPrice.create({
+          data: { ...data, tenantId },
+        });
 
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: existing ? 'UPDATE' : 'CREATE',
       entity: 'RegulatedDrugPrice',
       entityId: row.id,
@@ -88,12 +99,12 @@ export class RegulatedPriceService {
       nombre: string;
       precioMaximo: number;
     }>,
-    actorId?: string,
+    actor: JwtRequestUser,
   ) {
     let imported = 0;
     for (const row of rows) {
       if (!row.nombre?.trim() || row.precioMaximo == null) continue;
-      await this.upsert(row, actorId);
+      await this.upsert(row, actor);
       imported += 1;
     }
     return { imported, total: rows.length };
@@ -105,12 +116,16 @@ export class RegulatedPriceService {
   ) {
     const establishment = await this.prisma.establishment.findFirst({
       where: { id: establishmentId, deletedAt: null },
-      select: { blockSalesAboveRegulatedPrice: true },
+      select: { blockSalesAboveRegulatedPrice: true, tenantId: true },
     });
     if (!establishment) return { violations: [], blocked: false };
 
     const products = await this.prisma.product.findMany({
-      where: { id: { in: items.map((i) => i.productId) }, deletedAt: null },
+      where: {
+        id: { in: items.map((i) => i.productId) },
+        tenantId: establishment.tenantId,
+        deletedAt: null,
+      },
       select: {
         id: true,
         nombre: true,
@@ -137,6 +152,7 @@ export class RegulatedPriceService {
 
       const regulated = await this.prisma.regulatedDrugPrice.findFirst({
         where: {
+          tenantId: establishment.tenantId,
           codigoDigemid: codigo,
           deletedAt: null,
           activo: true,
@@ -175,9 +191,10 @@ export class RegulatedPriceService {
     return { violations, blocked: establishment.blockSalesAboveRegulatedPrice };
   }
 
-  async remove(id: string, actorId?: string) {
+  async remove(id: string, actor: JwtRequestUser) {
+    const tenantId = requireTenantId(actorFromJwt(actor));
     const row = await this.prisma.regulatedDrugPrice.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, tenantId, deletedAt: null },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('Precio regulado no encontrado');
@@ -187,7 +204,7 @@ export class RegulatedPriceService {
       data: { deletedAt: new Date(), activo: false },
     });
     await this.audit.log({
-      userId: actorId,
+      userId: actor.sub,
       action: 'DELETE',
       entity: 'RegulatedDrugPrice',
       entityId: id,
