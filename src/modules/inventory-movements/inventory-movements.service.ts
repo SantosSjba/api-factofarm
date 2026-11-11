@@ -59,6 +59,11 @@ import { assertLotExpiryConsistent, resolveInboundLot } from './lot-rules.util';
 import { RegulatedPriceService } from '../compliance/services/regulated-price.service';
 import { ProductPriceHistoryService } from '../products/product-price-history.service';
 import { hasChainScope } from '../../common/permissions/role-policy.util';
+import {
+  buildImportTemplateBuffer as buildTemplateXlsx,
+  canonicalizeImportRows,
+} from '../../common/utils/import-template.util';
+import { LOT_IMPORT_COLUMNS, SERIES_IMPORT_COLUMNS } from './inventory-import-columns';
 
 const ADJUST_OUT_CODE = 'OUT_AJUSTE_DIFERENCIA';
 const ADJUST_IN_CODE = 'INGRESO_OTROS';
@@ -2304,28 +2309,13 @@ export class InventoryMovementsService {
   }
 
   buildImportTemplateBuffer(mode: InventoryImportTemplateMode) {
-    const workbook = XLSX.utils.book_new();
-    const rows =
-      mode === 'SERIES'
-        ? [
-            {
-              'Código Interno': 'SERBI001',
-              Serie: 'SERPXAB1',
-              Estado: 'Activo',
-              Fecha: '12/10/2023',
-            },
-          ]
-        : [
-            {
-              'Código Interno': 'BI001',
-              'Código Lote': 'LOTZBC001',
-              Stock: 40,
-              'Fec. Vencimiento': '12/10/2023',
-            },
-          ];
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return writeWorkbookBuffer(workbook);
+    return mode === 'SERIES'
+      ? buildTemplateXlsx(SERIES_IMPORT_COLUMNS, {
+          notes: ['Las series entran al almacén que elijas al importar.'],
+        })
+      : buildTemplateXlsx(LOT_IMPORT_COLUMNS, {
+          notes: ['Los lotes entran al almacén que elijas al importar. No se acepta mercadería vencida.'],
+        });
   }
 
   private readRows(file: Express.Multer.File) {
@@ -2335,9 +2325,11 @@ export class InventoryMovementsService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: '',
-    });
+    // Acepta los encabezados claros de la plantilla y los antiguos, sin importar tildes ni mayúsculas.
+    return canonicalizeImportRows(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
+      [...LOT_IMPORT_COLUMNS, ...SERIES_IMPORT_COLUMNS],
+    );
   }
 
   private async recalculateStock(productId: string, warehouseId: string) {
@@ -2383,10 +2375,11 @@ export class InventoryMovementsService {
   } {
     const key = value.trim().toUpperCase();
     if (!key) return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
-    if (key.includes('ACT'))
-      return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
-    if (key.includes('INACT'))
+    // «INACTIVO» contiene «ACT»: se revisa antes para no tomarlo como disponible.
+    if (key.includes('INACT') || key.includes('ANUL'))
       return { estado: ProductSerialStatus.ANULADO, vendido: false };
+    if (key.includes('ACT') || key.includes('DISP'))
+      return { estado: ProductSerialStatus.DISPONIBLE, vendido: false };
     if (key.includes('VEND'))
       return { estado: ProductSerialStatus.VENDIDO, vendido: true };
     if (key.includes('RES'))

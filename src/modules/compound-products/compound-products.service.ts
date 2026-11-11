@@ -21,6 +21,11 @@ import * as XLSX from 'xlsx';
 import { CompoundProductListQueryDto } from './dto/compound-product-list-query.dto';
 import { CreateCompoundProductDto } from './dto/create-compound-product.dto';
 import { CompoundProductImportMode } from './dto/import-compound-products.dto';
+import {
+  buildImportTemplateBuffer as buildTemplateXlsx,
+  canonicalizeImportRows,
+} from '../../common/utils/import-template.util';
+import { COMPOUND_COLUMNS, COMPOUND_DETAIL_COLUMNS } from './compound-import-columns';
 
 const selectCompoundList = {
   id: true,
@@ -329,9 +334,11 @@ export class CompoundProductsService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: '',
-    });
+    // Acepta los encabezados claros de la plantilla y los antiguos, sin importar tildes ni mayúsculas.
+    const rows = canonicalizeImportRows(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
+      mode === 'DETALLE_PRODUCTOS_COMPUESTOS' ? COMPOUND_DETAIL_COLUMNS : COMPOUND_COLUMNS,
+    );
     if (!rows.length) {
       return { totalRows: 0, created: 0, updated: 0, errors: [] as string[] };
     }
@@ -342,37 +349,14 @@ export class CompoundProductsService {
   }
 
   buildImportTemplateBuffer(mode: CompoundProductImportMode) {
-    const workbook = XLSX.utils.book_new();
-    const rows =
-      mode === 'DETALLE_PRODUCTOS_COMPUESTOS'
-        ? [
-            {
-              'Código Interno (Producto compuesto/kit)': 'CODKIT1',
-              'Código Interno (Producto individual pertenece al kit)': 'C150',
-              Cantidad: 1,
-            },
-          ]
-        : [
-            {
-              Nombre: 'kit 1',
-              'Código Interno': 'CODKIT1',
-              'Código Sunat': '20202020',
-              'Código Tipo de Unidad': 'NIU',
-              'Código Tipo de Moneda': 'PEN',
-              'Precio Unitario Venta': 120.25,
-              'Codigo Tipo de Afectación del Igv Venta': '10',
-              Categoria: 'Bebidas',
-              Marca: 'Adidas',
-              Descripcion: 'desc 1',
-              'Nombre secundario': 'nombre sec 1',
-              Plataforma: 'Saga Falabella',
-              'Tiene Igv': 'SI',
-              Modelo: 'Modelo A',
-            },
-          ];
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return writeWorkbookBuffer(workbook);
+    return mode === 'DETALLE_PRODUCTOS_COMPUESTOS'
+      ? buildTemplateXlsx(COMPOUND_DETAIL_COLUMNS, {
+          notes: ['Una fila por cada producto del pack. Si un pack lleva 3 productos, van 3 filas con el mismo código de pack.'],
+          extraExamples: [{ 'Código Interno (Producto compuesto/kit)': 'KIT001', 'Código Interno (Producto individual pertenece al kit)': 'P0002', Cantidad: 1 }],
+        })
+      : buildTemplateXlsx(COMPOUND_COLUMNS, {
+          notes: ['Después de importar los packs, usa la plantilla «Productos de cada pack» para indicar qué lleva cada uno.'],
+        });
   }
 
   private async importCompoundRows(

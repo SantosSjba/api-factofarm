@@ -40,6 +40,22 @@ import { UpdateProductPrescriptionDto } from './dto/update-product-prescription.
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 import { ProductPriceHistoryService } from './product-price-history.service';
+import {
+  buildImportTemplateBuffer as buildTemplateXlsx,
+  canonicalizeImportRows,
+  type ImportColumn,
+} from '../../common/utils/import-template.util';
+import {
+  PRODUCT_ITEMS_COLUMNS,
+  PRODUCT_PRICE_LIST_COLUMNS,
+  PRODUCT_UPDATE_PRICES_COLUMNS,
+} from './product-import-columns';
+
+const PRODUCT_IMPORT_COLUMNS: Record<ProductImportMode, ImportColumn[]> = {
+  PRODUCTOS: PRODUCT_ITEMS_COLUMNS,
+  L_PRECIOS: PRODUCT_PRICE_LIST_COLUMNS,
+  ACTUALIZAR_PRECIOS: PRODUCT_UPDATE_PRICES_COLUMNS,
+};
 
 const selectProductList = {
   id: true,
@@ -1612,9 +1628,11 @@ export class ProductsService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: '',
-    });
+    // Acepta los encabezados claros de la plantilla y los antiguos, sin importar tildes ni mayúsculas.
+    const rows = canonicalizeImportRows(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
+      PRODUCT_IMPORT_COLUMNS[mode],
+    );
 
     if (!rows.length) {
       const empty = {
@@ -1667,69 +1685,11 @@ export class ProductsService {
   }
 
   buildImportTemplateBuffer(mode: ProductImportMode) {
-    const workbook = XLSX.utils.book_new();
-    let rows: Record<string, unknown>[] = [];
-    if (mode === 'L_PRECIOS') {
-      rows = [
-        {
-          'Código Interno (Producto)': 'P001',
-          Descripcion: 'Desc Precio 1',
-          'Código Tipo de Unidad': 'NIU',
-          Factor: 5,
-          'Precio 1': 10,
-          'Precio 2': 20,
-          'Precio 3': 30,
-          'Precio por defecto': 1,
-        },
-      ];
-    } else if (mode === 'ACTUALIZAR_PRECIOS') {
-      rows = [
-        {
-          medcod: 'BI001',
-          medff: 'SUSPENSION',
-          prdpreadq: 0.9264,
-          prdpredist: 0.9264,
-          prdpreope: 1,
-          medest: 'E',
-          medestvta: 1,
-          descrip: 'PRODUCTO REFERENCIAL',
-        },
-      ];
-    } else {
-      rows = [
-        {
-          Nombre: 'ACIDO FOLICO TABLETA 0.5 mg',
-          'Código Interno': 'A000001',
-          Modelo: '',
-          'Código Sunat': 20202020,
-          'Código Tipo de Unidad': 'NIU',
-          'Código Tipo de Moneda': 'PEN',
-          'Precio Unitario Venta': 12.25,
-          'Codigo Tipo de Afectación del Igv Venta': 10,
-          'Tiene Igv': 'SI',
-          'Precio Unitario Compra': 120.5,
-          'Codigo Tipo de Afectación del Igv Compra': 10,
-          Stock: 10,
-          'Stock Mínimo': 1,
-          Categoria: 'MEDICAMENTO',
-          Marca: 'FARMINDUSTRIA',
-          Descripcion: 'ACIDO FOLICO TABLETA 0.5 mg',
-          'Principio Activo': 'ACIDO FOLICO',
-          'Código lote': '',
-          'Fec. Vencimiento': '',
-          'Cód barras': 10000001,
-          Concentración: '0.5 mg',
-          'Código Medicamento DIGEMID': 'A000001',
-          Presentación: 'Tabletas',
-          'Registro Sanitario': '1234-1235',
-          'Es Generico': 'SI',
-          Ubicación: 'Inv 1 Est 2',
-        },
-      ];
-    }
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return writeWorkbookBuffer(workbook);
+    const notes =
+      mode === 'PRODUCTOS'
+        ? ['El stock inicial solo se carga en productos nuevos. Para cambiar el stock de uno que ya existe, usa Inventario.']
+        : ['Los productos deben existir antes y tener código interno.'];
+    return buildTemplateXlsx(PRODUCT_IMPORT_COLUMNS[mode], { notes });
   }
 
   private async importItemsRows(
@@ -2322,7 +2282,12 @@ export class ProductsService {
       const d = new Date(Date.UTC(date.y, date.m - 1, date.d));
       return Number.isNaN(d.getTime()) ? null : d.toISOString();
     }
-    const d = new Date(scalarText(value));
+    // Texto: día/mes/año (formato peruano) o año-mes-día.
+    const text = scalarText(value).trim();
+    const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+    const d = dmy
+      ? new Date(Date.UTC(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])))
+      : new Date(text);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
 

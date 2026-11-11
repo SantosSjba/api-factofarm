@@ -79,12 +79,36 @@ export class CategoriesService {
         ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
       },
       orderBy: { nombre: 'asc' },
-      select: selectCategory,
+      select: {
+        ...selectCategory,
+        _count: {
+          select: {
+            products: { where: { deletedAt: null } },
+            services: { where: { deletedAt: null } },
+            compoundProducts: { where: { deletedAt: null } },
+          },
+        },
+      },
     });
-    const byId = new Map(
-      rows.map((r) => [r.id, { ...r, children: [] as typeof rows }]),
+    type TreeNode = Omit<(typeof rows)[number], '_count'> & {
+      productCount: number;
+      serviceCount: number;
+      packCount: number;
+      children: TreeNode[];
+    };
+    const byId = new Map<string, TreeNode>(
+      rows.map(({ _count, ...r }) => [
+        r.id,
+        {
+          ...r,
+          productCount: _count.products,
+          serviceCount: _count.services,
+          packCount: _count.compoundProducts,
+          children: [],
+        },
+      ]),
     );
-    const roots: ((typeof rows)[number] & { children: typeof rows })[] = [];
+    const roots: TreeNode[] = [];
     for (const row of rows) {
       const node = byId.get(row.id)!;
       if (row.parentId && byId.has(row.parentId)) {
@@ -143,6 +167,7 @@ export class CategoriesService {
       }
       if (dto.parentId) {
         await this.assertParentExists(dto.parentId, current.tenantId);
+        await this.assertNotDescendant(id, dto.parentId);
       }
       data.parent = dto.parentId
         ? { connect: { id: dto.parentId } }
@@ -225,6 +250,26 @@ export class CategoriesService {
     });
     if (!parent) {
       throw new NotFoundException('Categoría padre no encontrada');
+    }
+  }
+
+  /** Evita ciclos: la nueva categoría padre no puede estar dentro de la que se mueve. */
+  private async assertNotDescendant(id: string, newParentId: string) {
+    let cursor: string | null = newParentId;
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      if (cursor === id) {
+        throw new ConflictException(
+          'No puedes poner una categoría dentro de una de sus propias subcategorías.',
+        );
+      }
+      seen.add(cursor);
+      const parent: { parentId: string | null } | null =
+        await this.prisma.category.findUnique({
+          where: { id: cursor },
+          select: { parentId: true },
+        });
+      cursor = parent?.parentId ?? null;
     }
   }
 

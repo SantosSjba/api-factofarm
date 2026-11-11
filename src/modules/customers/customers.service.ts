@@ -34,6 +34,11 @@ import { UpdateCustomerStatusDto } from './dto/update-customer-status.dto';
 import { UpdateCustomerTagsDto } from './dto/update-customer-tags.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import * as XLSX from 'xlsx';
+import {
+  buildImportTemplateBuffer as buildTemplateXlsx,
+  canonicalizeImportRows,
+} from '../../common/utils/import-template.util';
+import { CUSTOMER_IMPORT_COLUMNS } from './customer-import-columns';
 
 const CUSTOMER_DOC_LABELS: Record<CustomerDocumentType, string> = {
   DNI: 'DNI',
@@ -458,9 +463,11 @@ export class CustomersService {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const first = workbook.SheetNames[0];
     const sheet = workbook.Sheets[first];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: '',
-    });
+    // Acepta los encabezados claros de la plantilla y los antiguos, sin importar tildes ni mayúsculas.
+    const rows = canonicalizeImportRows(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
+      CUSTOMER_IMPORT_COLUMNS,
+    );
 
     let created = 0;
     let updated = 0;
@@ -638,36 +645,18 @@ export class CustomersService {
   }
 
   buildImportTemplateBuffer() {
-    const rows = [
-      {
-        'Código documento de identidad': 1,
-        'Número de documento': 41784438,
-        'Nombre/Razón Social': 'Juan Pinedo',
-        'Nombre Comercial': '',
-        'Código del Páis': '',
-        'Código de Ubigeo': '',
-        Dirección: '',
-        'Correo electrónico': '',
-        Teléfono: '',
-        'Tipo Cliente': 'Interno',
-      },
-      {
-        'Código documento de identidad': 6,
-        'Número de documento': 20505973522,
-        'Nombre/Razón Social': 'Empresa SAC',
-        'Nombre Comercial': 'Empresa SAC',
-        'Código del Páis': 'PE',
-        'Código de Ubigeo': 150101,
-        Dirección: 'Los pinos 125',
-        'Correo electrónico': 'embo@gmail.com',
-        Teléfono: 7152233,
-        'Tipo Cliente': '',
-      },
-    ];
-    const workbook = XLSX.utils.book_new();
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja1');
-    return writeWorkbookBuffer(workbook);
+    return buildTemplateXlsx(CUSTOMER_IMPORT_COLUMNS, {
+      extraExamples: [
+        {
+          'Código documento de identidad': 'RUC',
+          'Número de documento': '20505973522',
+          'Nombre/Razón Social': 'EMPRESA EJEMPLO SAC',
+          'Nombre Comercial': 'EMPRESA EJEMPLO',
+          'Código de Ubigeo': '150101',
+          'Código del Páis': 'PE',
+        },
+      ],
+    });
   }
 
   private mapPersonDocumentType(rawCode: string): CustomerDocumentType | null {
