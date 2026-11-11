@@ -104,6 +104,7 @@ export class StaffController {
       await this.scope.resolve(actor),
       dto,
       actor.sub,
+      actor.role,
     );
   }
 
@@ -155,6 +156,7 @@ export class StaffController {
       await this.scope.resolve(actor),
       dto,
       actor.sub,
+      actor.role,
     );
   }
 }

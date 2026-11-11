@@ -20,8 +20,15 @@ import { AuditLogExportQueryDto, AuditLogQueryDto } from './dto/audit-log.dto';
 export class AuditController {
   constructor(private readonly service: AuditService) {}
 
+  @Get('facets')
+  @RequirePermissions('audit.read', 'nav.auditoria', 'nav.usuarios')
+  @ApiOperation({ summary: 'Acciones y entidades disponibles para filtrar' })
+  facets(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.facets(actor);
+  }
+
   @Get()
-  @RequirePermissions('audit.read', 'nav.usuarios')
+  @RequirePermissions('audit.read', 'nav.auditoria', 'nav.usuarios')
   @ApiOperation({ summary: 'Consultar registro de auditoría (compliance)' })
   findAll(
     @Query() query: AuditLogQueryDto,
@@ -31,7 +38,7 @@ export class AuditController {
   }
 
   @Post('export')
-  @RequirePermissions('audit.read', 'nav.usuarios')
+  @RequirePermissions('audit.read', 'nav.auditoria', 'nav.usuarios')
   @ApiOperation({ summary: 'Exportar auditoría a Excel' })
   async export(
     @Query() query: AuditLogExportQueryDto,

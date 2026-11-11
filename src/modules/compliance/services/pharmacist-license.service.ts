@@ -7,7 +7,9 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
 import { EntityIntegrityService } from '../../../common/services/entity-integrity.service';
-import { canApproveControlledDispense } from '../../../common/permissions/role-policy.util';
+import { canApproveControlledDispense, isPlatformAdmin } from '../../../common/permissions/role-policy.util';
+import type { JwtRequestUser } from '../../auth/domain/auth.types';
+import { Prisma } from '../../../generated/prisma/client';
 import { SensitiveHealthCryptoService } from './sensitive-health-crypto.service';
 
 @Injectable()
@@ -19,10 +21,28 @@ export class PharmacistLicenseService {
     private readonly integrity: EntityIntegrityService,
   ) {}
 
-  async list(includeInactive = false) {
+  /** Licencias del cliente del usuario (la plataforma ve todas). */
+  private tenantScope(actor: JwtRequestUser): Prisma.PharmacistLicenseWhereInput {
+    if (isPlatformAdmin(actor.role)) return {};
+    if (!actor.tenantId) throw new BadRequestException('Usuario sin cliente asignado');
+    return { tenantId: actor.tenantId };
+  }
+
+  /** El usuario vinculado debe ser del mismo cliente. */
+  private async assertUserInTenant(userId: string | null | undefined, actor: JwtRequestUser) {
+    if (!userId || isPlatformAdmin(actor.role)) return;
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId: actor.tenantId ?? undefined, deletedAt: null },
+      select: { id: true },
+    });
+    if (!user) throw new BadRequestException('El usuario indicado no pertenece a tu empresa.');
+  }
+
+  async list(actor: JwtRequestUser, includeInactive = false) {
     return this.prisma.pharmacistLicense.findMany({
       where: {
         deletedAt: null,
+        ...this.tenantScope(actor),
         ...(includeInactive ? {} : { activo: true }),
       },
       include: {
@@ -44,10 +64,13 @@ export class PharmacistLicenseService {
       userId?: string;
       activo?: boolean;
     },
-    actorId?: string,
+    actor: JwtRequestUser,
   ) {
+    await this.assertUserInTenant(dto.userId, actor);
+    const actorId = actor.sub;
     const created = await this.prisma.pharmacistLicense.create({
       data: {
+        tenantId: actor.tenantId ?? null,
         colegiaturaCqp: dto.colegiaturaCqp.trim(),
         fullName: dto.fullName.trim(),
         vigenciaHasta: dto.vigenciaHasta ? new Date(dto.vigenciaHasta) : null,
@@ -73,9 +96,11 @@ export class PharmacistLicenseService {
       userId?: string | null;
       activo?: boolean;
     },
-    actorId?: string,
+    actor: JwtRequestUser,
   ) {
-    await this.ensure(id);
+    await this.ensure(id, actor);
+    await this.assertUserInTenant(dto.userId, actor);
+    const actorId = actor.sub;
     const updated = await this.prisma.pharmacistLicense.update({
       where: { id },
       data: {
@@ -101,8 +126,9 @@ export class PharmacistLicenseService {
     return updated;
   }
 
-  async remove(id: string, actorId?: string) {
-    await this.ensure(id);
+  async remove(id: string, actor: JwtRequestUser) {
+    await this.ensure(id, actor);
+    const actorId = actor.sub;
     await this.integrity.assertCanDeletePharmacistLicense(id);
     await this.prisma.pharmacistLicense.update({
       where: { id },
@@ -190,9 +216,10 @@ export class PharmacistLicenseService {
     );
   }
 
-  private async ensure(id: string) {
+  /** La licencia existe y es del cliente del usuario (si no, «no encontrada»). */
+  async ensure(id: string, actor: JwtRequestUser) {
     const row = await this.prisma.pharmacistLicense.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, ...this.tenantScope(actor) },
       select: { id: true },
     });
     if (!row)

@@ -155,8 +155,11 @@ export class ComplianceController {
     'nav.farmaceutico_titular',
   )
   @ApiOperation({ summary: 'Listar licencias de farmacéuticos' })
-  listPharmacists(@Query('includeInactive') includeInactive?: string) {
-    return this.pharmacist.list(includeInactive === 'true');
+  listPharmacists(
+    @CurrentUser() actor: JwtRequestUser,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.pharmacist.list(actor, includeInactive === 'true');
   }
 
   @Post('pharmacist-licenses')
@@ -170,7 +173,7 @@ export class ComplianceController {
     @Body() dto: CreatePharmacistLicenseDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.pharmacist.create(dto, actor.sub);
+    return this.pharmacist.create(dto, actor);
   }
 
   @Patch('pharmacist-licenses/:id')
@@ -185,7 +188,7 @@ export class ComplianceController {
     @Body() dto: UpdatePharmacistLicenseDto,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.pharmacist.update(id, dto, actor.sub);
+    return this.pharmacist.update(id, dto, actor);
   }
 
   @Post('pharmacist-licenses/:id/remove')
@@ -199,7 +202,7 @@ export class ComplianceController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.pharmacist.remove(id, actor.sub);
+    return this.pharmacist.remove(id, actor);
   }
 
   @Get('pharmacist-licenses/dispensation-signature')

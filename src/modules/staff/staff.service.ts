@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,8 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { hasChainScope } from '../../common/permissions/role-policy.util';
+import type { UserRole } from '../../generated/prisma/client';
 import {
   AttendanceListQueryDto,
   CreateLeaveDto,
@@ -137,8 +140,10 @@ export class StaffService {
     establishmentId: string,
     dto: UpsertCommissionRuleDto,
     actorId: string,
+    actorRole?: UserRole,
   ) {
     await this.ensureUserInEstablishment(userId, establishmentId);
+    this.assertNotSelf(userId, actorId, actorRole, 'No puede cambiar su propia comisión: debe hacerlo otro usuario autorizado.');
     await this.prisma.userCommissionRule.updateMany({
       where: { userId, activo: true },
       data: { activo: false },
@@ -229,9 +234,24 @@ export class StaffService {
     if (!fromYmd || !toYmd) {
       throw new BadRequestException('Fechas inválidas');
     }
+    if (fromYmd > toYmd) {
+      throw new BadRequestException('La fecha «hasta» no puede ser anterior a «desde».');
+    }
     const tz = await this.resolveTimeZone(establishmentId);
     const fromDate = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz).start;
     const toDate = dateRangeBoundsInTimeZone(toYmd, toYmd, tz).start;
+    const overlap = await this.prisma.userLeave.findFirst({
+      where: {
+        userId,
+        estado: { in: [UserLeaveStatus.SOLICITADO, UserLeaveStatus.APROBADO] },
+        fromDate: { lte: toDate },
+        toDate: { gte: fromDate },
+      },
+      select: { id: true },
+    });
+    if (overlap) {
+      throw new BadRequestException('Ya tiene una licencia o vacaciones que se cruzan con esas fechas.');
+    }
 
     const row = await this.prisma.userLeave.create({
       data: {
@@ -256,11 +276,23 @@ export class StaffService {
     establishmentId: string,
     dto: UpdateLeaveStatusDto,
     actorId: string,
+    actorRole?: UserRole,
   ) {
     const leave = await this.prisma.userLeave.findFirst({
       where: { id: leaveId, user: { establecimientoId: establishmentId } },
     });
     if (!leave) throw new NotFoundException('Licencia no encontrada');
+    const allowed: Partial<Record<UserLeaveStatus, UserLeaveStatus[]>> = {
+      [UserLeaveStatus.SOLICITADO]: [UserLeaveStatus.APROBADO, UserLeaveStatus.RECHAZADO, UserLeaveStatus.CANCELADO],
+      [UserLeaveStatus.APROBADO]: [UserLeaveStatus.CANCELADO],
+    };
+    if (!(allowed[leave.estado] ?? []).includes(dto.estado)) {
+      throw new BadRequestException(`No se puede pasar una licencia de ${leave.estado.toLowerCase()} a ${dto.estado.toLowerCase()}.`);
+    }
+    // Aprobar o rechazar lo hace otra persona; cancelar la propia sí se permite.
+    if (dto.estado !== UserLeaveStatus.CANCELADO) {
+      this.assertNotSelf(leave.userId, actorId, actorRole, 'Otro usuario debe aprobar o rechazar su propia licencia.');
+    }
 
     const row = await this.prisma.userLeave.update({
       where: { id: leaveId },
@@ -295,6 +327,13 @@ export class StaffService {
       notas: r.notas,
       user: r.user,
     }));
+  }
+
+  /** Sin alcance de cadena, nadie aprueba ni se asigna beneficios a sí mismo. */
+  private assertNotSelf(userId: string, actorId: string, actorRole: UserRole | undefined, message: string) {
+    if (userId === actorId && !(actorRole && hasChainScope(actorRole))) {
+      throw new ForbiddenException(message);
+    }
   }
 
   private async ensureUserInEstablishment(

@@ -60,6 +60,9 @@ model ArcoRequest {
 /// Colegiatura / licencia del farmacéutico titular (CQP)
 model PharmacistLicense {
   id              String    @id @default(uuid())
+  /// Cliente dueño de la licencia (null solo en registros antiguos sin usuario ni local).
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId          String?   @unique
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   colegiaturaCqp  String    @db.VarChar(20)
@@ -75,6 +78,7 @@ model PharmacistLicense {
 
   @@index([colegiaturaCqp])
   @@index([deletedAt])
+  @@index([tenantId])
 }
 
 /// Catálogo precios máximos regulados DIGEMED

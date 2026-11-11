@@ -81,4 +81,21 @@ describe('nav-permission-expansion', () => {
     ]);
     expect(nav).toEqual(['nav.marcas']);
   });
+
+  it('el farmacéutico titular no puede reconfigurar establecimientos', () => {
+    const result = expandUserPermissionCodes(['nav.farmaceutico_titular'], UserRole.FARMACEUTICO_TITULAR);
+    expect(result).toContain('compliance.write');
+    expect(result).not.toContain('establishments.write');
+  });
+
+  it('cada pantalla de finanzas escribe solo con su propio ítem de menú', () => {
+    const result = expandUserPermissionCodes(
+      ['nav.cuentas_cobrar', 'nav.cuentas_pagar', 'nav.conciliacion_bancaria', 'nav.finanzas_ingresos'],
+      UserRole.CONTADOR,
+    );
+    expect(result).not.toContain('finance.write');
+    expect(result).not.toContain('purchases.write');
+    expect(result).toContain('finance.read');
+    expect(result).toContain('purchases.read');
+  });
 });

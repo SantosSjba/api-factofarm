@@ -246,6 +246,7 @@ export class EstablishmentsService {
 
   async create(dto: CreateEstablishmentDto, actor?: JwtRequestUser) {
     const tenantId = this.resolveTenantIdForCreate(dto, actor);
+    await this.assertLicenseInTenant(dto.titularPharmacistLicenseId, tenantId);
     const tenant = await this.tenants.findOne(tenantId);
     await this.tenants.assertEstablishmentQuota(
       tenantId,
@@ -292,6 +293,7 @@ export class EstablishmentsService {
     if (actor) {
       assertTenantAccess(actorFromJwt(actor), current.tenantId);
     }
+    await this.assertLicenseInTenant(dto.titularPharmacistLicenseId, current.tenantId);
 
     try {
       return await this.prisma.establishment.update({
@@ -427,6 +429,19 @@ export class EstablishmentsService {
       throw new NotFoundException(
         'Serie no encontrada para el establecimiento',
       );
+    }
+  }
+
+  /** El farmacéutico titular debe ser una licencia del mismo cliente. */
+  private async assertLicenseInTenant(licenseId: string | null | undefined, tenantId: string) {
+    const id = this.normNullable(licenseId ?? undefined);
+    if (!id) return;
+    const license = await this.prisma.pharmacistLicense.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!license) {
+      throw new BadRequestException('El farmacéutico titular elegido no pertenece a tu empresa.');
     }
   }
 

@@ -1,3 +1,4 @@
+import { auditActionLabel, auditEntityLabel } from './audit-labels';
 import { writeWorkbookBuffer } from '../../common/utils/spreadsheet.util';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
@@ -58,12 +59,37 @@ export class AuditService {
       }),
     ]);
 
+    const names = await this.userNames(rows);
     return buildPaginatedResult(
-      rows.map((r) => this.mapRow(r)),
+      rows.map((r) => this.mapRow(r, names)),
       total,
       page,
       pageSize,
     );
+  }
+
+  /** Acciones y entidades registradas (para los filtros de la pantalla). */
+  async facets(actor: JwtRequestUser) {
+    const where = tenantWhere(actorFromJwt(actor));
+    const [actions, entities] = await Promise.all([
+      this.prisma.auditLog.groupBy({ by: ['action'], where, orderBy: { action: 'asc' } }),
+      this.prisma.auditLog.groupBy({ by: ['entity'], where, orderBy: { entity: 'asc' } }),
+    ]);
+    return {
+      actions: actions.map((a) => ({ value: a.action, label: auditActionLabel(a.action) })),
+      entities: entities.map((e) => ({ value: e.entity, label: auditEntityLabel(e.entity) })),
+    };
+  }
+
+  /** Nombre y correo de quien hizo cada acción (el registro solo guarda el id). */
+  private async userNames(rows: { userId: string | null }[]) {
+    const ids = [...new Set(rows.map((r) => r.userId).filter((v): v is string => !!v))];
+    if (!ids.length) return new Map<string, { nombre: string; email: string }>();
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, nombre: true, email: true },
+    });
+    return new Map(users.map((u) => [u.id, { nombre: u.nombre, email: u.email }]));
   }
 
   private async findAllCursor(
@@ -96,8 +122,9 @@ export class AuditService {
       encodeCursor(row.createdAt, row.id),
     );
 
+    const names = await this.userNames(page.items);
     return {
-      items: page.items.map((r) => this.mapRow(r)),
+      items: page.items.map((r) => this.mapRow(r, names)),
       nextCursor: page.nextCursor,
       pageSize: page.pageSize,
     };
@@ -152,10 +179,13 @@ export class AuditService {
     return normalizeTimeZone(row?.timeZone);
   }
 
-  private mapRow(r: AuditLogRow) {
+  private mapRow(r: AuditLogRow, names?: Map<string, { nombre: string; email: string }>) {
     return {
       id: r.id,
       userId: r.userId,
+      user: r.userId ? (names?.get(r.userId) ?? null) : null,
+      actionLabel: auditActionLabel(r.action),
+      entityLabel: auditEntityLabel(r.entity),
       action: r.action,
       entity: r.entity,
       entityId: r.entityId,
@@ -177,16 +207,21 @@ export class AuditService {
       take: limit,
     });
 
-    const normalized = rows.map((r) => ({
-      FECHA: r.createdAt.toISOString(),
-      USUARIO_ID: r.userId ?? '',
-      ACCION: r.action,
-      ENTIDAD: r.entity,
-      ENTIDAD_ID: r.entityId ?? '',
-      IP: r.ipAddress ?? '',
-      USER_AGENT: r.userAgent ?? '',
-      DIFF: r.diff ? JSON.stringify(r.diff) : '',
-    }));
+    const names = await this.userNames(rows);
+    const normalized = rows.map((r) => {
+      const u = r.userId ? names.get(r.userId) : undefined;
+      return {
+        Fecha: r.createdAt.toISOString(),
+        Usuario: u?.nombre ?? '',
+        Correo: u?.email ?? '',
+        Acción: auditActionLabel(r.action),
+        Módulo: auditEntityLabel(r.entity),
+        'Id del registro': r.entityId ?? '',
+        IP: r.ipAddress ?? '',
+        Dispositivo: r.userAgent ?? '',
+        Detalle: r.diff ? JSON.stringify(r.diff) : '',
+      };
+    });
 
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.json_to_sheet(normalized);

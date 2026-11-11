@@ -60,6 +60,7 @@ model Tenant {
   auditLogs      AuditLog[]
   archivos       Archivo[]
 
+  pharmacistLicenses PharmacistLicense[]
   @@index([status])
   @@index([deletedAt])
   @@map("tenants")

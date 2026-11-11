@@ -13,11 +13,12 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
   'nav.auditoria': ['audit.read'],
   'nav.establecimientos': ['establishments.read', 'establishments.write'],
   'nav.lpdp': ['compliance.read', 'compliance.write', 'customers.read'],
+  // Sus endpoints (licencias CQP) aceptan el ítem de menú: sin `establishments.write`, que
+  // permitiría crear, borrar o reconfigurar locales (incluida la facturación).
   'nav.farmaceutico_titular': [
     'compliance.read',
     'compliance.write',
     'establishments.read',
-    'establishments.write',
   ],
   'nav.precios_regulados': [
     'compliance.read',
@@ -104,7 +105,8 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
   'nav.recepcion_mercaderia': ['purchases.read', 'purchases.receive'],
   'nav.reporte_compras_sugerido': ['purchases.read'],
   'nav.comparativo_precios': ['purchases.read'],
-  'nav.cuentas_pagar': ['purchases.read', 'purchases.write'],
+  // Registrar pagos acepta el ítem de menú; `purchases.write` abriría órdenes y recepciones.
+  'nav.cuentas_pagar': ['purchases.read'],
   'nav.comprobante_electronico': ['billing.read', 'billing.write'],
   'nav.resumenes': ['billing.read', 'billing.write'],
   'nav.medicos': ['medicos.read', 'medicos.write'],
@@ -163,11 +165,12 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
   'nav.sire_compras': ['compliance.read', 'billing.read', 'purchases.read'],
   'nav.finanzas_movimientos': ['finance.read'],
   'nav.transacciones': ['finance.read'],
-  'nav.finanzas_ingresos': ['finance.read', 'finance.write'],
-  'nav.cuentas_cobrar': ['finance.read', 'finance.write'],
+  // Cada pantalla de finanzas escribe con su propio ítem de menú; `finance.write` abriría todas.
+  'nav.finanzas_ingresos': ['finance.read'],
+  'nav.cuentas_cobrar': ['finance.read'],
   'nav.pagos': ['finance.read'],
   'nav.balance': ['finance.read'],
-  'nav.conciliacion_bancaria': ['finance.read', 'finance.write'],
+  'nav.conciliacion_bancaria': ['finance.read'],
   'nav.ingresos_egresos_medio_pago': ['finance.read'],
   'nav.platform_dashboard': ['tenants.read'],
   'nav.platform_clientes': ['tenants.read', 'tenants.write'],

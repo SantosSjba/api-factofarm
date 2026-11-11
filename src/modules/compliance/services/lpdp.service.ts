@@ -173,6 +173,12 @@ export class LpdpService {
       },
     });
     if (!row) throw new NotFoundException('Solicitud ARCO no encontrada');
+    if (row.status === ArcoRequestStatus.COMPLETADA || row.status === ArcoRequestStatus.RECHAZADA) {
+      throw new BadRequestException('La solicitud ya fue cerrada y no se puede volver a cambiar.');
+    }
+    if (status === ArcoRequestStatus.RECHAZADA && !responseNotes?.trim()) {
+      throw new BadRequestException('Explique al cliente por qué se rechaza la solicitud.');
+    }
 
     await this.scope.assertCustomerInTenant(actor, row.customerId);
     const updated = await this.prisma.$transaction(async (tx) => {
