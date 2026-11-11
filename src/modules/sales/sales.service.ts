@@ -72,6 +72,8 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
+import { saleSearchFilter } from './utils/sale-search.util';
+import { resolveRefundCashSession } from '../cash-registers/cash-refund.util';
 
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
 
@@ -128,6 +130,7 @@ export class SalesService {
       ...(query.estado ? { estado: query.estado } : {}),
       ...(query.documentType ? { documentType: query.documentType } : {}),
       ...(createdAtRange ? { createdAt: createdAtRange } : {}),
+      ...(query.search?.trim() ? { OR: saleSearchFilter(query.search) } : {}),
       ...(query.paymentMetodo || query.paymentReferencia?.trim()
         ? {
             payments: {
@@ -166,9 +169,13 @@ export class SalesService {
           createdAt: true,
           customer: { select: { id: true, nombre: true } },
           seller: { select: { id: true, nombre: true } },
+          voidReason: true,
+          voidedAt: true,
+          voidedBy: { select: { id: true, nombre: true } },
           electronicDocument: {
             select: { sunatStatus: true, id: true, deletedAt: true },
           },
+          voidRequest: { select: { id: true, status: true } },
           _count: { select: { returns: true } },
         },
       }),
@@ -176,7 +183,7 @@ export class SalesService {
 
     return buildPaginatedResult(
       rows.map((row) => {
-        const { electronicDocument, _count, ...rest } = row;
+        const { electronicDocument, _count, voidRequest, ...rest } = row;
         const cpe =
           electronicDocument && !electronicDocument.deletedAt
             ? electronicDocument
@@ -203,6 +210,12 @@ export class SalesService {
           canConvertToCpe: flags.canConvertToCpe,
           canReturn: flags.canReturn,
           canDebit: flags.canDebit,
+          canVoid: flags.canVoid,
+          pendingVoidRequestId:
+            voidRequest?.status === SaleVoidRequestStatus.PENDIENTE
+              ? voidRequest.id
+              : null,
+          voidedAt: rest.voidedAt?.toISOString() ?? null,
           emitBlockedReason: flags.emitBlockedReason,
           convertBlockedReason: flags.convertBlockedReason,
           returnBlockedReason: flags.returnBlockedReason,
@@ -1270,26 +1283,24 @@ export class SalesService {
           .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
           .reduce((acc, p) => acc.plus(p.monto), new Prisma.Decimal(0));
         if (cashTotal.greaterThan(0)) {
-          const session = await tx.cashSession.findFirst({
-            where: {
-              id: sale.cashSessionId,
-              estado: CashSessionStatus.ABIERTA,
-            },
-            select: { id: true },
+          const refund = await resolveRefundCashSession(tx, {
+            saleCashSessionId: sale.cashSessionId,
+            userId: actor.sub,
+            establishmentId: actor.establecimientoId,
+            amount: cashTotal,
           });
-          if (!session) {
-            throw new BadRequestException(
-              'La sesión de caja ya no está abierta; no se puede registrar la anulación de efectivo',
-            );
-          }
           await tx.cashMovement.create({
             data: {
-              cashSessionId: sale.cashSessionId,
+              cashSessionId: refund.cashSessionId,
               tipo: CashMovementType.ANULACION,
               monto: cashTotal.negated(),
               metodoPago: PaymentMethod.EFECTIVO,
               saleId: sale.id,
-              comentario: dto.reason.trim(),
+              referencia: `${sale.serie}-${sale.numero}`,
+              comentario: (refund.fromOtherSession
+                ? `Anulación de venta de una caja ya cerrada: ${dto.reason.trim()}`
+                : dto.reason.trim()
+              ).slice(0, 500),
             },
           });
         }
@@ -1327,6 +1338,11 @@ export class SalesService {
             numero: true,
             total: true,
             sellerId: true,
+            documentType: true,
+            estado: true,
+            createdAt: true,
+            customer: { select: { nombre: true } },
+            seller: { select: { id: true, nombre: true } },
           },
         },
         requestedBy: { select: { id: true, nombre: true } },
@@ -1344,6 +1360,7 @@ export class SalesService {
       sale: {
         ...r.sale,
         total: r.sale.total.toString(),
+        createdAt: r.sale.createdAt.toISOString(),
       },
       requestedBy: r.requestedBy,
       approvedBy: r.approvedBy,
@@ -1768,26 +1785,21 @@ export class SalesService {
         if (cashPaid.greaterThan(0) && sale.total.greaterThan(0)) {
           const cashRefund = cashPaid.times(totalDevuelto).div(sale.total);
           if (cashRefund.greaterThan(0)) {
-            const session = await tx.cashSession.findFirst({
-              where: {
-                id: sale.cashSessionId,
-                estado: CashSessionStatus.ABIERTA,
-              },
-              select: { id: true },
+            const refund = await resolveRefundCashSession(tx, {
+              saleCashSessionId: sale.cashSessionId,
+              userId: actor.sub,
+              establishmentId: actor.establecimientoId,
+              amount: cashRefund,
             });
-            if (!session) {
-              throw new BadRequestException(
-                'La sesión de caja ya no está abierta; no se puede registrar el egreso de efectivo',
-              );
-            }
             await tx.cashMovement.create({
               data: {
-                cashSessionId: sale.cashSessionId,
+                cashSessionId: refund.cashSessionId,
                 tipo: CashMovementType.EGRESO,
                 monto: cashRefund.negated(),
                 metodoPago: PaymentMethod.EFECTIVO,
                 saleId: sale.id,
-                comentario: `Devolución: ${dto.motivo.trim()}`,
+                referencia: `${sale.serie}-${sale.numero}`,
+                comentario: `Devolución: ${dto.motivo.trim()}`.slice(0, 500),
               },
             });
           }

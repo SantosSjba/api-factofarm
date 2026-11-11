@@ -240,6 +240,11 @@ describe('SalesService', () => {
           numero: '1',
           total: new Prisma.Decimal(20),
           sellerId: 'u2',
+          documentType: 'BOLETA',
+          estado: 'COMPLETADA',
+          createdAt: new Date('2026-07-08T15:00:00Z'),
+          customer: { nombre: 'Cliente' },
+          seller: { id: 'u2', nombre: 'Vendedor' },
         },
         requestedBy: { id: 'u1', nombre: 'Cajero' },
         approvedBy: null,
@@ -247,6 +252,8 @@ describe('SalesService', () => {
     ]);
     const rows = await service.listVoidRequests('est-1');
     expect(rows[0].sale.total).toBe('20');
+    expect(rows[0].sale.createdAt).toBe('2026-07-08T15:00:00.000Z');
+    expect(rows[0].sale.customer).toEqual({ nombre: 'Cliente' });
   });
 
   it('impide anulación directa a vendedor', async () => {

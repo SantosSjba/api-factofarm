@@ -15,6 +15,14 @@ import {
 } from '../../../generated/prisma/client';
 
 export class SaleListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: 'Serie-número del comprobante, nombre o documento del cliente',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()

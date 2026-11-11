@@ -53,6 +53,7 @@ import {
 } from './utils/ose-config.util';
 import { isValidPdfBuffer } from './utils/pdf-buffer.util';
 import { resolveSaleActionFlags } from '../sales/utils/sale-action-rules.util';
+import { electronicDocumentSearchFilter } from '../sales/utils/sale-search.util';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   BillingDocumentListQueryDto,
@@ -269,10 +270,26 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     query: BillingDocumentListQueryDto,
   ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
+    let createdAt: { gte?: Date; lt?: Date } | undefined;
+    if (query.from || query.to) {
+      const tz = await this.resolveTimeZone(establishmentId);
+      const fromYmd = query.from?.trim() || query.to!.trim();
+      const toYmd = query.to?.trim() || query.from!.trim();
+      const bounds = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
+      createdAt = {
+        ...(query.from ? { gte: bounds.start } : {}),
+        ...(query.to ? { lt: bounds.end } : {}),
+      };
+    }
     const where: Prisma.ElectronicDocumentWhereInput = {
       establishmentId,
       deletedAt: null,
       ...(query.sunatStatus ? { sunatStatus: query.sunatStatus } : {}),
+      ...(query.documentType ? { documentType: query.documentType } : {}),
+      ...(createdAt ? { createdAt } : {}),
+      ...(query.search?.trim()
+        ? { OR: electronicDocumentSearchFilter(query.search) }
+        : {}),
     };
     const [total, rows] = await Promise.all([
       this.prisma.electronicDocument.count({ where }),
@@ -289,6 +306,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
           sunatStatus: true,
           total: true,
           customerNombre: true,
+          customerDocNumber: true,
+          sunatDescripcion: true,
           emittedAt: true,
           createdAt: true,
           saleId: true,

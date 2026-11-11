@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import {
   BillingProviderType,
+  ElectronicDocumentType,
   SunatDocumentStatus,
 } from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
@@ -190,6 +191,27 @@ export class BillingDocumentListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(SunatDocumentStatus)
   sunatStatus?: SunatDocumentStatus;
+
+  @ApiPropertyOptional({ enum: ElectronicDocumentType })
+  @IsOptional()
+  @IsEnum(ElectronicDocumentType)
+  documentType?: ElectronicDocumentType;
+
+  @ApiPropertyOptional({ description: 'Serie-número o cliente (nombre o documento)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ example: '2026-11-01' })
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-11-30' })
+  @IsOptional()
+  @IsString()
+  to?: string;
 }
 
 export class VoidBillingDocumentDto {
