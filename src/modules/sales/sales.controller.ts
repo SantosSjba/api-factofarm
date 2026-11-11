@@ -34,6 +34,7 @@ import {
 import { ConvertSaleToCpeDto } from './dto/convert-sale-to-cpe.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
 import { CheckSaleInteractionsDto } from './dto/check-sale-interactions.dto';
+import { SoldItemsQueryDto } from './dto/sold-items-query.dto';
 import { SaleListQueryDto } from './dto/sale-list-query.dto';
 import { SalesService } from './sales.service';
 
@@ -59,6 +60,17 @@ export class SalesController {
   ) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.findAll(establishmentId, query);
+  }
+
+  @Get('items-report')
+  @RequirePermissions('sales.read', 'nav.reportes_panel', 'nav.notas_venta')
+  @ApiOperation({ summary: 'Productos vendidos, uno por fila, con totales del filtro' })
+  async soldItems(
+    @Query() query: SoldItemsQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    const establishmentId = await this.scope.resolve(actor);
+    return this.service.soldItems(establishmentId, query);
   }
 
   @Get('pos-catalog')

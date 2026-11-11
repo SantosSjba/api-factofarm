@@ -16,6 +16,7 @@ function buildService() {
   const prisma = {
     sale: {
       count: jest.fn(),
+      aggregate: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
@@ -127,7 +128,16 @@ describe('SalesService', () => {
         _count: { returns: 0 },
       },
     ]);
+    prisma.sale.aggregate.mockResolvedValue({
+      _sum: { total: new Prisma.Decimal(10) },
+      _count: { _all: 1 },
+    });
     const result = await service.findAll('est-1', { page: 1, pageSize: 10 });
+    expect((result as { totales: { monto: string; ventas: number } }).totales).toEqual({
+      ventas: 1,
+      monto: '10',
+      anuladas: 1,
+    });
     expect(result.total).toBe(1);
     expect(result.items[0].total).toBe('10');
   });

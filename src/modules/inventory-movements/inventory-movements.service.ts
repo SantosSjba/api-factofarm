@@ -572,7 +572,7 @@ export class InventoryMovementsService {
     // Saldo inicial: todo lo anterior al rango (de cualquier antigüedad) más las filas de
     // páginas anteriores del rango. Antes empezaba en 0 en cada página y en cada «Desde».
     const { fechaRegistro: _range, archivedAt: _archived, ...baseWhere } = where;
-    const [before, previousPages] = await Promise.all([
+    const [before, previousPages, entradasAgg, salidasAgg] = await Promise.all([
       dateFilter?.gte
         ? this.prisma.inventoryInboundMovement.aggregate({
             where: { ...baseWhere, fechaRegistro: { lt: dateFilter.gte } },
@@ -587,7 +587,20 @@ export class InventoryMovementsService {
             select: { cantidad: true },
           })
         : Promise.resolve([] as { cantidad: Prisma.Decimal }[]),
+      // Totales de todo el filtro (no solo de la página visible).
+      this.prisma.inventoryInboundMovement.aggregate({
+        where: { ...where, cantidad: { gt: 0 } },
+        _sum: { cantidad: true },
+      }),
+      this.prisma.inventoryInboundMovement.aggregate({
+        where: { ...where, cantidad: { lt: 0 } },
+        _sum: { cantidad: true },
+      }),
     ]);
+    const zero = new Prisma.Decimal(0);
+    const saldoAntesDelRango = before?._sum.cantidad ?? zero;
+    const entradas = entradasAgg._sum.cantidad ?? zero;
+    const salidas = salidasAgg._sum.cantidad ?? zero;
     const saldoInicial = (before?._sum.cantidad ?? new Prisma.Decimal(0)).plus(
       previousPages.reduce((acc, r) => acc.plus(r.cantidad), new Prisma.Decimal(0)),
     );
@@ -615,7 +628,16 @@ export class InventoryMovementsService {
       };
     });
 
-    return { ...buildPaginatedResult(items, total, page, pageSize), saldoInicial: saldoInicial.toString() };
+    return {
+      ...buildPaginatedResult(items, total, page, pageSize),
+      saldoInicial: saldoInicial.toString(),
+      resumen: {
+        saldoInicial: saldoAntesDelRango.toString(),
+        entradas: entradas.toString(),
+        salidas: salidas.toString(),
+        saldoFinal: saldoAntesDelRango.plus(entradas).plus(salidas).toString(),
+      },
+    };
   }
 
   async kardexArchived(query: KardexQueryDto, establishmentId: string) {
@@ -1041,63 +1063,48 @@ export class InventoryMovementsService {
       cantidad: { gt: 0 },
     };
 
-    const [total, rows] = await Promise.all([
-      this.prisma.productWarehouseStock.count({ where }),
-      this.prisma.productWarehouseStock.findMany({
-        where,
-        skip,
-        take,
-        orderBy: [
-          { warehouse: { nombre: 'asc' } },
-          { product: { nombre: 'asc' } },
-        ],
-        select: {
-          cantidad: true,
-          product: {
-            select: {
-              id: true,
-              nombre: true,
-              codigoInterno: true,
-              costoUnitario: true,
-            },
-          },
-          warehouse: {
-            select: {
-              id: true,
-              nombre: true,
-              establishment: {
-                select: { nombre: true, inventoryValuationMethod: true },
-              },
-            },
+    // Se valoriza todo el filtro para que el total no sea solo el de la página visible.
+    const all = await this.prisma.productWarehouseStock.findMany({
+      where,
+      orderBy: [{ warehouse: { nombre: 'asc' } }, { product: { nombre: 'asc' } }],
+      select: {
+        cantidad: true,
+        product: { select: { id: true, nombre: true, codigoInterno: true, costoUnitario: true } },
+        warehouse: {
+          select: {
+            id: true,
+            nombre: true,
+            establishment: { select: { nombre: true, inventoryValuationMethod: true } },
           },
         },
-      }),
-    ]);
-
-    const items = await Promise.all(
-      rows.map(async (row) => {
-        const method = row.warehouse.establishment.inventoryValuationMethod;
-        const unitCost = await this.resolveUnitCost(
-          row.product.id,
-          row.warehouse.id,
-          method,
-          row.product.costoUnitario,
-        );
-        const totalValue = row.cantidad.times(unitCost);
-        return {
-          productId: row.product.id,
-          producto: row.product.nombre,
-          codigoInterno: row.product.codigoInterno,
-          almacen: row.warehouse.nombre,
-          establecimiento: row.warehouse.establishment.nombre,
-          metodoValoracion: method,
-          stock: row.cantidad.toString(),
-          costoUnitario: unitCost.toString(),
-          valorTotal: totalValue.toString(),
-        };
-      }),
+      },
+    });
+    const costs = await this.unitCostsFor(
+      all.map((row) => ({
+        productId: row.product.id,
+        warehouseId: row.warehouse.id,
+        method: row.warehouse.establishment.inventoryValuationMethod,
+        productCost: row.product.costoUnitario,
+      })),
     );
-
+    const valued = all.map((row) => {
+      const unitCost = costs.get(`${row.product.id}|${row.warehouse.id}`) ?? new Prisma.Decimal(0);
+      return { row, unitCost, value: row.cantidad.times(unitCost) };
+    });
+    const total = valued.length;
+    const grandAll = valued.reduce((acc, v) => acc.plus(v.value), new Prisma.Decimal(0));
+    const unidades = valued.reduce((acc, v) => acc.plus(v.row.cantidad), new Prisma.Decimal(0));
+    const items = valued.slice(skip, skip + take).map(({ row, unitCost, value }) => ({
+      productId: row.product.id,
+      producto: row.product.nombre,
+      codigoInterno: row.product.codigoInterno,
+      almacen: row.warehouse.nombre,
+      establecimiento: row.warehouse.establishment.nombre,
+      metodoValoracion: row.warehouse.establishment.inventoryValuationMethod,
+      stock: row.cantidad.toString(),
+      costoUnitario: unitCost.toString(),
+      valorTotal: value.toString(),
+    }));
     const grandTotal = items.reduce(
       (acc, row) => acc.plus(new Prisma.Decimal(row.valorTotal)),
       new Prisma.Decimal(0),
@@ -1106,6 +1113,9 @@ export class InventoryMovementsService {
     return {
       ...buildPaginatedResult(items, total, page, pageSize),
       valorTotalPagina: grandTotal.toString(),
+      valorTotal: grandAll.toString(),
+      unidadesTotal: unidades.toString(),
+      sinCosto: valued.filter((v) => v.unitCost.isZero()).length,
     };
   }
 
@@ -2500,51 +2510,58 @@ export class InventoryMovementsService {
     return stock?.cantidad ?? new Prisma.Decimal(0);
   }
 
-  private async resolveUnitCost(
-    productId: string,
-    warehouseId: string,
-    method: string,
-    productCost: Prisma.Decimal | null,
-  ): Promise<Prisma.Decimal> {
-    if (method === 'PROMEDIO_PONDERADO') {
-      const movements = await this.prisma.inventoryInboundMovement.findMany({
-        where: {
-          productId,
-          warehouseId,
-          deletedAt: null,
-          cantidad: { gt: 0 },
-          costoUnitario: { not: null },
-        },
-        select: { cantidad: true, costoUnitario: true },
-        take: 50,
-        orderBy: { fechaRegistro: 'desc' },
-      });
-      if (movements.length === 0) {
-        return productCost ?? new Prisma.Decimal(0);
-      }
-      let totalQty = new Prisma.Decimal(0);
-      let totalValue = new Prisma.Decimal(0);
-      for (const m of movements) {
-        totalQty = totalQty.plus(m.cantidad);
-        totalValue = totalValue.plus(m.cantidad.times(m.costoUnitario!));
-      }
-      return totalQty.isZero()
-        ? new Prisma.Decimal(0)
-        : totalValue.dividedBy(totalQty);
-    }
-
-    const lot = await this.prisma.productLotStock.findFirst({
-      where: {
-        productId,
-        warehouseId,
-        deletedAt: null,
-        stock: { gt: 0 },
-        costoUnitario: { not: null },
-      },
-      orderBy: { fechaVencimiento: 'asc' },
-      select: { costoUnitario: true },
+  /**
+   * Costo unitario de muchos productos/almacenes en pocas consultas: PEPS = costo del lote con
+   * stock que vence antes; promedio = promedio ponderado de los últimos 50 ingresos con costo.
+   * Sin datos, el costo del producto.
+   */
+  private async unitCostsFor(
+    pairs: { productId: string; warehouseId: string; method: string; productCost: Prisma.Decimal | null }[],
+  ): Promise<Map<string, Prisma.Decimal>> {
+    const out = new Map<string, Prisma.Decimal>();
+    if (!pairs.length) return out;
+    const key = (p: string, w: string) => `${p}|${w}`;
+    const avg = pairs.filter((p) => p.method === 'PROMEDIO_PONDERADO');
+    const fifo = pairs.filter((p) => p.method !== 'PROMEDIO_PONDERADO');
+    const ids = (list: typeof pairs) => ({
+      productId: { in: [...new Set(list.map((p) => p.productId))] },
+      warehouseId: { in: [...new Set(list.map((p) => p.warehouseId))] },
     });
-    return lot?.costoUnitario ?? productCost ?? new Prisma.Decimal(0);
+
+    if (fifo.length) {
+      const lots = await this.prisma.productLotStock.findMany({
+        where: { ...ids(fifo), deletedAt: null, stock: { gt: 0 }, costoUnitario: { not: null } },
+        orderBy: { fechaVencimiento: 'asc' },
+        select: { productId: true, warehouseId: true, costoUnitario: true },
+      });
+      for (const lot of lots) {
+        const k = key(lot.productId, lot.warehouseId);
+        if (!out.has(k)) out.set(k, lot.costoUnitario!);
+      }
+    }
+    if (avg.length) {
+      const movements = await this.prisma.inventoryInboundMovement.findMany({
+        where: { ...ids(avg), deletedAt: null, cantidad: { gt: 0 }, costoUnitario: { not: null } },
+        orderBy: { fechaRegistro: 'desc' },
+        select: { productId: true, warehouseId: true, cantidad: true, costoUnitario: true },
+      });
+      const acc = new Map<string, { qty: Prisma.Decimal; value: Prisma.Decimal; n: number }>();
+      for (const m of movements) {
+        const k = key(m.productId, m.warehouseId);
+        const a = acc.get(k) ?? { qty: new Prisma.Decimal(0), value: new Prisma.Decimal(0), n: 0 };
+        if (a.n >= 50) continue;
+        a.qty = a.qty.plus(m.cantidad);
+        a.value = a.value.plus(m.cantidad.times(m.costoUnitario!));
+        a.n++;
+        acc.set(k, a);
+      }
+      for (const [k, a] of acc) out.set(k, a.qty.isZero() ? new Prisma.Decimal(0) : a.value.dividedBy(a.qty));
+    }
+    for (const p of pairs) {
+      const k = key(p.productId, p.warehouseId);
+      if (!out.has(k)) out.set(k, p.productCost ?? new Prisma.Decimal(0));
+    }
+    return out;
   }
 
   private async countLowStock(establishmentId: string): Promise<number> {

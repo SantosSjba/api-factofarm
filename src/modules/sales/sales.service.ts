@@ -73,6 +73,7 @@ import {
 } from '../../common/utils/timezone.util';
 import { resolveSaleActionFlags } from './utils/sale-action-rules.util';
 import { saleSearchFilter } from './utils/sale-search.util';
+import { SoldItemsQueryDto } from './dto/sold-items-query.dto';
 import { resolveRefundCashSession } from '../cash-registers/cash-refund.util';
 
 import { assertActiveColdZoneForRefrigeratedProducts } from '../warehouse-zones/assert-refrigerated-zone';
@@ -147,7 +148,7 @@ export class SalesService {
         : {}),
     };
 
-    const [total, rows] = await Promise.all([
+    const [total, rows, validAgg, anuladas] = await Promise.all([
       this.prisma.sale.count({ where }),
       this.prisma.sale.findMany({
         where,
@@ -179,9 +180,16 @@ export class SalesService {
           _count: { select: { returns: true } },
         },
       }),
+      // Totales de todo el filtro (no solo de la página): las anuladas no suman.
+      this.prisma.sale.aggregate({
+        where: { AND: [where, { estado: { not: SaleStatus.ANULADA } }] },
+        _sum: { total: true },
+        _count: { _all: true },
+      }),
+      this.prisma.sale.count({ where: { AND: [where, { estado: SaleStatus.ANULADA }] } }),
     ]);
 
-    return buildPaginatedResult(
+    const result = buildPaginatedResult(
       rows.map((row) => {
         const { electronicDocument, _count, voidRequest, ...rest } = row;
         const cpe =
@@ -226,6 +234,137 @@ export class SalesService {
       page,
       pageSize,
     );
+    return {
+      ...result,
+      totales: {
+        ventas: validAgg._count._all,
+        monto: (validAgg._sum.total ?? new Prisma.Decimal(0)).toString(),
+        anuladas,
+      },
+    };
+  }
+
+  /**
+   * Productos vendidos, uno por fila, del más reciente al más antiguo. Los totales son de
+   * todo el filtro (no de la página) y no incluyen ventas anuladas.
+   */
+  async soldItems(establishmentId: string, query: SoldItemsQueryDto) {
+    const { page, pageSize, skip, take } = paginationArgs(query);
+    const createdAtRange = await this.createdAtRangeFilter(establishmentId, query.from, query.to);
+    const term = query.search?.trim();
+    const saleWhere: Prisma.SaleWhereInput = {
+      establishmentId,
+      deletedAt: null,
+      ...(query.includeVoided ? {} : { estado: { not: SaleStatus.ANULADA } }),
+      ...(query.documentType ? { documentType: query.documentType } : {}),
+      ...(query.sellerId ? { sellerId: query.sellerId } : {}),
+      ...(createdAtRange ? { createdAt: createdAtRange } : {}),
+    };
+    const productWhere: Prisma.ProductWhereInput | undefined = term
+      ? {
+          OR: [
+            { nombre: textSearchFilter(term) },
+            { codigoInterno: { contains: term, mode: 'insensitive' } },
+            { codigoBarra: { contains: term } },
+          ],
+        }
+      : undefined;
+    const where: Prisma.SaleItemWhereInput = {
+      sale: saleWhere,
+      ...(query.productId ? { productId: query.productId } : {}),
+      ...(productWhere ? { product: productWhere } : {}),
+    };
+    const validWhere: Prisma.SaleItemWhereInput = {
+      ...where,
+      sale: { AND: [saleWhere, { estado: { not: SaleStatus.ANULADA } }] },
+    };
+
+    const [total, rows, agg, ventas] = await Promise.all([
+      this.prisma.saleItem.count({ where }),
+      this.prisma.saleItem.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ sale: { createdAt: 'desc' } }, { id: 'asc' }],
+        select: {
+          id: true,
+          cantidad: true,
+          precioUnitario: true,
+          totalLinea: true,
+          promotionLabel: true,
+          product: { select: { id: true, nombre: true, codigoInterno: true } },
+          lotLines: { select: { codigoLote: true, cantidad: true } },
+          sale: {
+            select: {
+              id: true,
+              createdAt: true,
+              documentType: true,
+              serie: true,
+              numero: true,
+              estado: true,
+              customer: { select: { nombre: true } },
+              seller: { select: { nombre: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.saleItem.aggregate({
+        where: validWhere,
+        _sum: { cantidad: true, totalLinea: true },
+        _count: { _all: true },
+      }),
+      this.prisma.sale.count({
+        where: {
+          AND: [saleWhere, { estado: { not: SaleStatus.ANULADA } }],
+          items: {
+            some: {
+              ...(query.productId ? { productId: query.productId } : {}),
+              ...(productWhere ? { product: productWhere } : {}),
+            },
+          },
+        },
+      }),
+    ]);
+
+    const returned = rows.length
+      ? await this.prisma.saleReturnItem.groupBy({
+          by: ['saleItemId'],
+          where: { saleItemId: { in: rows.map((r) => r.id) } },
+          _sum: { cantidad: true },
+        })
+      : [];
+    const returnedById = new Map(returned.map((r) => [r.saleItemId, r._sum.cantidad]));
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      fecha: r.sale.createdAt.toISOString(),
+      saleId: r.sale.id,
+      documentType: r.sale.documentType,
+      serie: r.sale.serie,
+      numero: r.sale.numero,
+      estado: r.sale.estado,
+      cliente: r.sale.customer?.nombre ?? null,
+      vendedor: r.sale.seller?.nombre ?? null,
+      productId: r.product.id,
+      producto: r.product.nombre,
+      codigoInterno: r.product.codigoInterno,
+      cantidad: r.cantidad.toString(),
+      cantidadDevuelta: (returnedById.get(r.id) ?? new Prisma.Decimal(0)).toString(),
+      precioUnitario: r.precioUnitario.toString(),
+      totalLinea: r.totalLinea.toString(),
+      promocion: r.promotionLabel,
+      lotes: r.lotLines.map((l) => ({ codigoLote: l.codigoLote, cantidad: l.cantidad.toString() })),
+    }));
+
+    return {
+      ...buildPaginatedResult(items, total, page, pageSize),
+      totales: {
+        lineas: agg._count._all,
+        unidades: (agg._sum.cantidad ?? new Prisma.Decimal(0)).toString(),
+        monto: (agg._sum.totalLinea ?? new Prisma.Decimal(0)).toString(),
+        ventas,
+      },
+    };
   }
 
   async findArchived(establishmentId: string, query: SaleListQueryDto) {
