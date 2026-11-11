@@ -70,14 +70,14 @@ export class FinanceController {
   }
 
   @Get('bank-accounts')
-  @RequirePermissions('finance.read', 'nav.balance')
+  @RequirePermissions('finance.read', 'nav.balance', 'nav.transacciones', 'nav.conciliacion_bancaria')
   async bankAccounts(@CurrentUser() actor: JwtRequestUser) {
     const establishmentId = await this.scope.resolve(actor);
     return this.service.listBankAccounts(establishmentId);
   }
 
   @Post('bank-accounts')
-  @RequirePermissions('finance.write', 'nav.balance')
+  @RequirePermissions('finance.write', 'nav.balance', 'nav.transacciones')
   async createBankAccount(
     @Body() dto: CreateBankAccountDto,
     @CurrentUser() actor: JwtRequestUser,
@@ -102,7 +102,7 @@ export class FinanceController {
   }
 
   @Post('bank-movements')
-  @RequirePermissions('finance.write', 'nav.balance')
+  @RequirePermissions('finance.write', 'nav.balance', 'nav.transacciones')
   async createBankMovement(
     @Body() dto: CreateBankMovementDto,
     @CurrentUser() actor: JwtRequestUser,
@@ -112,7 +112,7 @@ export class FinanceController {
   }
 
   @Post('bank-movements/reconcile')
-  @RequirePermissions('finance.write', 'nav.balance')
+  @RequirePermissions('finance.write', 'nav.balance', 'nav.conciliacion_bancaria')
   async reconcile(
     @Body() dto: BulkReconcileMovementsDto,
     @CurrentUser() actor: JwtRequestUser,

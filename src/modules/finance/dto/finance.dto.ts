@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -97,6 +98,27 @@ export class BankMovementListQueryDto extends PaginationQueryDto {
   @IsBoolean()
   @BooleanField()
   conciliado?: boolean;
+
+  @ApiPropertyOptional({ enum: BankMovementType })
+  @IsOptional()
+  @IsEnum(BankMovementType)
+  tipo?: BankMovementType;
+
+  @ApiPropertyOptional({ example: '2026-01-01' })
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-31' })
+  @IsOptional()
+  @IsString()
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Referencia o descripción' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }
 
 export class UpsertPurchaseBudgetDto {
@@ -150,6 +172,17 @@ export class RecentPaymentsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   to?: string;
+
+  @ApiPropertyOptional({ enum: ['VENTA', 'COBRO_CLIENTE', 'PAGO_PROVEEDOR'] })
+  @IsOptional()
+  @IsIn(['VENTA', 'COBRO_CLIENTE', 'PAGO_PROVEEDOR'])
+  tipo?: 'VENTA' | 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR';
+
+  @ApiPropertyOptional({ description: 'EFECTIVO, YAPE, PLIN, TARJETA, TRANSFERENCIA…' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  metodo?: string;
 }
 
 export class GeneralLedgerQueryDto extends FinancePeriodQueryDto {

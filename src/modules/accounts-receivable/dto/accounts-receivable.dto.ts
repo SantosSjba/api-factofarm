@@ -16,10 +16,16 @@ export class AccountReceivableListQueryDto extends PaginationQueryDto {
   @IsUUID()
   customerId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'PENDIENTE, PARCIAL, VENCIDA, PAGADA, ANULADA o ABIERTA (por cobrar)' })
   @IsOptional()
   @IsString()
   estado?: string;
+
+  @ApiPropertyOptional({ description: 'Cliente (nombre o documento) o número de documento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }
 
 export class RegisterAccountReceivablePaymentDto {

@@ -26,6 +26,17 @@ export class AccountPayableListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   supplierId?: string;
+
+  @ApiPropertyOptional({ description: 'PENDIENTE, PARCIAL, VENCIDA, PAGADA, ANULADA o ABIERTA (por pagar)' })
+  @IsOptional()
+  @IsString()
+  estado?: string;
+
+  @ApiPropertyOptional({ description: 'Proveedor (razón social o RUC) o número de documento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }
 
 export class ReplenishmentReportQueryDto {

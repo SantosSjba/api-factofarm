@@ -50,16 +50,35 @@ export class AccountsReceivableService {
       data: { estado: AccountReceivableStatus.VENCIDA },
     });
 
+    const OPEN = [
+      AccountReceivableStatus.PENDIENTE,
+      AccountReceivableStatus.PARCIAL,
+      AccountReceivableStatus.VENCIDA,
+    ];
+    const estadoFilter =
+      query.estado === 'ABIERTA'
+        ? { estado: { in: OPEN } }
+        : query.estado && (Object.values(AccountReceivableStatus) as string[]).includes(query.estado)
+          ? { estado: query.estado as AccountReceivableStatus }
+          : {};
+    const term = query.search?.trim();
     const where: Prisma.AccountReceivableWhereInput = {
       establishmentId,
       deletedAt: null,
       ...(query.customerId ? { customerId: query.customerId } : {}),
-      ...(query.estado
-        ? { estado: query.estado as AccountReceivableStatus }
+      ...estadoFilter,
+      ...(term
+        ? {
+            OR: [
+              { documentoRef: { contains: term, mode: 'insensitive' } },
+              { customer: { nombre: { contains: term, mode: 'insensitive' } } },
+              { customer: { numeroDocumento: { contains: term } } },
+            ],
+          }
         : {}),
     };
 
-    const [total, rows] = await Promise.all([
+    const [total, rows, openAgg, overdueAgg] = await Promise.all([
       this.prisma.accountReceivable.count({ where }),
       this.prisma.accountReceivable.findMany({
         where,
@@ -82,9 +101,20 @@ export class AccountsReceivableService {
           sale: { select: { id: true, serie: true, numero: true } },
         },
       }),
+      // Totales de todo el filtro: lo que falta cobrar y lo vencido.
+      this.prisma.accountReceivable.aggregate({
+        where: { AND: [where, { estado: { in: OPEN } }] },
+        _sum: { saldo: true },
+        _count: { _all: true },
+      }),
+      this.prisma.accountReceivable.aggregate({
+        where: { AND: [where, { estado: AccountReceivableStatus.VENCIDA }] },
+        _sum: { saldo: true },
+        _count: { _all: true },
+      }),
     ]);
 
-    return buildPaginatedResult(
+    const result = buildPaginatedResult(
       rows.map((r) => ({
         ...r,
         montoTotal: r.montoTotal.toString(),
@@ -97,6 +127,15 @@ export class AccountsReceivableService {
       page,
       pageSize,
     );
+    return {
+      ...result,
+      totales: {
+        porCobrar: (openAgg._sum.saldo ?? new Prisma.Decimal(0)).toString(),
+        documentosAbiertos: openAgg._count._all,
+        vencido: (overdueAgg._sum.saldo ?? new Prisma.Decimal(0)).toString(),
+        documentosVencidos: overdueAgg._count._all,
+      },
+    };
   }
 
   async registerPayment(

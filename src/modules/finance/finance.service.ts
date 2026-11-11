@@ -503,14 +503,26 @@ export class FinanceService {
     query: BankMovementListQueryDto,
   ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
+    const range = await this.optionalRange(establishmentId, query.from, query.to);
+    const term = query.search?.trim();
     const where: Prisma.BankMovementWhereInput = {
       bankAccount: { establishmentId, deletedAt: null },
       ...(query.bankAccountId ? { bankAccountId: query.bankAccountId } : {}),
       ...(query.conciliado !== undefined
         ? { conciliado: query.conciliado }
         : {}),
+      ...(query.tipo ? { tipo: query.tipo } : {}),
+      ...(range ? { movimientoAt: range } : {}),
+      ...(term
+        ? {
+            OR: [
+              { referencia: { contains: term, mode: 'insensitive' } },
+              { descripcion: { contains: term, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
-    const [total, rows] = await Promise.all([
+    const [total, rows, ingresosAgg, egresosAgg, pendientes] = await Promise.all([
       this.prisma.bankMovement.count({ where }),
       this.prisma.bankMovement.findMany({
         where,
@@ -521,8 +533,21 @@ export class FinanceService {
           bankAccount: { select: { id: true, nombre: true } },
         },
       }),
+      // Totales de todo el filtro.
+      this.prisma.bankMovement.aggregate({
+        where: { AND: [where, { tipo: BankMovementType.INGRESO }] },
+        _sum: { monto: true },
+      }),
+      this.prisma.bankMovement.aggregate({
+        where: { AND: [where, { tipo: BankMovementType.EGRESO }] },
+        _sum: { monto: true },
+      }),
+      this.prisma.bankMovement.count({ where: { AND: [where, { conciliado: false }] } }),
     ]);
-    return buildPaginatedResult(
+    const zero = new Prisma.Decimal(0);
+    const ingresos = ingresosAgg._sum.monto ?? zero;
+    const egresos = egresosAgg._sum.monto ?? zero;
+    const result = buildPaginatedResult(
       rows.map((r) => ({
         id: r.id,
         bankAccountId: r.bankAccountId,
@@ -539,6 +564,15 @@ export class FinanceService {
       page,
       pageSize,
     );
+    return {
+      ...result,
+      totales: {
+        ingresos: ingresos.toString(),
+        egresos: egresos.toString(),
+        neto: ingresos.minus(egresos).toString(),
+        pendientes,
+      },
+    };
   }
 
   async createBankMovement(
@@ -652,19 +686,20 @@ export class FinanceService {
     };
   }
 
+  /** Los 12 meses del año: presupuesto (0 si no se cargó) contra las compras registradas. */
   async getPurchaseBudgetVsActual(
     establishmentId: string,
     query: PurchaseBudgetReportQueryDto,
   ) {
     const budgets = await this.prisma.purchaseBudget.findMany({
       where: { establishmentId, anio: query.anio },
-      orderBy: { mes: 'asc' },
     });
+    const byMonth = new Map(budgets.map((b) => [b.mes, b]));
     const tz = await this.resolveTimeZone(establishmentId);
 
     const rows = await Promise.all(
-      budgets.map(async (b) => {
-        const yearMonth = `${query.anio}-${String(b.mes).padStart(2, '0')}`;
+      Array.from({ length: 12 }, (_, i) => i + 1).map(async (mes) => {
+        const yearMonth = `${query.anio}-${String(mes).padStart(2, '0')}`;
         const { start: from, end: to } = monthBoundsInTimeZone(yearMonth, tz);
         const actual = await this.prisma.accountPayable.aggregate({
           where: {
@@ -675,11 +710,14 @@ export class FinanceService {
           _sum: { montoTotal: true },
         });
         const actualTotal = actual._sum.montoTotal ?? new Prisma.Decimal(0);
-        const presupuesto = b.montoPresupuestado;
+        const budget = byMonth.get(mes);
+        const presupuesto = budget?.montoPresupuestado ?? new Prisma.Decimal(0);
         const variacion = actualTotal.minus(presupuesto);
         return {
-          mes: b.mes,
+          mes,
           presupuesto: presupuesto.toString(),
+          tienePresupuesto: !!budget,
+          notas: budget?.notas ?? null,
           actual: actualTotal.toString(),
           variacion: variacion.toString(),
           variacionPorcentaje: presupuesto.greaterThan(0)
@@ -784,27 +822,98 @@ export class FinanceService {
     return { from: from.toISOString(), to: to.toISOString(), ...report };
   }
 
+  /**
+   * Cobros de ventas, cobros de cuentas por cobrar y pagos a proveedores, del más reciente al
+   * más antiguo. Pagina sin límites artificiales: de cada fuente se lee solo hasta la página
+   * pedida y los totales salen de agregados de todo el filtro.
+   */
   async getRecentPayments(
     establishmentId: string,
     query: RecentPaymentsQueryDto,
   ) {
     const { page, pageSize, skip, take } = paginationArgs(query);
-    let dateFilter: { gte?: Date; lt?: Date } | undefined;
-    if (query.from || query.to) {
-      const tz = await this.resolveTimeZone(establishmentId);
-      const fromYmd = query.from?.trim();
-      const toYmd = query.to?.trim();
-      if (fromYmd && toYmd) {
-        const { start, end } = dateRangeBoundsInTimeZone(fromYmd, toYmd, tz);
-        dateFilter = { gte: start, lt: end };
-      } else if (fromYmd) {
-        const { start } = dateRangeBoundsInTimeZone(fromYmd, fromYmd, tz);
-        dateFilter = { gte: start };
-      } else if (toYmd) {
-        const { end } = dateRangeBoundsInTimeZone(toYmd, toYmd, tz);
-        dateFilter = { lt: end };
-      }
-    }
+    const dateFilter = await this.optionalRange(establishmentId, query.from, query.to);
+    const metodo = query.metodo?.trim().toUpperCase() || null;
+    const want = (t: 'VENTA' | 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR') => !query.tipo || query.tipo === t;
+    const limit = skip + take;
+    const zero = new Prisma.Decimal(0);
+
+    const saleWhere: Prisma.PaymentWhereInput = {
+      sale: {
+        establishmentId,
+        deletedAt: null,
+        estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
+        ...(dateFilter ? { createdAt: dateFilter } : {}),
+      },
+      ...(metodo ? { metodo: metodo as PaymentMethod } : {}),
+    };
+    const arWhere: Prisma.AccountReceivablePaymentWhereInput = {
+      accountReceivable: { establishmentId, deletedAt: null },
+      ...(dateFilter ? { pagadoAt: dateFilter } : {}),
+      ...(metodo ? { metodoPago: metodo } : {}),
+    };
+    const apWhere: Prisma.AccountPayablePaymentWhereInput = {
+      accountPayable: { establishmentId, deletedAt: null },
+      ...(dateFilter ? { fechaPago: dateFilter } : {}),
+      ...(metodo ? { metodo } : {}),
+    };
+    const validMethod = !metodo || (Object.values(PaymentMethod) as string[]).includes(metodo);
+
+    const [salePays, arPays, apPays, saleAgg, arAgg, apAgg] = await Promise.all([
+      want('VENTA') && validMethod
+        ? this.prisma.payment.findMany({
+            where: saleWhere,
+            take: limit,
+            orderBy: { sale: { createdAt: 'desc' } },
+            select: {
+              id: true,
+              metodo: true,
+              monto: true,
+              referencia: true,
+              sale: { select: { createdAt: true, serie: true, numero: true, documentType: true } },
+            },
+          })
+        : Promise.resolve([]),
+      want('COBRO_CLIENTE')
+        ? this.prisma.accountReceivablePayment.findMany({
+            where: arWhere,
+            take: limit,
+            orderBy: { pagadoAt: 'desc' },
+            select: {
+              id: true,
+              monto: true,
+              metodoPago: true,
+              referencia: true,
+              pagadoAt: true,
+              accountReceivable: { select: { documentoRef: true, customer: { select: { nombre: true } } } },
+            },
+          })
+        : Promise.resolve([]),
+      want('PAGO_PROVEEDOR')
+        ? this.prisma.accountPayablePayment.findMany({
+            where: apWhere,
+            take: limit,
+            orderBy: { fechaPago: 'desc' },
+            select: {
+              id: true,
+              monto: true,
+              metodo: true,
+              referencia: true,
+              fechaPago: true,
+              accountPayable: { select: { numeroDocumento: true, supplier: { select: { razonSocial: true } } } },
+            },
+          })
+        : Promise.resolve([]),
+      want('VENTA') && validMethod
+        ? this.prisma.payment.aggregate({ where: saleWhere, _sum: { monto: true }, _count: { _all: true } })
+        : Promise.resolve(null),
+      want('COBRO_CLIENTE')
+        ? this.prisma.accountReceivablePayment.aggregate({ where: arWhere, _sum: { monto: true }, _count: { _all: true } })
+        : Promise.resolve(null),
+      want('PAGO_PROVEEDOR')
+        ? this.prisma.accountPayablePayment.aggregate({ where: apWhere, _sum: { monto: true }, _count: { _all: true } })
+        : Promise.resolve(null),
+    ]);
 
     type Entry = {
       id: string;
@@ -814,110 +923,46 @@ export class FinanceService {
       metodo: string;
       referencia: string | null;
       descripcion: string;
+      contraparte: string | null;
     };
-
-    const entries: Entry[] = [];
-
-    const salePayments = await this.prisma.payment.findMany({
-      where: {
-        sale: {
-          establishmentId,
-          deletedAt: null,
-          estado: { in: ['COMPLETADA', 'PARCIALMENTE_DEVUELTA'] },
-          ...(dateFilter ? { createdAt: dateFilter } : {}),
-        },
-      },
-      take: 500,
-      orderBy: { sale: { createdAt: 'desc' } },
-      select: {
-        id: true,
-        metodo: true,
-        monto: true,
-        referencia: true,
-        sale: {
-          select: {
-            createdAt: true,
-            serie: true,
-            numero: true,
-            documentType: true,
-          },
-        },
-      },
-    });
-
-    for (const p of salePayments) {
-      entries.push({
+    const entries: Entry[] = [
+      ...salePays.map((p) => ({
         id: p.id,
         fecha: p.sale.createdAt,
         tipo: 'VENTA',
         monto: p.monto,
         metodo: p.metodo,
         referencia: p.referencia,
-        descripcion:
-          `${p.sale.documentType} ${p.sale.serie ?? ''}-${p.sale.numero ?? ''}`.trim(),
-      });
-    }
-
-    const arPayments = await this.prisma.accountReceivablePayment.findMany({
-      where: {
-        accountReceivable: { establishmentId, deletedAt: null },
-        ...(dateFilter ? { pagadoAt: dateFilter } : {}),
-      },
-      take: 200,
-      orderBy: { pagadoAt: 'desc' },
-      select: {
-        id: true,
-        monto: true,
-        metodoPago: true,
-        referencia: true,
-        pagadoAt: true,
-        accountReceivable: { select: { documentoRef: true } },
-      },
-    });
-
-    for (const p of arPayments) {
-      entries.push({
+        descripcion: `${p.sale.documentType} ${p.sale.serie ?? ''}-${p.sale.numero ?? ''}`.trim(),
+        contraparte: null,
+      })),
+      ...arPays.map((p) => ({
         id: p.id,
         fecha: p.pagadoAt,
         tipo: 'COBRO_CLIENTE',
         monto: p.monto,
         metodo: p.metodoPago ?? 'SIN_ESPECIFICAR',
         referencia: p.referencia,
-        descripcion: `CxC ${p.accountReceivable.documentoRef ?? ''}`.trim(),
-      });
-    }
-
-    const apPayments = await this.prisma.accountPayablePayment.findMany({
-      where: {
-        accountPayable: { establishmentId, deletedAt: null },
-        ...(dateFilter ? { fechaPago: dateFilter } : {}),
-      },
-      take: 200,
-      orderBy: { fechaPago: 'desc' },
-      select: {
-        id: true,
-        monto: true,
-        metodo: true,
-        referencia: true,
-        fechaPago: true,
-        accountPayable: { select: { numeroDocumento: true } },
-      },
-    });
-
-    for (const p of apPayments) {
-      entries.push({
+        descripcion: `Cuenta por cobrar ${p.accountReceivable.documentoRef ?? ''}`.trim(),
+        contraparte: p.accountReceivable.customer?.nombre ?? null,
+      })),
+      ...apPays.map((p) => ({
         id: p.id,
         fecha: p.fechaPago,
         tipo: 'PAGO_PROVEEDOR',
         monto: p.monto,
         metodo: p.metodo ?? 'SIN_ESPECIFICAR',
         referencia: p.referencia,
-        descripcion: `CxP ${p.accountPayable.numeroDocumento ?? ''}`.trim(),
-      });
-    }
-
+        descripcion: `Cuenta por pagar ${p.accountPayable.numeroDocumento ?? ''}`.trim(),
+        contraparte: p.accountPayable.supplier?.razonSocial ?? null,
+      })),
+    ];
     entries.sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
-    const total = entries.length;
+
+    const cobrosVentas = saleAgg?._sum.monto ?? zero;
+    const cobrosClientes = arAgg?._sum.monto ?? zero;
+    const pagosProveedores = apAgg?._sum.monto ?? zero;
+    const total = (saleAgg?._count._all ?? 0) + (arAgg?._count._all ?? 0) + (apAgg?._count._all ?? 0);
     const items = entries.slice(skip, skip + take).map((e) => ({
       id: e.id,
       fecha: e.fecha.toISOString(),
@@ -926,9 +971,31 @@ export class FinanceService {
       metodo: e.metodo,
       referencia: e.referencia,
       descripcion: e.descripcion,
+      contraparte: e.contraparte,
     }));
+    return {
+      ...buildPaginatedResult(items, total, page, pageSize),
+      totales: {
+        cobrosVentas: cobrosVentas.toString(),
+        cobrosClientes: cobrosClientes.toString(),
+        pagosProveedores: pagosProveedores.toString(),
+        neto: cobrosVentas.plus(cobrosClientes).minus(pagosProveedores).toString(),
+      },
+    };
+  }
 
-    return buildPaginatedResult(items, total, page, pageSize);
+  /** Rango opcional de fechas (Desde / Hasta) en la zona horaria del local. */
+  private async optionalRange(
+    establishmentId: string,
+    from?: string,
+    to?: string,
+  ): Promise<{ gte?: Date; lt?: Date } | undefined> {
+    const fromYmd = from?.trim();
+    const toYmd = to?.trim();
+    if (!fromYmd && !toYmd) return undefined;
+    const tz = await this.resolveTimeZone(establishmentId);
+    const bounds = dateRangeBoundsInTimeZone(fromYmd || toYmd!, toYmd || fromYmd!, tz);
+    return { ...(fromYmd ? { gte: bounds.start } : {}), ...(toYmd ? { lt: bounds.end } : {}) };
   }
 
   async getGeneralLedger(
