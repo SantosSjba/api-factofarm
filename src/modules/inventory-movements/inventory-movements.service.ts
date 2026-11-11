@@ -31,6 +31,7 @@ import {
   normalizeTimeZone,
 } from '../../common/utils/timezone.util';
 import { recordControlledMovement } from '../pharmaceutical/controlled-ledger.util';
+import { recordOpeningBalance } from './opening-balance.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import * as XLSX from 'xlsx';
@@ -568,7 +569,30 @@ export class InventoryMovementsService {
       }),
     ]);
 
-    let saldo = new Prisma.Decimal(0);
+    // Saldo inicial: todo lo anterior al rango (de cualquier antigüedad) más las filas de
+    // páginas anteriores del rango. Antes empezaba en 0 en cada página y en cada «Desde».
+    const { fechaRegistro: _range, archivedAt: _archived, ...baseWhere } = where;
+    const [before, previousPages] = await Promise.all([
+      dateFilter?.gte
+        ? this.prisma.inventoryInboundMovement.aggregate({
+            where: { ...baseWhere, fechaRegistro: { lt: dateFilter.gte } },
+            _sum: { cantidad: true },
+          })
+        : Promise.resolve(null),
+      skip > 0
+        ? this.prisma.inventoryInboundMovement.findMany({
+            where,
+            orderBy: { fechaRegistro: 'asc' },
+            take: skip,
+            select: { cantidad: true },
+          })
+        : Promise.resolve([] as { cantidad: Prisma.Decimal }[]),
+    ]);
+    const saldoInicial = (before?._sum.cantidad ?? new Prisma.Decimal(0)).plus(
+      previousPages.reduce((acc, r) => acc.plus(r.cantidad), new Prisma.Decimal(0)),
+    );
+
+    let saldo = saldoInicial;
     const items = rows.map((row) => {
       saldo = saldo.plus(row.cantidad);
       const unitCost = row.costoUnitario ?? new Prisma.Decimal(0);
@@ -591,7 +615,7 @@ export class InventoryMovementsService {
       };
     });
 
-    return { ...buildPaginatedResult(items, total, page, pageSize) };
+    return { ...buildPaginatedResult(items, total, page, pageSize), saldoInicial: saldoInicial.toString() };
   }
 
   async kardexArchived(query: KardexQueryDto, establishmentId: string) {
@@ -2204,7 +2228,12 @@ export class InventoryMovementsService {
     }
 
     for (const productId of touched) {
-      await this.recalculateStock(productId, warehouse.id);
+      await this.recalculateStock(
+        productId,
+        warehouse.id,
+        actor.sub ?? null,
+        'Stock cargado por importación de lotes',
+      );
     }
 
     return { totalRows: rows.length, created, updated, errors };
@@ -2302,7 +2331,12 @@ export class InventoryMovementsService {
     }
 
     for (const productId of touched) {
-      await this.recalculateStock(productId, warehouse.id);
+      await this.recalculateStock(
+        productId,
+        warehouse.id,
+        actor.sub ?? null,
+        'Stock cargado por importación de series',
+      );
     }
 
     return { totalRows: rows.length, created, updated, errors };
@@ -2332,40 +2366,80 @@ export class InventoryMovementsService {
     );
   }
 
-  private async recalculateStock(productId: string, warehouseId: string) {
-    const [lots, serialCount] = await Promise.all([
-      this.prisma.productLotStock.findMany({
-        where: { productId, warehouseId, deletedAt: null },
-        select: { stock: true },
-      }),
-      this.prisma.productSerial.count({
-        where: {
-          productId,
-          warehouseId,
-          deletedAt: null,
-          estado: { in: serialAvailableStates },
-        },
-      }),
-    ]);
-    const lotTotal = lots.reduce(
-      (acc, row) => acc.plus(row.stock),
-      new Prisma.Decimal(0),
-    );
-    const total = lotTotal.plus(serialCount);
+  /**
+   * Tras importar lotes o series, el stock del almacén pasa a ser la suma de lotes más series
+   * disponibles. La diferencia con el stock anterior queda en el kardex (entrada como
+   * «Inventario inicial», salida como ajuste) para que el kardex siga cuadrando con el stock.
+   */
+  private async recalculateStock(
+    productId: string,
+    warehouseId: string,
+    userId: string | null,
+    origen: string,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const [lots, serialCount, current] = await Promise.all([
+        tx.productLotStock.findMany({
+          where: { productId, warehouseId, deletedAt: null },
+          select: { stock: true },
+        }),
+        tx.productSerial.count({
+          where: {
+            productId,
+            warehouseId,
+            deletedAt: null,
+            estado: { in: serialAvailableStates },
+          },
+        }),
+        tx.productWarehouseStock.findUnique({
+          where: { productId_warehouseId: { productId, warehouseId } },
+          select: { cantidad: true },
+        }),
+      ]);
+      const total = lots
+        .reduce((acc, row) => acc.plus(row.stock), new Prisma.Decimal(0))
+        .plus(serialCount);
+      const delta = total.minus(current?.cantidad ?? 0);
 
-    await this.prisma.productWarehouseStock.upsert({
-      where: {
-        productId_warehouseId: {
+      await tx.productWarehouseStock.upsert({
+        where: { productId_warehouseId: { productId, warehouseId } },
+        update: { cantidad: total },
+        create: { productId, warehouseId, cantidad: total },
+      });
+
+      if (delta.greaterThan(0)) {
+        await recordOpeningBalance(tx, {
           productId,
           warehouseId,
-        },
-      },
-      update: { cantidad: total },
-      create: {
-        productId,
-        warehouseId,
-        cantidad: total,
-      },
+          cantidad: delta,
+          comentario: origen,
+          userId,
+        });
+      } else if (delta.lessThan(0)) {
+        const reason = await tx.inventoryTransferReason.findFirst({
+          where: { codigo: ADJUST_OUT_CODE, deletedAt: null, activo: true },
+          select: { id: true },
+        });
+        if (!reason) {
+          throw new BadRequestException(
+            `Motivo de ajuste no configurado (${ADJUST_OUT_CODE})`,
+          );
+        }
+        await recordControlledMovement(
+          tx,
+          await tx.inventoryInboundMovement.create({
+            data: {
+              productId,
+              warehouseId,
+              transferReasonId: reason.id,
+              movementType: InventoryMovementType.AJUSTE,
+              cantidad: delta,
+              comentario: origen,
+              userId,
+            },
+          }),
+        );
+      }
     });
   }
 

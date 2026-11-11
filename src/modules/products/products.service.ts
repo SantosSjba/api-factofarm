@@ -40,6 +40,7 @@ import { UpdateProductPrescriptionDto } from './dto/update-product-prescription.
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { ProductPriceHistoryQueryDto } from './dto/product-price-history-query.dto';
 import { ProductPriceHistoryService } from './product-price-history.service';
+import { recordOpeningBalance } from '../inventory-movements/opening-balance.util';
 import {
   buildImportTemplateBuffer as buildTemplateXlsx,
   canonicalizeImportRows,
@@ -683,6 +684,16 @@ export class ProductsService {
       if (!t) throw new BadRequestException('Tipo de atributo no válido');
     }
 
+    if (
+      dto.manejaLotes &&
+      !dto.codigoLote?.trim() &&
+      (dto.warehouseStocks ?? []).some((s) => Number(s.cantidad) > 0)
+    ) {
+      throw new BadRequestException(
+        'Escribe el código de lote del stock inicial: el producto maneja lotes.',
+      );
+    }
+
     const purchaseTaxId =
       dto.purchaseTaxAffectationId ?? dto.saleTaxAffectationId;
 
@@ -783,13 +794,43 @@ export class ProductsService {
         });
       }
 
+      // Stock inicial: va al kardex como «Inventario inicial» y, si maneja lotes, a su lote.
+      const initialLot = dto.manejaLotes ? dto.codigoLote?.trim() || null : null;
+      const initialExpiry =
+        initialLot && dto.fechaVencimientoLote
+          ? new Date(dto.fechaVencimientoLote)
+          : null;
       for (const ws of dto.warehouseStocks ?? []) {
+        const cantidad = new Prisma.Decimal(ws.cantidad);
         await tx.productWarehouseStock.create({
           data: {
             productId: product.id,
             warehouseId: ws.warehouseId,
-            cantidad: new Prisma.Decimal(ws.cantidad),
+            cantidad,
           },
+        });
+        if (!cantidad.greaterThan(0)) continue;
+        if (initialLot) {
+          await tx.productLotStock.create({
+            data: {
+              productId: product.id,
+              warehouseId: ws.warehouseId,
+              codigoLote: initialLot,
+              stock: cantidad,
+              costoUnitario: dto.costoUnitario ?? null,
+              fechaVencimiento: initialExpiry,
+            },
+          });
+        }
+        await recordOpeningBalance(tx, {
+          productId: product.id,
+          warehouseId: ws.warehouseId,
+          cantidad,
+          codigoLote: initialLot,
+          fechaVencimiento: initialExpiry,
+          costoUnitario: dto.costoUnitario ?? dto.precioUnitarioCompra ?? null,
+          comentario: 'Stock inicial al crear el producto',
+          userId: actor?.sub,
         });
       }
 
@@ -1940,26 +1981,41 @@ export class ProductsService {
               'Código lote obligatorio para crear stock de productos con manejo de lotes.',
             );
           }
-          await this.prisma.productWarehouseStock.create({
-            data: {
-              productId: product.id,
-              warehouseId: defaultWarehouse.id,
-              cantidad: new Prisma.Decimal(stock),
-            },
-          });
-          if (manejaLotes && codigoLote && stock > 0) {
-            await this.prisma.productLotStock.create({
+          const lotCode = manejaLotes && codigoLote ? codigoLote : null;
+          const expiry =
+            lotCode && fechaVencimiento ? new Date(fechaVencimiento) : null;
+          await this.prisma.$transaction(async (tx) => {
+            await tx.productWarehouseStock.create({
               data: {
                 productId: product.id,
                 warehouseId: defaultWarehouse.id,
-                codigoLote,
-                stock: new Prisma.Decimal(stock),
-                fechaVencimiento: fechaVencimiento
-                  ? new Date(fechaVencimiento)
-                  : null,
+                cantidad: new Prisma.Decimal(stock),
               },
             });
-          }
+            if (lotCode && stock > 0) {
+              await tx.productLotStock.create({
+                data: {
+                  productId: product.id,
+                  warehouseId: defaultWarehouse.id,
+                  codigoLote: lotCode,
+                  stock: new Prisma.Decimal(stock),
+                  costoUnitario: precioCompra,
+                  fechaVencimiento: expiry,
+                },
+              });
+            }
+            // El stock importado entra al kardex como «Inventario inicial».
+            await recordOpeningBalance(tx, {
+              productId: product.id,
+              warehouseId: defaultWarehouse.id,
+              cantidad: stock,
+              codigoLote: lotCode,
+              fechaVencimiento: expiry,
+              costoUnitario: precioCompra,
+              comentario: 'Stock inicial importado desde Excel',
+              userId: actor?.sub,
+            });
+          });
         } else if (stock > 0) {
           const existingStock =
             await this.prisma.productWarehouseStock.findUnique({
