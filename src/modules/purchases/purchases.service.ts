@@ -30,6 +30,7 @@ import {
 } from '../cash-registers/cash-session.util';
 import { recordControlledMovement } from '../pharmaceutical/controlled-ledger.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { textSearchFilter } from '../../common/utils/text-search-filter';
 import {
   assertLotExpiryConsistent,
   resolveInboundLot,
@@ -71,6 +72,14 @@ export class PurchasesService {
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),
       ...(query.estado ? { estado: query.estado } : {}),
     };
+    const search = query.search?.trim();
+    if (search) {
+      where.OR = [
+        { numero: textSearchFilter(search) },
+        { supplier: { razonSocial: textSearchFilter(search) } },
+        { supplier: { numeroDocumento: textSearchFilter(search) } },
+      ];
+    }
     const [total, rows] = await Promise.all([
       this.prisma.purchaseOrder.count({ where }),
       this.prisma.purchaseOrder.findMany({
@@ -922,6 +931,7 @@ export class PurchasesService {
       cantidadSugerida: number;
       rotacion90d: string;
       claseAbc: 'A' | 'B' | 'C';
+      proveedorSugeridoId: string | null;
       proveedorSugerido: string | null;
       precioSugerido: string | null;
     }> = [];
@@ -939,10 +949,12 @@ export class PurchasesService {
               nombre: true,
               codigoInterno: true,
               stockMinimo: true,
+              // El más barato entre los proveedores que se pueden elegir en una orden.
               supplierLinks: {
+                where: { supplier: { deletedAt: null, habilitado: true } },
                 orderBy: { precioCompra: 'asc' },
                 take: 1,
-                include: { supplier: { select: { razonSocial: true } } },
+                include: { supplier: { select: { id: true, razonSocial: true } } },
               },
             },
           },
@@ -1019,6 +1031,7 @@ export class PurchasesService {
             salesMap.get(stock.productId)?.qty ?? new Prisma.Decimal(0)
           ).toString(),
           claseAbc,
+          proveedorSugeridoId: link?.supplier.id ?? null,
           proveedorSugerido: link?.supplier.razonSocial ?? null,
           precioSugerido: link?.precioCompra?.toString() ?? null,
         });

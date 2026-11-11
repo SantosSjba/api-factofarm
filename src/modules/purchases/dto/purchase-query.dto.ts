@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PurchaseOrderStatus } from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
@@ -13,6 +13,12 @@ export class PurchaseOrderListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(PurchaseOrderStatus)
   estado?: PurchaseOrderStatus;
+
+  @ApiPropertyOptional({ description: 'Número de orden, razón social o RUC del proveedor' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 }
 
 export class AccountPayableListQueryDto extends PaginationQueryDto {
