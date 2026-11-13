@@ -25,6 +25,11 @@ const TENANT_NAV_CODES = MENU_NAV_LEAF_CODES.filter(
  */
 const BOTICA_MODULES: readonly string[] = [
   'nav.dashboard_admin',
+  'nav.dashboard_ventas',
+  'nav.dashboard_margenes',
+  'nav.dashboard_caja',
+  'nav.dashboard_inventario',
+  'nav.dashboard_cuentas',
   // Usuarios y local
   'nav.usuarios',
   'nav.establecimientos',

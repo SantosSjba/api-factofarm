@@ -60,6 +60,16 @@ export type UserListFilters = {
   search?: string;
   role?: UserRole;
   tenantId?: string;
+  establishmentId?: string;
   page?: number;
   pageSize?: number;
+};
+
+/** Conteos para la fila de resumen de la pantalla Usuarios. */
+export type UserSummary = {
+  total: number;
+  byRole: { role: UserRole; count: number }[];
+  byEstablishment: { id: string; nombre: string; count: number }[];
+  /** Usuarios con al menos una caja abierta ahora. */
+  withOpenCash: number;
 };

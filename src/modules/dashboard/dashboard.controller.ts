@@ -6,6 +6,7 @@ import type { JwtRequestUser } from '../auth/domain/auth.types';
 import { DashboardService } from './dashboard.service';
 import { DashboardOverviewService } from './dashboard-overview.service';
 import { DashboardAlertsService } from './dashboard-alerts.service';
+import { DASHBOARD_SECTION_CODES as SEC } from '../../common/permissions/dashboard-sections';
 
 @ApiTags('dashboard')
 @ApiBearerAuth()
@@ -25,7 +26,8 @@ export class DashboardController {
   }
 
   @Get('overview')
-  @RequirePermissions('nav.dashboard_admin')
+  // Panel general: basta con una sección; el servicio entrega solo las permitidas.
+  @RequirePermissions(SEC.ventas, SEC.margenes, SEC.caja, SEC.inventario, SEC.cuentas)
   @ApiOperation({
     summary: 'Resumen del cliente: ventas, medios de pago, comprobantes, horas, productos, caja, inventario y finanzas',
   })
@@ -51,14 +53,14 @@ export class DashboardController {
   }
 
   @Get('stats')
-  @RequirePermissions('nav.dashboard_admin')
+  @RequirePermissions(SEC.ventas, SEC.margenes, SEC.caja, SEC.inventario, SEC.cuentas)
   @ApiOperation({ summary: 'KPIs del panel administrativo (por tenant)' })
   getStats(@CurrentUser() actor: JwtRequestUser) {
     return this.dashboard.getStats(actor);
   }
 
   @Get('chain-summary')
-  @RequirePermissions('nav.dashboard_admin')
+  @RequirePermissions(SEC.ventas)
   @ApiOperation({
     summary: 'Vista consolidada multi-sucursal del tenant (últimos 30 días)',
   })
@@ -67,7 +69,7 @@ export class DashboardController {
   }
 
   @Get('sales-trend')
-  @RequirePermissions('nav.dashboard_admin')
+  @RequirePermissions(SEC.ventas)
   @ApiOperation({ summary: 'Tendencia de ventas diarias (últimos 14 días)' })
   getSalesTrend(@CurrentUser() actor: JwtRequestUser) {
     return this.dashboard.getSalesTrend(actor);

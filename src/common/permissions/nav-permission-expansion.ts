@@ -173,6 +173,12 @@ export const NAV_TO_RBAC_EXPANSION: Readonly<
   'nav.conciliacion_bancaria': ['finance.read'],
   'nav.ingresos_egresos_medio_pago': ['finance.read'],
   'nav.platform_dashboard': ['tenants.read'],
+  // Secciones del panel general: se ven dentro de «Mi panel»; costos y ganancia van sobre las ventas.
+  'nav.dashboard_ventas': ['nav.dashboard_admin'],
+  'nav.dashboard_margenes': ['nav.dashboard_admin', 'nav.dashboard_ventas'],
+  'nav.dashboard_caja': ['nav.dashboard_admin'],
+  'nav.dashboard_inventario': ['nav.dashboard_admin'],
+  'nav.dashboard_cuentas': ['nav.dashboard_admin'],
   'nav.platform_clientes': ['tenants.read', 'tenants.write'],
   'nav.platform_leads': ['tenants.read'],
   'nav.platform_reclamaciones': ['complaints.read', 'complaints.write'],

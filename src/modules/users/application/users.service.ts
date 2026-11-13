@@ -120,6 +120,7 @@ export class UsersService {
       page?: number;
       pageSize?: number;
       tenantId?: string;
+      establishmentId?: string;
     },
     actor?: JwtRequestUser,
   ) {
@@ -138,9 +139,17 @@ export class UsersService {
       ...(this.resolveTenantFilter(actor, rawFilters?.tenantId)
         ? { tenantId: this.resolveTenantFilter(actor, rawFilters?.tenantId)! }
         : {}),
+      ...(rawFilters?.establishmentId
+        ? { establishmentId: rawFilters.establishmentId }
+        : {}),
       page: rawFilters?.page,
       pageSize: rawFilters?.pageSize,
     });
+  }
+
+  /** Conteos del encabezado de Usuarios, con el mismo alcance de empresa que el listado. */
+  summary(actor?: JwtRequestUser, tenantId?: string) {
+    return this.users.summary(this.resolveTenantFilter(actor, tenantId));
   }
 
   async findOne(id: string, actor?: JwtRequestUser): Promise<UserSnapshot> {

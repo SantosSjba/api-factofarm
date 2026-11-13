@@ -21,4 +21,9 @@ export class UserListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   tenantId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Filtrar por establecimiento' })
+  @IsOptional()
+  @IsUUID()
+  establishmentId?: string;
 }

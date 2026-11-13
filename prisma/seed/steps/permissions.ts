@@ -109,7 +109,15 @@ export const MENU_GROUPS: MenuGroup[] = [
     code: 'nav.dashboard',
     label: 'Dashboard',
     sortOrder: 1,
-    children: [{ code: 'nav.dashboard_admin', label: 'Mi panel', sortOrder: 1 }],
+    children: [
+      { code: 'nav.dashboard_admin', label: 'Mi panel', sortOrder: 1 },
+      // Secciones del panel general (ver src/common/permissions/dashboard-sections.ts).
+      { code: 'nav.dashboard_ventas', label: 'Panel general: ventas', sortOrder: 2 },
+      { code: 'nav.dashboard_margenes', label: 'Panel general: costos y ganancia', sortOrder: 3 },
+      { code: 'nav.dashboard_caja', label: 'Panel general: caja y gastos', sortOrder: 4 },
+      { code: 'nav.dashboard_inventario', label: 'Panel general: inventario', sortOrder: 5 },
+      { code: 'nav.dashboard_cuentas', label: 'Panel general: cuentas por cobrar y pagar', sortOrder: 6 },
+    ],
   },
   {
     code: 'nav.usuarios_series',

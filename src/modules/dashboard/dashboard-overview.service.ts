@@ -5,6 +5,7 @@ import {
   requireTenantId,
 } from '../../common/scoping/tenant-scope.util';
 import { isPlatformAdmin } from '../../common/permissions/role-policy.util';
+import { dashboardSectionAccess } from '../../common/permissions/dashboard-sections';
 import {
   dateRangeBoundsInTimeZone,
   dayBoundsInTimeZone,
@@ -50,6 +51,8 @@ export class DashboardOverviewService {
       throw new ForbiddenException('Use la consola de plataforma (/platform/dashboard)');
     }
     const tenantId = requireTenantId(scope);
+    // Solo se calcula y entrega lo que el usuario puede ver (permisos «Panel general: …»).
+    const can = dashboardSectionAccess(actor);
     const timeZone = await this.actorTimeZone(actor);
     const now = new Date();
     const today = dayBoundsInTimeZone(now, timeZone);
@@ -71,8 +74,10 @@ export class DashboardOverviewService {
       deletedAt: null,
       establishment: { tenantId },
       ...(userId ? { sellerId: userId } : {}),
+      // Sin la sección de ventas las consultas de ventas no traen filas.
+      ...(can.ventas ? {} : { id: { in: [] } }),
     };
-    const expensesQuery = this.prisma.cashMovement.aggregate({
+    const expensesQuery = !can.caja ? Promise.resolve(null) : this.prisma.cashMovement.aggregate({
       where: {
         tipo: 'EGRESO',
         createdAt: { gte: periodStart, lt: periodEnd },
@@ -83,9 +88,9 @@ export class DashboardOverviewService {
     });
     // Independientes de las ventas: se lanzan ya para no sumar latencia.
     const sidePanels = Promise.all([
-      this.openCash(tenantId),
-      this.inventorySummary(tenantId, now),
-      this.financeSummary(tenantId, now),
+      can.caja ? this.openCash(tenantId) : Promise.resolve(null),
+      can.inventario ? this.inventorySummary(tenantId, now) : Promise.resolve(null),
+      can.cuentas ? this.financeSummary(tenantId, now) : Promise.resolve(null),
     ]);
 
     const [periodSales, prevAgg, todayAgg, yesterdayAgg, voided, paymentRows, itemRows, newCustomers] =
@@ -114,7 +119,9 @@ export class DashboardOverviewService {
             product: { select: { nombre: true, costoUnitario: true, precioUnitarioCompra: true } },
           },
         }),
-        this.prisma.customer.count({ where: { tenantId, deletedAt: null, createdAt: { gte: periodStart, lt: periodEnd } } }),
+        can.ventas
+          ? this.prisma.customer.count({ where: { tenantId, deletedAt: null, createdAt: { gte: periodStart, lt: periodEnd } } })
+          : Promise.resolve(0),
       ]);
 
     // Medios de pago, comprobantes, horas y vendedores.
@@ -174,7 +181,7 @@ export class DashboardOverviewService {
     const itemsTotal = itemRows.reduce((a, it) => a.plus(it.totalLinea), ZERO());
 
     const [[cash, inventory, finance], expensesAgg] = await Promise.all([sidePanels, expensesQuery]);
-    const expenses = expensesAgg._sum.monto ?? ZERO();
+    const expenses = expensesAgg?._sum.monto ?? ZERO();
 
     return {
       days,
@@ -185,14 +192,15 @@ export class DashboardOverviewService {
       userName: user?.nombre ?? null,
       users,
       timeZone,
-      today: {
+      sections: can,
+      today: !can.ventas ? null : {
         total: money(todayAgg.total),
         count: todayAgg.count,
         avgTicket: avg(todayAgg.total, todayAgg.count),
         yesterdayTotal: money(yesterdayAgg.total),
         yesterdayCount: yesterdayAgg.count,
       },
-      period: {
+      period: !can.ventas ? null : {
         total: money(periodTotal),
         count: periodSales.length,
         avgTicket: avg(periodTotal, periodSales.length),
@@ -202,17 +210,18 @@ export class DashboardOverviewService {
         voidedCount: voided.count,
         unitsSold: itemRows.reduce((a, it) => a.plus(it.cantidad), ZERO()).toFixed(0),
         newCustomers,
-        grossMargin: money(costed.minus(cost)),
-        grossMarginPct: costed.greaterThan(0) ? costed.minus(cost).div(costed).times(100).toFixed(1) : null,
-        marginCoveragePct: itemsTotal.greaterThan(0) ? costed.div(itemsTotal).times(100).toFixed(0) : null,
         // Resumen financiero: ganancia = ventas − costo; neto = ganancia − egresos de caja.
-        cost: money(cost),
-        profit: money(periodTotal.minus(cost)),
-        expenses: money(expenses),
-        expensesCount: expensesAgg._count,
-        net: money(periodTotal.minus(cost).minus(expenses)),
+        // null = el usuario no tiene la sección (costos y ganancia / caja y gastos).
+        grossMargin: can.margenes ? money(costed.minus(cost)) : null,
+        grossMarginPct: can.margenes && costed.greaterThan(0) ? costed.minus(cost).div(costed).times(100).toFixed(1) : null,
+        marginCoveragePct: can.margenes && itemsTotal.greaterThan(0) ? costed.div(itemsTotal).times(100).toFixed(0) : null,
+        cost: can.margenes ? money(cost) : null,
+        profit: can.margenes ? money(periodTotal.minus(cost)) : null,
+        expenses: can.caja ? money(expenses) : null,
+        expensesCount: can.caja ? (expensesAgg?._count ?? 0) : null,
+        net: can.margenes && can.caja ? money(periodTotal.minus(cost).minus(expenses)) : null,
       },
-      costAboveSalePrice: [...suspects]
+      costAboveSalePrice: !can.margenes ? [] : [...suspects]
         .map(([id, r]) => ({ id, nombre: r.nombre, costo: money(r.costo), precio: money(r.precio), cantidad: r.cantidad.toFixed(0), exceso: money(r.exceso) }))
         .sort((a, b) => Number(b.exceso) - Number(a.exceso)),
       trend: [...byDay].map(([date, r]) => ({ date, label: `${date.slice(8, 10)}/${date.slice(5, 7)}`, total: money(r.total), count: r.count })),

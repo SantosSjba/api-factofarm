@@ -13,6 +13,7 @@ import type {
   UserListFilters,
   UserProfileSnapshot,
   UserSnapshot,
+  UserSummary,
 } from '../domain/user.types';
 
 const userSnapshotInclude = {
@@ -103,6 +104,9 @@ export class PrismaUserRepository implements IUserRepository {
       deletedAt: null,
       ...(filters?.role ? { role: filters.role } : {}),
       ...(filters?.tenantId ? { tenantId: filters.tenantId } : {}),
+      ...(filters?.establishmentId
+        ? { establecimientoId: filters.establishmentId }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -125,6 +129,45 @@ export class PrismaUserRepository implements IUserRepository {
     ]);
 
     return buildPaginatedResult(rows.map(mapUser), total, page, pageSize);
+  }
+
+  async summary(tenantId?: string): Promise<UserSummary> {
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      ...(tenantId ? { tenantId } : {}),
+    };
+    const [total, roles, establishments, openCash] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.groupBy({ by: ['role'], where, _count: { _all: true } }),
+      this.prisma.user.groupBy({
+        by: ['establecimientoId'],
+        where,
+        _count: { _all: true },
+      }),
+      this.prisma.cashSession.groupBy({
+        by: ['userId'],
+        where: { estado: 'ABIERTA', user: where },
+      }),
+    ]);
+    const names = await this.prisma.establishment.findMany({
+      where: { id: { in: establishments.map((e) => e.establecimientoId) } },
+      select: { id: true, nombre: true },
+    });
+    const nameById = new Map(names.map((n) => [n.id, n.nombre]));
+    return {
+      total,
+      byRole: roles
+        .map((r) => ({ role: r.role, count: r._count._all }))
+        .sort((a, b) => b.count - a.count),
+      byEstablishment: establishments
+        .map((e) => ({
+          id: e.establecimientoId,
+          nombre: nameById.get(e.establecimientoId) ?? 'Sin nombre',
+          count: e._count._all,
+        }))
+        .sort((a, b) => b.count - a.count),
+      withOpenCash: openCash.length,
+    };
   }
 
   async findById(id: string): Promise<UserSnapshot | null> {

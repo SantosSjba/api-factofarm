@@ -52,11 +52,22 @@ export class UsersController {
         search: query.search,
         role: query.role === 'all' ? undefined : query.role,
         tenantId: query.tenantId,
+        establishmentId: query.establishmentId,
         page: query.page,
         pageSize: query.pageSize,
       },
       actor,
     );
+  }
+
+  @Get('summary')
+  @RequirePermissions('users.read')
+  @ApiOperation({ summary: 'Resumen de usuarios (por rol, local y caja abierta)' })
+  summary(
+    @Query() query: UserListQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.usersService.summary(actor, query.tenantId);
   }
 
   @Get(':id')
