@@ -27,6 +27,16 @@ export class AuditController {
     return this.service.facets(actor);
   }
 
+  @Get('summary')
+  @RequirePermissions('audit.read', 'nav.auditoria', 'nav.usuarios')
+  @ApiOperation({ summary: 'Resumen: eventos por acción y personas, con los filtros aplicados' })
+  summary(
+    @Query() query: AuditLogQueryDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.summary(query, actor);
+  }
+
   @Get()
   @RequirePermissions('audit.read', 'nav.auditoria', 'nav.usuarios')
   @ApiOperation({ summary: 'Consultar registro de auditoría (compliance)' })

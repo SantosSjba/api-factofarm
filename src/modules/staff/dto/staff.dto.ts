@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -108,4 +109,9 @@ export class AttendanceListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   userId?: string;
+
+  @ApiPropertyOptional({ description: 'true = solo quienes están trabajando ahora (sin salida)' })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  open?: 'true' | 'false';
 }

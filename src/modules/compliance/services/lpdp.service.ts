@@ -270,6 +270,8 @@ export class LpdpService {
     const staleCustomers = await this.prisma.customer.findMany({
       where: {
         deletedAt: null,
+        // Registrado hace más de 10 años: un cliente nuevo sin compras no es «sin actividad por 10 años».
+        createdAt: { lt: cutoff },
         ...(!isPlatformAdmin(actor.role) && actor.tenantId
           ? { tenantId: actor.tenantId }
           : {}),

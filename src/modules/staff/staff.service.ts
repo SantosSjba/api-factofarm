@@ -106,12 +106,19 @@ export class StaffService {
 
   async listAttendance(establishmentId: string, query: AttendanceListQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
-    const where: Prisma.UserAttendanceWhereInput = {
+    const base: Prisma.UserAttendanceWhereInput = {
       establishmentId,
       ...(query.userId ? { userId: query.userId } : {}),
     };
-    const [total, rows] = await Promise.all([
+    const where: Prisma.UserAttendanceWhereInput = {
+      ...base,
+      ...(query.open === 'true' ? { checkOutAt: null } : {}),
+    };
+    // Para el resumen, sin importar la página ni el filtro `open`: todos los registros y quienes trabajan ahora.
+    const [total, allCount, openNow, rows] = await Promise.all([
       this.prisma.userAttendance.count({ where }),
+      this.prisma.userAttendance.count({ where: base }),
+      this.prisma.userAttendance.count({ where: { ...base, checkOutAt: null } }),
       this.prisma.userAttendance.findMany({
         where,
         skip,
@@ -120,19 +127,23 @@ export class StaffService {
         include: { user: { select: { id: true, nombre: true } } },
       }),
     ]);
-    return buildPaginatedResult(
-      rows.map((r) => ({
-        id: r.id,
-        userId: r.userId,
-        user: r.user,
-        checkInAt: r.checkInAt.toISOString(),
-        checkOutAt: r.checkOutAt?.toISOString() ?? null,
-        notas: r.notas,
-      })),
-      total,
-      page,
-      pageSize,
-    );
+    return {
+      ...buildPaginatedResult(
+        rows.map((r) => ({
+          id: r.id,
+          userId: r.userId,
+          user: r.user,
+          checkInAt: r.checkInAt.toISOString(),
+          checkOutAt: r.checkOutAt?.toISOString() ?? null,
+          notas: r.notas,
+        })),
+        total,
+        page,
+        pageSize,
+      ),
+      allCount,
+      openNow,
+    };
   }
 
   async upsertCommissionRule(
@@ -181,7 +192,8 @@ export class StaffService {
     );
 
     const sellers = await this.prisma.user.findMany({
-      where: { establecimientoId: establishmentId, deletedAt: null },
+      // tenantId null = cuentas de la plataforma FactoFarm, no son personal de la farmacia.
+      where: { establecimientoId: establishmentId, deletedAt: null, tenantId: { not: null } },
       select: { id: true, nombre: true, role: true },
     });
 
@@ -345,6 +357,7 @@ export class StaffService {
         id: userId,
         establecimientoId: establishmentId,
         deletedAt: null,
+        tenantId: { not: null },
       },
       select: { id: true },
     });

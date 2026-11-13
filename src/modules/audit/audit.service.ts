@@ -81,6 +81,27 @@ export class AuditService {
     };
   }
 
+  /**
+   * Conteos para la fila de resumen. Ignora el filtro de acción: así los chips muestran cómo se
+   * reparten los eventos entre acciones y sirven para cambiar de una a otra.
+   */
+  async summary(query: AuditLogQueryDto, actor: JwtRequestUser) {
+    const where = await this.buildWhere({ ...query, action: undefined }, actor);
+    const [total, byAction, users] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.groupBy({ by: ['action'], where, _count: { _all: true } }),
+      // Con un usuario elegido `where` ya lo filtra; sin él se excluyen los eventos del sistema (sin usuario).
+      this.prisma.auditLog.groupBy({ by: ['userId'], where: query.userId ? where : { ...where, userId: { not: null } } }),
+    ]);
+    return {
+      total,
+      users: users.length,
+      byAction: byAction
+        .map((a) => ({ action: a.action, label: auditActionLabel(a.action), count: a._count._all }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }
+
   /** Nombre y correo de quien hizo cada acción (el registro solo guarda el id). */
   private async userNames(rows: { userId: string | null }[]) {
     const ids = [...new Set(rows.map((r) => r.userId).filter((v): v is string => !!v))];
