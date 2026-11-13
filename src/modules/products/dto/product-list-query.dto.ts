@@ -67,6 +67,11 @@ export class ProductListQueryDto {
   @IsBoolean()
   necesitaRecetaMedica?: boolean;
 
+  @ApiPropertyOptional({ enum: ['agotado', 'critico', 'bajo', 'normal'], description: 'Nivel de stock (solo productos habilitados)' })
+  @IsOptional()
+  @IsIn(['agotado', 'critico', 'bajo', 'normal'])
+  stockLevel?: 'agotado' | 'critico' | 'bajo' | 'normal';
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)

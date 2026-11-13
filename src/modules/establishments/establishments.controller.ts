@@ -65,6 +65,13 @@ export class EstablishmentsController {
     return this.establishmentsService.listDistricts(provinceId);
   }
 
+  @Get('summary')
+  @RequirePermissions('establishments.read', 'nav.establecimientos')
+  @ApiOperation({ summary: 'Resumen de locales activos: tipo y sin farmacéutico titular' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.establishmentsService.summary(actor);
+  }
+
   @Get()
   @RequirePermissions(
     'establishments.read',

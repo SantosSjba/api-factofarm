@@ -114,6 +114,13 @@ export class ProductsController {
     return this.productsService.listIscSystems();
   }
 
+  @Get('summary')
+  @RequirePermissions('products.read', 'nav.productos')
+  @ApiOperation({ summary: 'Resumen de productos: estado, genéricos, receta y niveles de stock' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.productsService.summary(actor);
+  }
+
   @Get(':id/equivalents')
   @RequirePermissions('products.read')
   @ApiOperation({

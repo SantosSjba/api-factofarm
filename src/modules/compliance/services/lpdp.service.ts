@@ -7,6 +7,7 @@ import {
   ArcoRequestStatus,
   ArcoRequestType,
   LpdpConsentPurpose,
+  Prisma,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../../common/services/audit-log.service';
@@ -140,6 +141,38 @@ export class LpdpService {
       diff: { requestType, customerId },
     });
     return created;
+  }
+
+  /**
+   * Conteos de todas las solicitudes ARCO de la empresa. Fuera de plazo = abiertas que superan
+   * los días hábiles (lunes a viernes) de su derecho: 20 para acceso, 10 para el resto.
+   */
+  async arcoSummary(actor: JwtRequestUser) {
+    const where: Prisma.ArcoRequestWhereInput = { customer: tenantWhere(actorFromJwt(actor)) };
+    const [total, byStatus, byType, open] = await Promise.all([
+      this.prisma.arcoRequest.count({ where }),
+      this.prisma.arcoRequest.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.prisma.arcoRequest.groupBy({ by: ['requestType'], where, _count: { _all: true } }),
+      this.prisma.arcoRequest.findMany({
+        where: { ...where, status: { in: ['PENDIENTE', 'EN_PROCESO'] } },
+        select: { createdAt: true, requestType: true },
+      }),
+    ]);
+    const businessDaysSince = (d: Date) => {
+      const today = new Date();
+      let n = 0;
+      for (const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); x <= today; x.setDate(x.getDate() + 1)) {
+        if (x.getDay() !== 0 && x.getDay() !== 6) n++;
+      }
+      return n;
+    };
+    const overdue = open.filter((r) => businessDaysSince(r.createdAt) > (r.requestType === 'ACCESO' ? 20 : 10)).length;
+    return {
+      total,
+      overdue,
+      byStatus: byStatus.map((s) => ({ status: s.status, count: s._count._all })),
+      byType: byType.map((t) => ({ requestType: t.requestType, count: t._count._all })),
+    };
   }
 
   async listArcoRequests(

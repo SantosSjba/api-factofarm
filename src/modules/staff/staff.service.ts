@@ -319,12 +319,29 @@ export class StaffService {
     return { id: row.id, estado: row.estado };
   }
 
-  async listLeaves(establishmentId: string, userId?: string) {
+  /** Conteos de todas las licencias del local, por estado y tipo (incluye canceladas). */
+  async leavesSummary(establishmentId: string) {
+    const where: Prisma.UserLeaveWhereInput = { user: { establecimientoId: establishmentId, deletedAt: null } };
+    const [total, byStatus, byType] = await Promise.all([
+      this.prisma.userLeave.count({ where }),
+      this.prisma.userLeave.groupBy({ by: ['estado'], where, _count: { _all: true } }),
+      this.prisma.userLeave.groupBy({ by: ['tipo'], where, _count: { _all: true } }),
+    ]);
+    return {
+      total,
+      byStatus: byStatus.map((s) => ({ estado: s.estado, count: s._count._all })),
+      byType: byType.map((t) => ({ tipo: t.tipo, count: t._count._all })),
+    };
+  }
+
+  /** Sin `estado` se omiten las canceladas; con `estado` (incluida CANCELADO) se filtra por él. */
+  async listLeaves(establishmentId: string, userId?: string, estado?: string) {
+    const status = estado && (Object.values(UserLeaveStatus) as string[]).includes(estado) ? (estado as UserLeaveStatus) : undefined;
     const rows = await this.prisma.userLeave.findMany({
       where: {
         user: { establecimientoId: establishmentId, deletedAt: null },
         ...(userId ? { userId } : {}),
-        estado: { not: UserLeaveStatus.CANCELADO },
+        estado: status ?? { not: UserLeaveStatus.CANCELADO },
       },
       orderBy: { fromDate: 'desc' },
       take: 100,

@@ -483,6 +483,22 @@ export class EstablishmentsService {
     });
   }
 
+  /** Conteos de todos los locales activos (mismo alcance que el listado). */
+  async summary(actor?: JwtRequestUser) {
+    const tenantId = this.resolveTenantFilter(actor, undefined);
+    const where: Prisma.EstablishmentWhereInput = {
+      deletedAt: null,
+      activo: true,
+      ...(tenantId ? { tenantId } : {}),
+    };
+    const [total, hospital, sinTitular] = await Promise.all([
+      this.prisma.establishment.count({ where }),
+      this.prisma.establishment.count({ where: { ...where, esHospital: true } }),
+      this.prisma.establishment.count({ where: { ...where, titularPharmacistLicenseId: null } }),
+    ]);
+    return { total, hospital, botica: total - hospital, sinTitular };
+  }
+
   private resolveTenantFilter(
     actor?: JwtRequestUser,
     requestedTenantId?: string,

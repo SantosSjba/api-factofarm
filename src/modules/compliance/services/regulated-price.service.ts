@@ -24,13 +24,59 @@ export class RegulatedPriceService {
   ) {}
 
   /** Cada cliente administra su propio catálogo. */
-  async list(actor: JwtRequestUser, search?: string) {
+  /**
+   * Condición de cada estado, con la misma regla que la pantalla y el control de venta:
+   * sin código → no se compara; vencido → ya pasó su fecha final; vigente → sin fechas o ya
+   * empezó; no vigente → el resto (aún no empieza o tiene fin sin inicio).
+   */
+  private estadoWhere(estado: string, now = new Date()): Prisma.RegulatedDrugPriceWhereInput | null {
+    const sinCodigo: Prisma.RegulatedDrugPriceWhereInput = { OR: [{ codigoDigemid: null }, { codigoDigemid: '' }] };
+    const conCodigo: Prisma.RegulatedDrugPriceWhereInput = { NOT: sinCodigo };
+    const vencido: Prisma.RegulatedDrugPriceWhereInput = { vigenteHasta: { lt: now } };
+    const vigente: Prisma.RegulatedDrugPriceWhereInput = {
+      AND: [
+        { OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: now } }] },
+        { OR: [{ vigenteDesde: null, vigenteHasta: null }, { vigenteDesde: { lte: now } }] },
+      ],
+    };
+    switch (estado) {
+      case 'sin_codigo':
+        return sinCodigo;
+      case 'vencido':
+        return { AND: [conCodigo, vencido] };
+      case 'vigente':
+        return { AND: [conCodigo, vigente] };
+      case 'no_vigente':
+        return { AND: [conCodigo, { NOT: vencido }, { NOT: vigente }] };
+      default:
+        return null;
+    }
+  }
+
+  /** Conteos de todo el catálogo de la empresa (el listado trae como máximo 500 filas). */
+  async summary(actor: JwtRequestUser) {
+    const base: Prisma.RegulatedDrugPriceWhereInput = { ...tenantWhere(actorFromJwt(actor)), deletedAt: null, activo: true };
+    const now = new Date();
+    const count = (estado: string) => this.prisma.regulatedDrugPrice.count({ where: { AND: [base, this.estadoWhere(estado, now)!] } });
+    const [total, vigente, vencido, noVigente, sinCodigo] = await Promise.all([
+      this.prisma.regulatedDrugPrice.count({ where: base }),
+      count('vigente'),
+      count('vencido'),
+      count('no_vigente'),
+      count('sin_codigo'),
+    ]);
+    return { total, vigente, vencido, noVigente, sinCodigo };
+  }
+
+  async list(actor: JwtRequestUser, search?: string, estado?: string) {
     const q = search?.trim();
+    const estadoFilter = estado ? this.estadoWhere(estado) : null;
     return this.prisma.regulatedDrugPrice.findMany({
       where: {
         ...tenantWhere(actorFromJwt(actor)),
         deletedAt: null,
         activo: true,
+        ...(estadoFilter ? { AND: [estadoFilter] } : {}),
         ...(q
           ? {
               OR: [

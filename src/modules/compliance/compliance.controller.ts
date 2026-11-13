@@ -95,6 +95,13 @@ export class ComplianceController {
     return this.lpdp.listRetentionCandidates(actor);
   }
 
+  @Get('lpdp/arco/summary')
+  @RequirePermissions('compliance.read', 'nav.lpdp')
+  @ApiOperation({ summary: 'Resumen de solicitudes ARCO: estado, derecho y fuera de plazo' })
+  arcoSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.lpdp.arcoSummary(actor);
+  }
+
   @Get('lpdp/arco')
   @RequirePermissions('compliance.read', 'nav.lpdp')
   @ApiOperation({ summary: 'Listar solicitudes ARCO' })
@@ -224,6 +231,13 @@ export class ComplianceController {
     };
   }
 
+  @Get('regulated-prices/summary')
+  @RequirePermissions('compliance.read', 'products.read', 'nav.precios_regulados')
+  @ApiOperation({ summary: 'Resumen del catálogo de precios regulados por estado' })
+  regulatedSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.regulated.summary(actor);
+  }
+
   @Get('regulated-prices')
   @RequirePermissions(
     'compliance.read',
@@ -234,8 +248,9 @@ export class ComplianceController {
   listRegulated(
     @CurrentUser() actor: JwtRequestUser,
     @Query('search') search?: string,
+    @Query('estado') estado?: string,
   ) {
-    return this.regulated.list(actor, search);
+    return this.regulated.list(actor, search, estado);
   }
 
   @Post('regulated-prices')

@@ -46,6 +46,13 @@ import { CustomersService } from './customers.service';
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
+  @Get('summary')
+  @RequirePermissions('customers.read', 'nav.clientes_list')
+  @ApiOperation({ summary: 'Resumen de clientes: estado, crédito, tipo y zona' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.customersService.summary(actor);
+  }
+
   @Get()
   @RequirePermissions('customers.read', 'nav.clientes_list')
   @ApiOperation({ summary: 'Listar clientes con filtros y paginación' })

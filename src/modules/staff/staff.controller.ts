@@ -135,13 +135,20 @@ export class StaffController {
     );
   }
 
+  @Get('leaves/summary')
+  @RequirePermissions('staff.read', 'nav.gestion_personal')
+  async leavesSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.leavesSummary(await this.scope.resolve(actor));
+  }
+
   @Get('leaves')
   @RequirePermissions('staff.read', 'nav.gestion_personal')
   async listLeaves(
     @Query('userId') userId: string | undefined,
+    @Query('estado') estado: string | undefined,
     @CurrentUser() actor: JwtRequestUser,
   ) {
-    return this.service.listLeaves(await this.scope.resolve(actor), userId);
+    return this.service.listLeaves(await this.scope.resolve(actor), userId, estado);
   }
 
   @Patch('leaves/:leaveId/status')

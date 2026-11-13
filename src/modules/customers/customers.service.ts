@@ -107,6 +107,45 @@ export class CustomersService {
     private readonly integrity: EntityIntegrityService,
   ) {}
 
+  /** Conteos para la fila de resumen de Clientes (todo el padrón de la empresa, sin filtros). */
+  async summary(actor?: JwtRequestUser) {
+    const where: Prisma.CustomerWhereInput = {
+      deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+    };
+    const [total, enabled, withCredit, byType, byZone] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.count({ where: { ...where, habilitado: true } }),
+      this.prisma.customer.count({ where: { ...where, diasCredito: { gt: 0 } } }),
+      this.prisma.customer.groupBy({ by: ['customerTypeId'], where: { ...where, customerTypeId: { not: null } }, _count: { _all: true } }),
+      this.prisma.customer.groupBy({ by: ['zoneId'], where: { ...where, zoneId: { not: null } }, _count: { _all: true } }),
+    ]);
+    const [types, zones] = await Promise.all([
+      this.prisma.customerType.findMany({
+        where: { id: { in: byType.map((t) => t.customerTypeId!) } },
+        select: { id: true, descripcion: true },
+      }),
+      this.prisma.customerZone.findMany({
+        where: { id: { in: byZone.map((z) => z.zoneId!) } },
+        select: { id: true, nombre: true },
+      }),
+    ]);
+    const typeName = new Map(types.map((t) => [t.id, t.descripcion]));
+    const zoneName = new Map(zones.map((z) => [z.id, z.nombre]));
+    return {
+      total,
+      enabled,
+      disabled: total - enabled,
+      withCredit,
+      byType: byType
+        .map((t) => ({ id: t.customerTypeId!, nombre: typeName.get(t.customerTypeId!) ?? 'Sin nombre', count: t._count._all }))
+        .sort((a, b) => b.count - a.count),
+      byZone: byZone
+        .map((z) => ({ id: z.zoneId!, nombre: zoneName.get(z.zoneId!) ?? 'Sin nombre', count: z._count._all }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }
+
   async list(query: CustomerListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;

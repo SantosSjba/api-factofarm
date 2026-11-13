@@ -216,10 +216,66 @@ export class ProductsService {
     };
   }
 
+  /**
+   * Conteos para la fila de resumen de Productos (todo el catálogo, sin filtros).
+   * Niveles de stock de los habilitados, con la misma regla que la pantalla:
+   * agotado ≤ 0 · crítico ≤ mínimo · bajo ≤ 2 × mínimo · normal.
+   */
+  async summary(actor?: JwtRequestUser) {
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: null,
+      ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+    };
+    const enabledWhere: Prisma.ProductWhereInput = { ...where, habilitado: true };
+    const [total, enabled, generico, receta, levelById] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.count({ where: enabledWhere }),
+      this.prisma.product.count({ where: { ...where, generico: true } }),
+      this.prisma.product.count({ where: { ...where, necesitaRecetaMedica: true } }),
+      this.stockLevels(enabledWhere),
+    ]);
+    const levels = { agotado: 0, critico: 0, bajo: 0, normal: 0 };
+    for (const level of levelById.values()) levels[level]++;
+    return { total, enabled, disabled: total - enabled, generico, receta, stock: levels };
+  }
+
+  /** Nivel de stock de cada producto (suma de todos sus almacenes contra su stock mínimo). */
+  private async stockLevels(where: Prisma.ProductWhereInput) {
+    const [mins, sums] = await Promise.all([
+      this.prisma.product.findMany({ where, select: { id: true, stockMinimo: true } }),
+      this.prisma.productWarehouseStock.groupBy({
+        by: ['productId'],
+        where: { product: where },
+        _sum: { cantidad: true },
+      }),
+    ]);
+    const stockById = new Map(sums.map((s) => [s.productId, Number(s._sum.cantidad ?? 0)]));
+    const result = new Map<string, 'agotado' | 'critico' | 'bajo' | 'normal'>();
+    for (const p of mins) {
+      const stock = stockById.get(p.id) ?? 0;
+      const min = Number(p.stockMinimo ?? 0);
+      result.set(p.id, stock <= 0 ? 'agotado' : stock <= min ? 'critico' : stock <= min * 2 ? 'bajo' : 'normal');
+    }
+    return result;
+  }
+
+  /**
+   * Filtro del listado y la exportación. Con `stockLevel` se limita a los habilitados de ese
+   * nivel (igual que los conteos del resumen).
+   */
+  private async resolveListWhere(query: ProductListQueryDto, actor?: JwtRequestUser): Promise<Prisma.ProductWhereInput> {
+    const where = this.buildListWhere(query, actor);
+    if (!query.stockLevel) return where;
+    const scoped: Prisma.ProductWhereInput = { ...where, habilitado: true };
+    const levels = await this.stockLevels(scoped);
+    const ids = [...levels].filter(([, level]) => level === query.stockLevel).map(([id]) => id);
+    return { ...scoped, id: { in: ids } };
+  }
+
   async list(query: ProductListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const where = this.buildListWhere(query, actor);
+    const where = await this.resolveListWhere(query, actor);
 
     // Evita transacción para lecturas paginadas y reduce riesgo de P2028 (maxWait).
     const [total, rows] = await Promise.all([
@@ -1560,8 +1616,9 @@ export class ProductsService {
   }
 
   async buildExportBuffer(query: ProductListQueryDto, actor?: JwtRequestUser) {
+    const where = await this.resolveListWhere(query, actor);
     const rows = await this.prisma.product.findMany({
-      where: this.buildListWhere(query, actor),
+      where,
       orderBy: { nombre: 'asc' },
       include: {
         unit: { select: { codigo: true } },
