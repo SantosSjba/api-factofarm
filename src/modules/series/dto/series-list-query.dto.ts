@@ -13,6 +13,12 @@ export class SeriesListQueryDto {
   @IsIn(['all', 'serie', 'producto', 'estado'])
   field?: 'all' | 'serie' | 'producto' | 'estado';
 
+  /** Filtro por estado (chips del resumen). */
+  @ApiPropertyOptional({ enum: ['DISPONIBLE', 'RESERVADO', 'VENDIDO', 'ANULADO'] })
+  @IsOptional()
+  @IsIn(['DISPONIBLE', 'RESERVADO', 'VENDIDO', 'ANULADO'])
+  estado?: 'DISPONIBLE' | 'RESERVADO' | 'VENDIDO' | 'ANULADO';
+
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)

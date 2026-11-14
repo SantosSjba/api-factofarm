@@ -82,6 +82,16 @@ export class ServicesService {
     return requireTenantId(actorFromJwt(actor));
   }
 
+  /** Totales del listado (todas las páginas) para el resumen. */
+  async summary(actor: JwtRequestUser) {
+    const base: Prisma.ServiceWhereInput = { deletedAt: null, ...tenantWhere(actorFromJwt(actor)) };
+    const [total, habilitados] = await Promise.all([
+      this.prisma.service.count({ where: base }),
+      this.prisma.service.count({ where: { ...base, habilitado: true } }),
+    ]);
+    return { total, habilitados, inhabilitados: total - habilitados };
+  }
+
   async list(query: ServiceListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -118,6 +128,7 @@ export class ServicesService {
     const where: Prisma.ServiceWhereInput = {
       deletedAt: null,
       ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      ...(query.estado ? { habilitado: query.estado === 'habilitado' } : {}),
       ...(searchable.length ? { OR: searchable } : {}),
     };
 

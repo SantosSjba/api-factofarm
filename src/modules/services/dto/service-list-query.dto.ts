@@ -29,6 +29,12 @@ export class ServiceListQueryDto {
     | 'codigoBusqueda'
     | 'descripcion';
 
+  /** Filtro por estado (chips del resumen). */
+  @ApiPropertyOptional({ enum: ['habilitado', 'inhabilitado'] })
+  @IsOptional()
+  @IsIn(['habilitado', 'inhabilitado'])
+  estado?: 'habilitado' | 'inhabilitado';
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)

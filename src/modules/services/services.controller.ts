@@ -61,6 +61,12 @@ export class ServicesController {
     return this.servicesService.listIscSystems();
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Resumen de servicios (habilitados / inhabilitados)' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.servicesService.summary(actor);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Listar servicios con paginación' })
   list(

@@ -33,6 +33,12 @@ export class SeriesController {
     return this.seriesService.list(query, actor);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Resumen de series por estado' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.seriesService.summary(actor);
+  }
+
   @Patch(':id/status')
   @ApiOperation({ summary: 'Actualizar estado de serie' })
   updateStatus(

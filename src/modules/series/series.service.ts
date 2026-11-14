@@ -71,6 +71,7 @@ export class SeriesService {
     const where: Prisma.ProductSerialWhereInput = {
       deletedAt: null,
       product: tenantWhere(actorFromJwt(actor)),
+      ...(query.estado ? { estado: query.estado } : {}),
       ...(or.length ? { OR: or } : {}),
     };
 
@@ -91,6 +92,26 @@ export class SeriesService {
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
+
+  /** Cantidad de series por estado (todas, sin paginar) para el resumen del listado. */
+  async summary(actor: JwtRequestUser) {
+    const groups = await this.prisma.productSerial.groupBy({
+      by: ['estado'],
+      where: { deletedAt: null, product: tenantWhere(actorFromJwt(actor)) },
+      _count: { _all: true },
+    });
+    const byEstado = Object.fromEntries(groups.map((g) => [g.estado, g._count._all])) as Partial<
+      Record<ProductSerialStatus, number>
+    >;
+    const total = groups.reduce((acc, g) => acc + g._count._all, 0);
+    return {
+      total,
+      disponible: byEstado.DISPONIBLE ?? 0,
+      reservado: byEstado.RESERVADO ?? 0,
+      vendido: byEstado.VENDIDO ?? 0,
+      anulado: byEstado.ANULADO ?? 0,
     };
   }
 
