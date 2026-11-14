@@ -55,6 +55,13 @@ export class BillingController {
     );
   }
 
+  @Get('documents/summary')
+  @RequirePermissions('billing.read', 'nav.comprobante_electronico')
+  @ApiOperation({ summary: 'Resumen de comprobantes por estado SUNAT' })
+  async documentsSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.documentsSummary(await this.scope.resolve(actor));
+  }
+
   @Get('documents')
   @RequirePermissions('billing.read', 'nav.comprobante_electronico')
   @ApiOperation({ summary: 'Bandeja de comprobantes electrónicos' })

@@ -24,6 +24,12 @@ export class QuotationsController {
     private readonly scope: EstablishmentScopeService,
   ) {}
 
+  @Get('summary')
+  @RequirePermissions('sales.read', 'nav.cotizaciones')
+  async summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.summary(await this.scope.resolve(actor));
+  }
+
   @Get()
   @RequirePermissions('sales.read', 'nav.cotizaciones')
   async findAll(

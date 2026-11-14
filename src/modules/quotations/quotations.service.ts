@@ -33,9 +33,29 @@ export class QuotationsService {
     if (!row) throw new NotFoundException('Cotización no encontrada');
   }
 
+  /** Cantidad de cotizaciones por estado (todas, sin paginar) para el resumen. */
+  async summary(establishmentId: string) {
+    const groups = await this.prisma.quotation.groupBy({
+      by: ['estado'],
+      where: { establishmentId, deletedAt: null },
+      _count: { _all: true },
+    });
+    const byEstado: Record<string, number> = {};
+    let total = 0;
+    for (const g of groups) {
+      byEstado[g.estado] = g._count._all;
+      total += g._count._all;
+    }
+    return { total, byEstado };
+  }
+
   async findAll(establishmentId: string, query: QuotationListQueryDto) {
     const { page, pageSize, skip, take } = paginationArgs(query);
-    const where = { establishmentId, deletedAt: null };
+    const where = {
+      establishmentId,
+      deletedAt: null,
+      ...(query.estado ? { estado: query.estado } : {}),
+    };
     const [total, rows] = await Promise.all([
       this.prisma.quotation.count({ where }),
       this.prisma.quotation.findMany({

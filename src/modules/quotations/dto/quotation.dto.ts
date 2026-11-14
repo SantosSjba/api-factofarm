@@ -12,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DiscountType } from '../../../generated/prisma/client';
+import { DiscountType, QuotationStatus } from '../../../generated/prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class QuotationItemDto {
@@ -70,4 +70,10 @@ export class CreateQuotationDto {
   items!: QuotationItemDto[];
 }
 
-export class QuotationListQueryDto extends PaginationQueryDto {}
+export class QuotationListQueryDto extends PaginationQueryDto {
+  /** Filtro por estado (chips del resumen). */
+  @ApiPropertyOptional({ enum: QuotationStatus })
+  @IsOptional()
+  @IsEnum(QuotationStatus)
+  estado?: QuotationStatus;
+}

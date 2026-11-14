@@ -265,6 +265,22 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return this.getConfig(establishmentId);
   }
 
+  /** Cantidad de comprobantes por estado SUNAT (todos, sin paginar) para el resumen. */
+  async documentsSummary(establishmentId: string) {
+    const groups = await this.prisma.electronicDocument.groupBy({
+      by: ['sunatStatus'],
+      where: { establishmentId, deletedAt: null },
+      _count: { _all: true },
+    });
+    const byStatus: Record<string, number> = {};
+    let total = 0;
+    for (const g of groups) {
+      byStatus[String(g.sunatStatus)] = g._count._all;
+      total += g._count._all;
+    }
+    return { total, byStatus };
+  }
+
   async listDocuments(
     establishmentId: string,
     query: BillingDocumentListQueryDto,
