@@ -69,6 +69,17 @@ export class SuppliersService {
     private readonly integrity: EntityIntegrityService,
   ) {}
 
+  /** Totales del listado (todas las páginas) para el resumen. */
+  async summary(actor: JwtRequestUser) {
+    const base: Prisma.SupplierWhereInput = { deletedAt: null, ...tenantWhere(actorFromJwt(actor)) };
+    const [total, habilitados, conCredito] = await Promise.all([
+      this.prisma.supplier.count({ where: base }),
+      this.prisma.supplier.count({ where: { ...base, habilitado: true } }),
+      this.prisma.supplier.count({ where: { ...base, diasCredito: { gt: 0 } } }),
+    ]);
+    return { total, habilitados, inhabilitados: total - habilitados, conCredito };
+  }
+
   async list(query: SupplierListQueryDto, actor?: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -92,6 +103,7 @@ export class SuppliersService {
     const where: Prisma.SupplierWhereInput = {
       deletedAt: null,
       ...(actor ? tenantWhere(actorFromJwt(actor)) : {}),
+      ...(query.estado ? { habilitado: query.estado === 'habilitado' } : {}),
       ...(searchable.length ? { OR: searchable } : {}),
     };
 

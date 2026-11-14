@@ -61,6 +61,22 @@ export class PurchasesService {
 
   // —— Órdenes de compra ——
 
+  /** Cantidad de órdenes por estado (todas, sin paginar) para el resumen del listado. */
+  async purchaseOrdersSummary(establishmentId: string) {
+    const groups = await this.prisma.purchaseOrder.groupBy({
+      by: ['estado'],
+      where: { establishmentId, deletedAt: null },
+      _count: { _all: true },
+    });
+    const byEstado: Record<string, number> = {};
+    let total = 0;
+    for (const g of groups) {
+      byEstado[g.estado] = g._count._all;
+      total += g._count._all;
+    }
+    return { total, byEstado };
+  }
+
   async listPurchaseOrders(
     establishmentId: string,
     query: PurchaseOrderListQueryDto,

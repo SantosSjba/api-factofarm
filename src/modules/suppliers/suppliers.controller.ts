@@ -31,6 +31,13 @@ import { SuppliersService } from './suppliers.service';
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
+  @Get('summary')
+  @RequirePermissions('suppliers.read', 'nav.proveedores')
+  @ApiOperation({ summary: 'Resumen de proveedores (habilitados / con crédito)' })
+  summary(@CurrentUser() actor: JwtRequestUser) {
+    return this.suppliersService.summary(actor);
+  }
+
   @Get()
   @RequirePermissions('suppliers.read', 'nav.proveedores')
   @ApiOperation({ summary: 'Listar proveedores con paginación' })

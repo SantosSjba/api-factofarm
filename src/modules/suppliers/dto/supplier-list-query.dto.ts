@@ -12,4 +12,10 @@ export class SupplierListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(['all', 'razonSocial', 'numeroDocumento'])
   field?: 'all' | 'razonSocial' | 'numeroDocumento';
+
+  /** Filtro por estado (chips del resumen). */
+  @ApiPropertyOptional({ enum: ['habilitado', 'inhabilitado'] })
+  @IsOptional()
+  @IsIn(['habilitado', 'inhabilitado'])
+  estado?: 'habilitado' | 'inhabilitado';
 }

@@ -35,6 +35,13 @@ export class PurchasesController {
     private readonly scope: EstablishmentScopeService,
   ) {}
 
+  @Get('purchase-orders/summary')
+  @RequirePermissions('purchases.read', 'nav.ordenes_compra')
+  @ApiOperation({ summary: 'Resumen de órdenes de compra por estado' })
+  async ordersSummary(@CurrentUser() actor: JwtRequestUser) {
+    return this.service.purchaseOrdersSummary(await this.scope.resolve(actor));
+  }
+
   @Get('purchase-orders')
   @RequirePermissions('purchases.read', 'nav.ordenes_compra')
   @ApiOperation({ summary: 'Listar órdenes de compra' })
