@@ -67,3 +67,27 @@ export function validateSalePayments(
     );
   }
 }
+
+/** Suma de las líneas en efectivo (lo único que mueve el cuadre de caja). */
+export function cashPaymentTotal(
+  payments: Pick<SalePaymentInput, 'metodo' | 'monto'>[],
+): Prisma.Decimal {
+  return payments
+    .filter((p) => p.metodo === PaymentMethod.EFECTIVO)
+    .reduce(
+      (acc, p) => acc.plus(new Prisma.Decimal(p.monto)),
+      new Prisma.Decimal(0),
+    );
+}
+
+/** Mismos medios, montos y operaciones, sin importar el orden de las líneas. */
+export function samePayments(
+  a: SalePaymentInput[],
+  b: SalePaymentInput[],
+): boolean {
+  const key = (p: SalePaymentInput) =>
+    `${p.metodo}|${new Prisma.Decimal(p.monto).toFixed(4)}|${p.referencia?.trim() ?? ''}`;
+  const left = a.map(key).sort();
+  const right = b.map(key).sort();
+  return left.length === right.length && left.every((k, i) => k === right[i]);
+}

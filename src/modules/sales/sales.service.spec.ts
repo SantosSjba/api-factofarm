@@ -43,8 +43,17 @@ function buildService() {
       update: jest.fn(),
     },
     saleReturn: { create: jest.fn() },
-    cashMovement: { create: jest.fn() },
+    cashMovement: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
     cashSession: { findFirst: jest.fn() },
+    payment: {
+      update: jest.fn(),
+      create: jest.fn(),
+    },
     accountReceivable: {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       findFirst: jest.fn(),
@@ -476,5 +485,234 @@ describe('SalesService', () => {
     const rows = await service.posCatalog('est-1', 'w1', 'para');
     expect(rows).toHaveLength(1);
     expect(rows[0].stock).toBe('3');
+  });
+});
+
+describe('SalesService.correctPayments', () => {
+  const admin = {
+    sub: 'admin-1',
+    establecimientoId: 'est-1',
+    role: UserRole.ADMINISTRADOR,
+  };
+  const saleRow = (over: Record<string, unknown> = {}) => ({
+    id: 'sale-1',
+    serie: 'T001',
+    numero: '00006626',
+    estado: SaleStatus.COMPLETADA,
+    archivedAt: null,
+    total: new Prisma.Decimal(3),
+    coberturaConvenio: new Prisma.Decimal(0),
+    copagoPaciente: new Prisma.Decimal(3),
+    cashSessionId: 'cs-1',
+    payments: [
+      {
+        id: 'pay-1',
+        metodo: PaymentMethod.EFECTIVO,
+        monto: new Prisma.Decimal(3),
+        referencia: null,
+      },
+    ],
+    _count: { returns: 0 },
+    establishment: { posPaymentReferenceMethods: [] },
+    ...over,
+  });
+  const toYape = {
+    payments: [{ metodo: PaymentMethod.YAPE, monto: 3 }],
+    reason: 'Se cobró con Yape',
+  };
+
+  it('impide corregir a un cajero', async () => {
+    const { service } = buildService();
+    await expect(
+      service.correctPayments('sale-1', toYape, {
+        ...admin,
+        role: UserRole.CAJERO,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('cambia efectivo a Yape y quita el efectivo de la caja abierta', async () => {
+    const { service, prisma, audit } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    prisma.cashSession.findFirst.mockResolvedValue({ id: 'cs-1' });
+    prisma.cashMovement.findFirst.mockResolvedValue({ id: 'mov-1' });
+
+    const res = await service.correctPayments('sale-1', toYape, admin);
+
+    expect(res.ok).toBe(true);
+    const updated = prisma.payment.update.mock.calls[0] as [
+      { where: { id: string }; data: { metodo: PaymentMethod } },
+    ];
+    expect(updated[0].where.id).toBe('pay-1');
+    expect(updated[0].data.metodo).toBe(PaymentMethod.YAPE);
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(prisma.cashMovement.delete).toHaveBeenCalledWith({
+      where: { id: 'mov-1' },
+    });
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'CORRECT_PAYMENT',
+        entityId: 'sale-1',
+      }),
+    );
+  });
+
+  it('cambia Yape a efectivo y crea el movimiento de caja', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(
+      saleRow({
+        payments: [
+          {
+            id: 'pay-1',
+            metodo: PaymentMethod.YAPE,
+            monto: new Prisma.Decimal(3),
+            referencia: '123',
+          },
+        ],
+      }),
+    );
+    prisma.cashSession.findFirst.mockResolvedValue({ id: 'cs-1' });
+    prisma.cashMovement.findFirst.mockResolvedValue(null);
+
+    await service.correctPayments(
+      'sale-1',
+      {
+        payments: [{ metodo: PaymentMethod.EFECTIVO, monto: 3 }],
+        reason: 'Era efectivo',
+      },
+      admin,
+    );
+
+    const created = prisma.cashMovement.create.mock.calls[0] as [
+      { data: { cashSessionId: string; monto: Prisma.Decimal } },
+    ];
+    expect(created[0].data.cashSessionId).toBe('cs-1');
+    expect(created[0].data.monto.toString()).toBe('3');
+  });
+
+  it('ajusta el monto en efectivo de un pago mixto', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    prisma.cashSession.findFirst.mockResolvedValue({ id: 'cs-1' });
+    prisma.cashMovement.findFirst.mockResolvedValue({ id: 'mov-1' });
+
+    await service.correctPayments(
+      'sale-1',
+      {
+        payments: [
+          { metodo: PaymentMethod.EFECTIVO, monto: 1 },
+          { metodo: PaymentMethod.YAPE, monto: 2 },
+        ],
+        reason: 'Parte fue Yape',
+      },
+      admin,
+    );
+
+    expect(prisma.cashMovement.update).toHaveBeenCalledWith({
+      where: { id: 'mov-1' },
+      data: { monto: new Prisma.Decimal(1) },
+    });
+    expect(prisma.payment.update).toHaveBeenCalledTimes(1);
+    expect(prisma.payment.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechaza si la caja de la venta ya está cerrada', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    prisma.cashSession.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.correctPayments('sale-1', toYape, admin),
+    ).rejects.toThrow(/caja .* ya está cerrada/);
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  it('rechaza ventas anuladas', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(
+      saleRow({ estado: SaleStatus.ANULADA }),
+    );
+    await expect(
+      service.correctPayments('sale-1', toYape, admin),
+    ).rejects.toThrow(/anulada/);
+  });
+
+  it('rechaza pagos a crédito', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    await expect(
+      service.correctPayments(
+        'sale-1',
+        {
+          payments: [{ metodo: PaymentMethod.CREDITO, monto: 3 }],
+          reason: 'x',
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/crédito/);
+  });
+
+  it('rechaza montos que no suman el total', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    await expect(
+      service.correctPayments(
+        'sale-1',
+        { payments: [{ metodo: PaymentMethod.YAPE, monto: 2 }], reason: 'x' },
+        admin,
+      ),
+    ).rejects.toThrow(/no coinciden/);
+  });
+
+  it('exige N° de operación si el establecimiento lo pide', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(
+      saleRow({
+        establishment: { posPaymentReferenceMethods: [PaymentMethod.YAPE] },
+      }),
+    );
+    await expect(
+      service.correctPayments('sale-1', toYape, admin),
+    ).rejects.toThrow(/operación/);
+  });
+
+  it('no permite quitar pagos ya registrados', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(
+      saleRow({
+        payments: [
+          {
+            id: 'pay-1',
+            metodo: PaymentMethod.EFECTIVO,
+            monto: new Prisma.Decimal(1),
+            referencia: null,
+          },
+          {
+            id: 'pay-2',
+            metodo: PaymentMethod.YAPE,
+            monto: new Prisma.Decimal(2),
+            referencia: null,
+          },
+        ],
+      }),
+    );
+    await expect(
+      service.correctPayments('sale-1', toYape, admin),
+    ).rejects.toThrow(/no se pueden quitar/);
+  });
+
+  it('rechaza si no cambia nada', async () => {
+    const { service, prisma } = buildService();
+    prisma.sale.findFirst.mockResolvedValue(saleRow());
+    await expect(
+      service.correctPayments(
+        'sale-1',
+        {
+          payments: [{ metodo: PaymentMethod.EFECTIVO, monto: 3 }],
+          reason: 'x',
+        },
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

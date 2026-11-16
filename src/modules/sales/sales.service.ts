@@ -51,7 +51,11 @@ import { PromotionsService } from '../marketing/promotions.service';
 import { FILE_STORAGE } from '../files/domain/file.storage';
 import type { IFileStorage } from '../files/domain/file.storage';
 import { isValidPdfBuffer } from '../billing/utils/pdf-buffer.util';
-import { validateSalePayments } from './utils/payment-validation.util';
+import {
+  cashPaymentTotal,
+  samePayments,
+  validateSalePayments,
+} from './utils/payment-validation.util';
 import {
   assertSaleCustomerRules,
   creditAmount,
@@ -62,6 +66,7 @@ import {
   CreateSaleDebitNoteDto,
   CreateSaleItemDto,
   CreateSaleReturnDto,
+  CorrectSalePaymentsDto,
   SyncSalesDto,
   VoidSaleDto,
 } from './dto/create-sale.dto';
@@ -1504,6 +1509,197 @@ export class SalesService {
       requestedBy: r.requestedBy,
       approvedBy: r.approvedBy,
     }));
+  }
+
+  /**
+   * Corrige el medio de pago de una venta ya cobrada (p. ej. se marcó efectivo y fue Yape).
+   * No toca stock ni SUNAT: solo los pagos y, si cambia el efectivo, el movimiento de la caja abierta.
+   */
+  async correctPayments(
+    id: string,
+    dto: CorrectSalePaymentsDto,
+    actor: { sub: string; establecimientoId: string; role: UserRole },
+  ) {
+    if (!canVoidSaleDirectly(actor.role)) {
+      throw new ForbiddenException(
+        'Solo un administrador, gerente o farmacéutico puede corregir el pago de una venta',
+      );
+    }
+    const reason = dto.reason.trim();
+    if (!reason) {
+      throw new BadRequestException('Indique el motivo de la corrección');
+    }
+
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, establishmentId: actor.establecimientoId, deletedAt: null },
+      select: {
+        id: true,
+        serie: true,
+        numero: true,
+        estado: true,
+        archivedAt: true,
+        total: true,
+        coberturaConvenio: true,
+        copagoPaciente: true,
+        cashSessionId: true,
+        payments: {
+          select: { id: true, metodo: true, monto: true, referencia: true },
+          orderBy: { id: 'asc' },
+        },
+        _count: { select: { returns: true } },
+        establishment: { select: { posPaymentReferenceMethods: true } },
+      },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.archivedAt) {
+      throw new BadRequestException(
+        'La venta está archivada: solo se puede consultar',
+      );
+    }
+    if (sale.estado !== SaleStatus.COMPLETADA || sale._count.returns > 0) {
+      throw new BadRequestException(
+        sale.estado === SaleStatus.ANULADA
+          ? 'La venta está anulada: no se puede corregir su pago'
+          : 'Solo se corrige el pago de ventas completadas sin devoluciones',
+      );
+    }
+
+    const isCredit = (p: { metodo: PaymentMethod }) =>
+      p.metodo === PaymentMethod.CREDITO;
+    if (sale.payments.some(isCredit) || dto.payments.some(isCredit)) {
+      throw new BadRequestException(
+        'El pago a crédito no se corrige aquí porque genera una cuenta por cobrar. Anule la venta y regístrela de nuevo.',
+      );
+    }
+
+    const amountToCollect = sale.coberturaConvenio.greaterThan(0)
+      ? sale.copagoPaciente
+      : sale.total;
+    if (!amountToCollect.greaterThan(0)) {
+      throw new BadRequestException(
+        'Esta venta no tuvo cobro al cliente: no hay pago que corregir',
+      );
+    }
+    const newPayments = dto.payments.map((p) => ({
+      metodo: p.metodo,
+      monto: new Prisma.Decimal(p.monto),
+      referencia: p.referencia?.trim() || null,
+    }));
+    validateSalePayments(
+      newPayments,
+      amountToCollect,
+      sale.establishment.posPaymentReferenceMethods,
+    );
+    // Payment es registro fiscal (trigger anti-DELETE): se actualizan las filas, nunca se borran.
+    if (newPayments.length < sale.payments.length) {
+      throw new BadRequestException(
+        `Esta venta tiene ${sale.payments.length} pagos registrados y no se pueden quitar: indique al menos ${sale.payments.length} medios de pago.`,
+      );
+    }
+    if (samePayments(sale.payments, newPayments)) {
+      throw new BadRequestException(
+        'El pago ya está registrado así: no hay nada que corregir',
+      );
+    }
+
+    const oldCash = cashPaymentTotal(sale.payments);
+    const newCash = cashPaymentTotal(newPayments);
+    const cashChanged = !oldCash.equals(newCash) && !!sale.cashSessionId;
+    if (cashChanged) {
+      const open = await this.prisma.cashSession.findFirst({
+        where: { id: sale.cashSessionId!, estado: CashSessionStatus.ABIERTA },
+        select: { id: true },
+      });
+      if (!open) {
+        throw new BadRequestException(
+          'La caja en que se cobró esta venta ya está cerrada y su cuadre no se puede cambiar. Corrija el pago antes de cerrar la caja o registre un ingreso/egreso en la caja actual.',
+        );
+      }
+    }
+
+    const doc = `${sale.serie}-${sale.numero}`;
+    await this.prisma.$transaction(async (tx) => {
+      // Bloquea la venta: si otro usuario la anuló en paralelo, no se toca.
+      const locked = await tx.sale.updateMany({
+        where: { id, estado: SaleStatus.COMPLETADA },
+        data: { updatedAt: new Date() },
+      });
+      if (locked.count !== 1) {
+        throw new BadRequestException(
+          'La venta ya no está disponible para corregir',
+        );
+      }
+
+      for (const [i, p] of newPayments.entries()) {
+        const existing = sale.payments[i];
+        if (existing) {
+          await tx.payment.update({ where: { id: existing.id }, data: p });
+        } else {
+          await tx.payment.create({ data: { saleId: id, ...p } });
+        }
+      }
+
+      if (cashChanged) {
+        const movement = await tx.cashMovement.findFirst({
+          where: {
+            saleId: id,
+            cashSessionId: sale.cashSessionId!,
+            tipo: CashMovementType.VENTA,
+          },
+          select: { id: true },
+        });
+        if (movement && newCash.greaterThan(0)) {
+          await tx.cashMovement.update({
+            where: { id: movement.id },
+            data: { monto: newCash },
+          });
+        } else if (movement) {
+          await tx.cashMovement.delete({ where: { id: movement.id } });
+        } else if (newCash.greaterThan(0)) {
+          await tx.cashMovement.create({
+            data: {
+              cashSessionId: sale.cashSessionId!,
+              tipo: CashMovementType.VENTA,
+              monto: newCash,
+              metodoPago: PaymentMethod.EFECTIVO,
+              saleId: id,
+              referencia: doc,
+            },
+          });
+        }
+      }
+    });
+
+    const describe = (
+      rows: {
+        metodo: PaymentMethod;
+        monto: Prisma.Decimal;
+        referencia: string | null;
+      }[],
+    ) =>
+      rows.map((p) => ({
+        metodo: p.metodo,
+        monto: p.monto.toString(),
+        referencia: p.referencia,
+      }));
+    await this.audit.log({
+      userId: actor.sub,
+      action: 'CORRECT_PAYMENT',
+      entity: 'Sale',
+      entityId: id,
+      diff: {
+        motivo: reason,
+        antes: describe(sale.payments),
+        despues: describe(newPayments),
+      },
+    });
+
+    return {
+      ok: true,
+      message: cashChanged
+        ? `Pago de ${doc} corregido; el efectivo esperado de la caja se ajustó.`
+        : `Pago de ${doc} corregido.`,
+    };
   }
 
   async requestVoidSale(

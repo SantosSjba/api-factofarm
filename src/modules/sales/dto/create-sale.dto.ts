@@ -238,6 +238,22 @@ export class VoidSaleDto {
   reason!: string;
 }
 
+/** Corrige cómo se cobró una venta (p. ej. se marcó efectivo y fue Yape). */
+export class CorrectSalePaymentsDto {
+  @ApiProperty({ type: [CreatePaymentDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreatePaymentDto)
+  payments!: CreatePaymentDto[];
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
+}
+
 export class CreateSaleReturnDto {
   @ApiProperty()
   @IsString()

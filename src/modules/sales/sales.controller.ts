@@ -30,6 +30,7 @@ import {
   CreateSaleReturnDto,
   SyncSalesDto,
   VoidSaleDto,
+  CorrectSalePaymentsDto,
 } from './dto/create-sale.dto';
 import { ConvertSaleToCpeDto } from './dto/convert-sale-to-cpe.dto';
 import { SaleVoidRequestStatus } from '../../generated/prisma/client';
@@ -258,6 +259,21 @@ export class SalesController {
     @CurrentUser() actor: JwtRequestUser,
   ) {
     return this.service.requestVoidSale(id, dto, actor);
+  }
+
+  @Post(':id/payment-correction')
+  @RequirePermissions('sales.void', 'nav.anulaciones')
+  @ApiOperation({
+    summary: 'Corregir el medio de pago de una venta (sin anularla)',
+    description:
+      'Reemplaza los pagos. Si cambia el efectivo, ajusta el movimiento de la caja de la venta (debe seguir abierta).',
+  })
+  correctPayments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CorrectSalePaymentsDto,
+    @CurrentUser() actor: JwtRequestUser,
+  ) {
+    return this.service.correctPayments(id, dto, actor);
   }
 
   @Post(':id/void')
