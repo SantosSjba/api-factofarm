@@ -38,7 +38,10 @@ import * as XLSX from 'xlsx';
 import { CreateInboundMovementDto } from './dto/create-inbound-movement.dto';
 import { CreateOutboundMovementDto } from './dto/create-outbound-movement.dto';
 import { ImportInventoryFileDto } from './dto/import-inventory-file.dto';
-import { InventoryMovementListQueryDto } from './dto/inventory-movement-list-query.dto';
+import {
+  InventoryMovementListQueryDto,
+  type InventoryStockLevel,
+} from './dto/inventory-movement-list-query.dto';
 import { InventoryImportTemplateMode } from './dto/inventory-import-template-query.dto';
 import { LotCodeSearchQueryDto } from './dto/lot-code-search-query.dto';
 import { InventoryLotListQueryDto } from './dto/inventory-lot-list-query.dto';
@@ -119,7 +122,7 @@ export class InventoryMovementsService {
   ) {}
 
   /** Filtros del listado, compartidos con la exportación. */
-  private async buildListWhere(
+  private async buildBaseListWhere(
     query: InventoryMovementListQueryDto,
     actor: JwtRequestUser,
   ): Promise<Prisma.ProductWarehouseStockWhereInput> {
@@ -174,10 +177,62 @@ export class InventoryMovementsService {
     };
   }
 
+  /**
+   * Nivel de stock de cada fila (producto × almacén) frente al mínimo del producto, igual que en
+   * Productos: agotado ≤ 0 · crítico ≤ mínimo · bajo ≤ 2 × mínimo · normal.
+   */
+  private async stockLevels(where: Prisma.ProductWarehouseStockWhereInput) {
+    const rows = await this.prisma.productWarehouseStock.findMany({
+      where,
+      select: {
+        id: true,
+        cantidad: true,
+        product: { select: { stockMinimo: true } },
+      },
+    });
+    const result = new Map<string, InventoryStockLevel>();
+    for (const row of rows) {
+      const stock = Number(row.cantidad);
+      const min = Number(row.product.stockMinimo ?? 0);
+      result.set(
+        row.id,
+        stock <= 0
+          ? 'agotado'
+          : stock <= min
+            ? 'critico'
+            : stock <= min * 2
+              ? 'bajo'
+              : 'normal',
+      );
+    }
+    return result;
+  }
+
+  /** Filtros del listado y la exportación, con el nivel de stock si se pidió. */
+  private async buildListWhere(
+    query: InventoryMovementListQueryDto,
+    actor: JwtRequestUser,
+    levels?: Map<string, InventoryStockLevel>,
+  ): Promise<Prisma.ProductWarehouseStockWhereInput> {
+    const base = await this.buildBaseListWhere(query, actor);
+    if (!query.stockLevel) return base;
+    const all = levels ?? (await this.stockLevels(base));
+    const ids = [...all]
+      .filter(([, level]) => level === query.stockLevel)
+      .map(([id]) => id);
+    return { AND: [base, { id: { in: ids } }] };
+  }
+
   async list(query: InventoryMovementListQueryDto, actor: JwtRequestUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const where = await this.buildListWhere(query, actor);
+    // Los conteos por nivel ignoran el propio filtro de nivel: son los chips para elegirlo.
+    const levels = await this.stockLevels(
+      await this.buildBaseListWhere(query, actor),
+    );
+    const where = await this.buildListWhere(query, actor, levels);
+    const levelCounts = { agotado: 0, critico: 0, bajo: 0, normal: 0 };
+    for (const level of levels.values()) levelCounts[level] += 1;
 
     const [total, rows] = await Promise.all([
       this.prisma.productWarehouseStock.count({ where }),
@@ -230,6 +285,7 @@ export class InventoryMovementsService {
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      levels: { total: levels.size, ...levelCounts },
     };
   }
 
@@ -402,6 +458,9 @@ export class InventoryMovementsService {
         or.push({
           product: { nombre: textSearchFilter(search) },
         });
+        or.push({
+          product: { codigoInterno: textSearchFilter(search) },
+        });
       }
       if (field === 'all' || field === 'lote') {
         or.push({ codigoLote: textSearchFilter(search) });
@@ -425,9 +484,11 @@ export class InventoryMovementsService {
         establishmentId,
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
       },
-      ...expiryWhere,
       ...(or.length ? { OR: or } : {}),
     };
+    // Los conteos por vencimiento ignoran ese filtro: son los chips para elegirlo.
+    const baseWhere = { ...where };
+    Object.assign(where, expiryWhere);
 
     const [total, rows] = await Promise.all([
       this.prisma.productLotStock.count({ where }),
@@ -462,7 +523,18 @@ export class InventoryMovementsService {
       }),
     ]);
 
-    return buildPaginatedResult(
+    const countWith = (filter: InventoryLotListQueryDto['expiryFilter']) =>
+      this.prisma.productLotStock.count({
+        where: { ...baseWhere, ...this.buildExpiryWhere(filter, now) },
+      });
+    const [vencidos, d30, d90, todos] = await Promise.all([
+      countWith('expired'),
+      countWith('30'),
+      countWith('90'),
+      this.prisma.productLotStock.count({ where: baseWhere }),
+    ]);
+
+    const result = buildPaginatedResult(
       rows.map((row) => ({
         id: row.id,
         productId: row.product.id,
@@ -481,6 +553,7 @@ export class InventoryMovementsService {
       page,
       pageSize,
     );
+    return { ...result, counts: { total: todos, vencidos, d30, d90 } };
   }
 
   async updateLotExpiry(id: string, expiry: unknown, actor: JwtRequestUser) {
@@ -1053,6 +1126,7 @@ export class InventoryMovementsService {
       pageSize: query.pageSize,
     });
 
+    const search = query.search?.trim();
     const where: Prisma.ProductWarehouseStockWhereInput = {
       product: { deletedAt: null },
       warehouse: {
@@ -1061,6 +1135,15 @@ export class InventoryMovementsService {
         ...(query.warehouseId ? { id: query.warehouseId } : {}),
       },
       cantidad: { gt: 0 },
+      ...(search
+        ? {
+            OR: [
+              { product: { nombre: textSearchFilter(search) } },
+              { product: { codigoInterno: textSearchFilter(search) } },
+              { product: { codigoBarra: textSearchFilter(search) } },
+            ],
+          }
+        : {}),
     };
 
     // Se valoriza todo el filtro para que el total no sea solo el de la página visible.
@@ -1091,10 +1174,14 @@ export class InventoryMovementsService {
       const unitCost = costs.get(`${row.product.id}|${row.warehouse.id}`) ?? new Prisma.Decimal(0);
       return { row, unitCost, value: row.cantidad.times(unitCost) };
     });
-    const total = valued.length;
+    // Totales y «sin costo» de todo el filtro; `sinCosto` solo recorta la lista.
+    const listed = query.sinCosto
+      ? valued.filter((v) => v.unitCost.isZero())
+      : valued;
+    const total = listed.length;
     const grandAll = valued.reduce((acc, v) => acc.plus(v.value), new Prisma.Decimal(0));
     const unidades = valued.reduce((acc, v) => acc.plus(v.row.cantidad), new Prisma.Decimal(0));
-    const items = valued.slice(skip, skip + take).map(({ row, unitCost, value }) => ({
+    const items = listed.slice(skip, skip + take).map(({ row, unitCost, value }) => ({
       productId: row.product.id,
       producto: row.product.nombre,
       codigoInterno: row.product.codigoInterno,
@@ -1116,6 +1203,12 @@ export class InventoryMovementsService {
       valorTotal: grandAll.toString(),
       unidadesTotal: unidades.toString(),
       sinCosto: valued.filter((v) => v.unitCost.isZero()).length,
+      filas: valued.length,
+      metodos: [
+        ...new Set(
+          valued.map((v) => v.row.warehouse.establishment.inventoryValuationMethod),
+        ),
+      ],
     };
   }
 

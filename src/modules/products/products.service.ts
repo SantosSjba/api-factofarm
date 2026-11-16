@@ -61,6 +61,7 @@ const PRODUCT_IMPORT_COLUMNS: Record<ProductImportMode, ImportColumn[]> = {
 const selectProductList = {
   id: true,
   nombre: true,
+  manejaLotes: true,
   descripcion: true,
   principioActivo: true,
   concentracion: true,
@@ -292,6 +293,7 @@ export class ProductsService {
     const items = rows.map((row) => ({
       id: row.id,
       nombre: row.nombre,
+      manejaLotes: row.manejaLotes,
       descripcion: row.descripcion,
       principioActivo: row.principioActivo,
       concentracion: row.concentracion,

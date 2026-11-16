@@ -10,6 +10,8 @@ import {
   Min,
 } from 'class-validator';
 
+export type InventoryStockLevel = 'agotado' | 'critico' | 'bajo' | 'normal';
+
 export class InventoryMovementListQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -35,6 +37,14 @@ export class InventoryMovementListQueryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['agotado', 'critico', 'bajo', 'normal'],
+    description: 'Nivel de stock de la fila frente al stock mínimo del producto',
+  })
+  @IsOptional()
+  @IsIn(['agotado', 'critico', 'bajo', 'normal'])
+  stockLevel?: InventoryStockLevel;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
