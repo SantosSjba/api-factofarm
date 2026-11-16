@@ -178,6 +178,40 @@ export class InventoryLotAllocationService {
     return totals;
   }
 
+  /**
+   * Stock en lotes ya vencidos por producto y la fecha del vencimiento más antiguo. El punto de venta
+   * lo usa para seguir mostrando esos productos (marcados) aunque no se puedan vender.
+   */
+  async batchExpiredStock(
+    productIds: string[],
+    warehouseId: string,
+  ): Promise<Map<string, { stock: Prisma.Decimal; fecha: Date }>> {
+    const result = new Map<string, { stock: Prisma.Decimal; fecha: Date }>();
+    if (!productIds.length) return result;
+    const rows = await this.prisma.productLotStock.findMany({
+      where: {
+        productId: { in: productIds },
+        warehouseId,
+        deletedAt: null,
+        stock: { gt: 0 },
+        fechaVencimiento: { lt: new Date() },
+      },
+      select: { productId: true, stock: true, fechaVencimiento: true },
+    });
+    for (const row of rows) {
+      if (!row.fechaVencimiento) continue;
+      const current = result.get(row.productId);
+      result.set(row.productId, {
+        stock: (current?.stock ?? new Prisma.Decimal(0)).plus(row.stock),
+        fecha:
+          current && current.fecha < row.fechaVencimiento
+            ? current.fecha
+            : row.fechaVencimiento,
+      });
+    }
+    return result;
+  }
+
   planManualAllocation(
     lots: EligibleLotRow[],
     manualLots: { lotCode: string; quantity: number }[],

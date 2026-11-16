@@ -68,6 +68,7 @@ function buildService() {
   const inventory = { executeAdjustmentDelta: jest.fn() };
   const lotAllocation = {
     batchSumEligibleStock: jest.fn().mockResolvedValue(new Map()),
+    batchExpiredStock: jest.fn().mockResolvedValue(new Map()),
   };
   const billing = {
     voidFromSale: jest.fn().mockResolvedValue(undefined),
@@ -485,6 +486,41 @@ describe('SalesService', () => {
     const rows = await service.posCatalog('est-1', 'w1', 'para');
     expect(rows).toHaveLength(1);
     expect(rows[0].stock).toBe('3');
+  });
+
+  it('muestra en el catálogo POS el producto con lotes vencidos (sin stock vendible)', async () => {
+    const { service, prisma, lotAllocation } = buildService();
+    prisma.product.findMany.mockResolvedValue([
+      {
+        id: 'p2',
+        nombre: 'Amoxicilina',
+        codigoInterno: 'AMOX',
+        codigoBarra: null,
+        precioUnitarioVenta: new Prisma.Decimal(8),
+        incluyeIgvVenta: true,
+        necesitaRecetaMedica: true,
+        manejaLotes: true,
+        esControlado: false,
+        imagenArchivoId: null,
+        saleTaxAffectation: { codigo: '10' },
+        warehouseStocks: [{ cantidad: new Prisma.Decimal(4) }],
+      },
+    ]);
+    lotAllocation.batchSumEligibleStock.mockResolvedValueOnce(
+      new Map([['p2', new Prisma.Decimal(0)]]),
+    );
+    lotAllocation.batchExpiredStock.mockResolvedValueOnce(
+      new Map([
+        ['p2', { stock: new Prisma.Decimal(4), fecha: new Date('2025-01-15T00:00:00Z') }],
+      ]),
+    );
+    const rows = await service.posCatalog('est-1', 'w1', 'amox');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      stock: '0',
+      stockVencido: '4',
+      vencimientoMasAntiguo: '2025-01-15T00:00:00.000Z',
+    });
   });
 });
 

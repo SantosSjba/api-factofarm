@@ -2342,10 +2342,10 @@ export class SalesService {
     const lotProductIds = products
       .filter((p) => p.manejaLotes)
       .map((p) => p.id);
-    const eligibleByProduct = await this.lotAllocation.batchSumEligibleStock(
-      lotProductIds,
-      warehouseId,
-    );
+    const [eligibleByProduct, expiredByProduct] = await Promise.all([
+      this.lotAllocation.batchSumEligibleStock(lotProductIds, warehouseId),
+      this.lotAllocation.batchExpiredStock(lotProductIds, warehouseId),
+    ]);
 
     const rows = products
       .map((p) => {
@@ -2354,7 +2354,10 @@ export class SalesService {
         const sellable = p.manejaLotes
           ? (eligibleByProduct.get(p.id) ?? new Prisma.Decimal(0))
           : warehouseStock;
-        if (sellable.lte(0)) return null;
+        // Los lotes vencidos no se venden, pero el producto sigue apareciendo (marcado) para que
+        // el vendedor se entere y lo retire del anaquel.
+        const expired = expiredByProduct.get(p.id);
+        if (sellable.lte(0) && !expired) return null;
 
         return {
           id: p.id,
@@ -2368,6 +2371,8 @@ export class SalesService {
           manejaLotes: p.manejaLotes,
           esControlado: p.esControlado,
           imagenArchivoId: p.imagenArchivoId,
+          stockVencido: expired?.stock.toString() ?? '0',
+          vencimientoMasAntiguo: expired?.fecha.toISOString() ?? null,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
@@ -2468,6 +2473,8 @@ export class SalesService {
           manejaLotes: false,
           esControlado: false,
           imagenArchivoId: null as string | null,
+          stockVencido: '0',
+          vencimientoMasAntiguo: null as string | null,
           esPack: true,
         };
       })
