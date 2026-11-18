@@ -83,9 +83,15 @@ export class SalesController {
     @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Query('search') search: string | undefined,
     @CurrentUser() actor: JwtRequestUser,
+    @Query('incluirSinStock') incluirSinStock?: string,
   ) {
     const establishmentId = await this.scope.resolve(actor);
-    return this.service.posCatalog(establishmentId, warehouseId, search);
+    return this.service.posCatalog(
+      establishmentId,
+      warehouseId,
+      search,
+      incluirSinStock === 'true',
+    );
   }
 
   @Get('pos-series')

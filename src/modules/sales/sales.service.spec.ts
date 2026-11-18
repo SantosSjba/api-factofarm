@@ -522,6 +522,51 @@ describe('SalesService', () => {
       vencimientoMasAntiguo: '2025-01-15T00:00:00.000Z',
     });
   });
+
+  it('al buscar con incluirSinStock muestra agotados al final, acotados a la empresa del almacén', async () => {
+    const { service, prisma } = buildService();
+    prisma.warehouse.findFirst.mockResolvedValue({
+      establishment: { tenantId: 'tenant-1' },
+    });
+    const base = {
+      codigoBarra: null,
+      precioUnitarioVenta: new Prisma.Decimal(5),
+      incluyeIgvVenta: true,
+      necesitaRecetaMedica: false,
+      manejaLotes: false,
+      esControlado: false,
+      imagenArchivoId: null,
+      saleTaxAffectation: { codigo: '10' },
+    };
+    prisma.product.findMany.mockResolvedValue([
+      { ...base, id: 'p0', nombre: 'Ibuprofeno A', codigoInterno: 'IB0', warehouseStocks: [] },
+      {
+        ...base,
+        id: 'p1',
+        nombre: 'Ibuprofeno B',
+        codigoInterno: 'IB1',
+        warehouseStocks: [{ cantidad: new Prisma.Decimal(2) }],
+      },
+    ]);
+    const rows = await service.posCatalog('est-1', 'w1', 'ibu', true);
+    const where = prisma.product.findMany.mock.calls[0][0].where;
+    expect(where.tenantId).toBe('tenant-1');
+    expect(where.warehouseStocks).toBeUndefined();
+    expect(rows.map((r) => [r.id, r.stock])).toEqual([
+      ['p1', '2'],
+      ['p0', '0'],
+    ]);
+  });
+
+  it('sin término de búsqueda no incluye agotados aunque se pida', async () => {
+    const { service, prisma } = buildService();
+    prisma.product.findMany.mockResolvedValue([]);
+    await service.posCatalog('est-1', 'w1', undefined, true);
+    const where = prisma.product.findMany.mock.calls[0][0].where;
+    expect(where.warehouseStocks).toEqual({
+      some: { warehouseId: 'w1', cantidad: { gt: 0 } },
+    });
+  });
 });
 
 describe('SalesService.correctPayments', () => {

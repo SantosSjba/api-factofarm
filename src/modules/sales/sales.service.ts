@@ -2301,8 +2301,21 @@ export class SalesService {
     establishmentId: string,
     warehouseId: string,
     search?: string,
+    includeOutOfStock = false,
   ) {
     const term = search?.trim();
+    // Al buscar en el POS también salen los productos sin stock vendible (marcados), para que el
+    // vendedor vea el precio y sepa que debe regularizar el inventario antes de venderlos.
+    // Sin término de búsqueda se mantiene solo lo que tiene stock para no inundar la lista.
+    const withOutOfStock = includeOutOfStock && !!term;
+    const tenantId = withOutOfStock
+      ? (
+          await this.prisma.warehouse.findFirst({
+            where: { id: warehouseId },
+            select: { establishment: { select: { tenantId: true } } },
+          })
+        )?.establishment.tenantId
+      : undefined;
     const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
@@ -2316,7 +2329,11 @@ export class SalesService {
               ],
             }
           : {}),
-        warehouseStocks: { some: { warehouseId, cantidad: { gt: 0 } } },
+        ...(withOutOfStock && tenantId
+          ? { tenantId }
+          : {
+              warehouseStocks: { some: { warehouseId, cantidad: { gt: 0 } } },
+            }),
       },
       take: 50,
       orderBy: { nombre: 'asc' },
@@ -2357,7 +2374,7 @@ export class SalesService {
         // Los lotes vencidos no se venden, pero el producto sigue apareciendo (marcado) para que
         // el vendedor se entere y lo retire del anaquel.
         const expired = expiredByProduct.get(p.id);
-        if (sellable.lte(0) && !expired) return null;
+        if (sellable.lte(0) && !expired && !withOutOfStock) return null;
 
         return {
           id: p.id,
@@ -2375,7 +2392,9 @@ export class SalesService {
           vencimientoMasAntiguo: expired?.fecha.toISOString() ?? null,
         };
       })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      // Primero lo vendible; los agotados/vencidos van al final (orden alfabético estable).
+      .sort((a, b) => Number(Number(b.stock) > 0) - Number(Number(a.stock) > 0));
 
     const packs = await this.listSellablePacks(
       establishmentId,
